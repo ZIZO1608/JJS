@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Simple, calm palette: ink on paper, orange only in the JJ's logo, color only for problems. */
+:root {
+  --bg: 247 246 244;
+  --surface: 255 255 255;
+  --sunken: 240 238 235;
+  --line: 228 225 220;
+  --ink: 28 25 23;
+  --muted: 107 101 96;
+  --faint: 156 149 143;
+  --brand: 210 86 26;
+  --good: 46 125 79;
+  --warn: 183 121 10;
+  --bad: 192 57 43;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 20 19 18;
+    --surface: 28 27 25;
+    --sunken: 38 36 34;
+    --line: 51 48 45;
+    --ink: 242 240 237;
+    --muted: 171 164 157;
+    --faint: 125 118 112;
+    --brand: 224 106 46;
+    --good: 92 196 138;
+    --warn: 233 178 74;
+    --bad: 240 116 101;
+    color-scheme: dark;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  @apply bg-bg text-ink font-sans antialiased;
+  font-size: 15px;
+  line-height: 1.55;
+}
+.num {
+  font-variant-numeric: tabular-nums;
+}
+.ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--ink));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface p-4;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-faint focus:border-ink focus:outline-none disabled:opacity-60;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium text-muted;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 font-semibold text-ink transition active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply border-ink bg-ink text-bg hover:opacity-90;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-sunken;
+  }
+  .btn-danger {
+    @apply text-bad;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-ink;
+  }
+  .th {
+    @apply whitespace-nowrap border-b border-line px-3 py-2 text-start text-xs font-medium text-faint;
+  }
+  .td {
+    @apply border-b border-line px-3 py-2.5 align-middle;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
