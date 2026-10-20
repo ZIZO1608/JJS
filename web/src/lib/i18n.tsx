@@ -28,6 +28,8 @@ interface I18n {
   /** Per-field messages from a validation error, in the current language. */
   fieldErrors: (e: unknown) => Record<string, string>;
   fmtDate: (iso: string | Date, withTime?: boolean) => string;
+  /** Inline bilingual text for screen copy: tr("عربي", "English"). */
+  tr: (ar: string, en: string) => string;
 }
 
 const Ctx = createContext<I18n | null>(null);
@@ -90,6 +92,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         }
         return out;
       },
+      tr: (a, e) => (lang === "ar" ? a : e),
       fmtDate: (iso, withTime = false) => {
         const d = typeof iso === "string" ? new Date(iso) : iso;
         return d.toLocaleString(lang === "ar" ? "ar-SY-u-nu-latn" : "en-GB", {

@@ -14,6 +14,18 @@ import { rolesRouter } from "./routes/roles.js";
 import { settingsRouter } from "./routes/settings.js";
 import { taxesRouter } from "./routes/taxes.js";
 import { usersRouter } from "./routes/users.js";
+import { clientsRouter } from "./routes/clients.js";
+import { costingRouter } from "./routes/costing.js";
+import { daysRouter } from "./routes/days.js";
+import { assetsRouter, expensesRouter } from "./routes/expenses.js";
+import { menuRouter } from "./routes/menu.js";
+import { moneyRouter } from "./routes/money.js";
+import { ordersRouter } from "./routes/orders.js";
+import { peopleRouter } from "./routes/people.js";
+import { purchasingRouter } from "./routes/purchasing.js";
+import { reportsRouter } from "./routes/reports.js";
+import { stockRouter } from "./routes/stock.js";
+import { systemRouter } from "./routes/system.js";
 
 export function createApp() {
   const app = express();
@@ -33,6 +45,19 @@ export function createApp() {
   api.use("/fx", fxRouter);
   api.use("/taxes", taxesRouter);
   api.use("/backups", backupsRouter);
+  api.use("/menu", menuRouter);
+  api.use("/stock", stockRouter);
+  api.use("/purchases", purchasingRouter);
+  api.use("/costing", costingRouter);
+  api.use("/clients", clientsRouter);
+  api.use("/orders", ordersRouter);
+  api.use("/money", moneyRouter);
+  api.use("/days", daysRouter);
+  api.use("/expenses", expensesRouter);
+  api.use("/assets", assetsRouter);
+  api.use("/people", peopleRouter);
+  api.use("/reports", reportsRouter);
+  api.use("/system", systemRouter);
   api.use((_req, _res, next) => next(new HttpError(404, "not_found", "No such API route.")));
   app.use("/api", api);
 

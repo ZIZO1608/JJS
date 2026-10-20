@@ -1,14 +1,30 @@
 import type { ReactNode } from "react";
-import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-dom";
-import { MODULES, type Module } from "@shared/permissions";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import type { Module } from "@shared/permissions";
 import { Layout } from "./components/Layout";
 import { Spinner } from "./components/ui";
+import { AssetsPage } from "./pages/Assets";
 import { AuditPage } from "./pages/Audit";
 import { LoginPage, SetupPage } from "./pages/Auth";
-import { ComingLater, HomePage } from "./pages/Home";
+import { ClientDetailPage } from "./pages/clients/ClientDetail";
+import { ClientsPage } from "./pages/clients/Clients";
+import { CostingPage } from "./pages/Costing";
+import { DailyClosePage } from "./pages/DailyClose";
+import { DashboardPage } from "./pages/Dashboard";
+import { ExpensesPage } from "./pages/Expenses";
+import { HomePage } from "./pages/Home";
+import { MenuPage } from "./pages/menu/Menu";
+import { NewOrderPage } from "./pages/orders/NewOrder";
+import { OrdersPage } from "./pages/orders/Orders";
+import { PeoplePage } from "./pages/People";
+import { PrintLabels, PrintReceipt, PrintReport, PrintStatement } from "./pages/print/Print";
+import { PurchasingPage } from "./pages/Purchasing";
+import { ReportsPage } from "./pages/Reports";
 import { RolesPage } from "./pages/Roles";
 import { SettingsPage } from "./pages/settings/Settings";
 import { UsersPage } from "./pages/Users";
+import { WarehousePage } from "./pages/warehouse/Warehouse";
+import { AppSettingsProvider } from "./lib/appSettings";
 import { useAuth } from "./lib/auth";
 import { useI18n } from "./lib/i18n";
 
@@ -19,16 +35,7 @@ function Guard({ module, children }: { module: Module; children: ReactNode }) {
   if (!can(module, "view")) return <p className="py-10 text-center text-muted">{t("errors.forbidden")}</p>;
   return <>{children}</>;
 }
-
-function ModuleRoute() {
-  const { module } = useParams();
-  if (!module || !(MODULES as readonly string[]).includes(module)) return <Navigate to="/" replace />;
-  return (
-    <Guard module={module as Module}>
-      <ComingLater module={module as Module} />
-    </Guard>
-  );
-}
+const g = (m: Module, el: ReactNode) => <Guard module={m}>{el}</Guard>;
 
 export function App() {
   const { status } = useAuth();
@@ -36,18 +43,38 @@ export function App() {
   if (status === "setup") return <SetupPage />;
   if (status === "login") return <LoginPage />;
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route index element={<HomePage />} />
-          <Route path="users" element={<Guard module="users"><UsersPage /></Guard>} />
-          <Route path="roles" element={<Guard module="roles"><RolesPage /></Guard>} />
-          <Route path="audit" element={<Guard module="audit"><AuditPage /></Guard>} />
-          <Route path="settings/*" element={<Guard module="settings"><SettingsPage /></Guard>} />
-          <Route path="m/:module" element={<ModuleRoute />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <AppSettingsProvider>
+      <BrowserRouter>
+        <Routes>
+          {/* print views: no menus, sized for the printer */}
+          <Route path="print/receipt/:id" element={g("orders", <PrintReceipt />)} />
+          <Route path="print/labels" element={g("warehouse", <PrintLabels />)} />
+          <Route path="print/statement/:id" element={g("clients", <PrintStatement />)} />
+          <Route path="print/report" element={g("reports", <PrintReport />)} />
+          <Route element={<Layout />}>
+            <Route index element={<HomePage />} />
+            <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
+            <Route path="orders" element={g("orders", <OrdersPage />)} />
+            <Route path="orders/new" element={g("orders", <NewOrderPage />)} />
+            <Route path="close" element={g("daily_close", <DailyClosePage />)} />
+            <Route path="clients" element={g("clients", <ClientsPage />)} />
+            <Route path="clients/:id" element={g("clients", <ClientDetailPage />)} />
+            <Route path="menu/*" element={g("menu", <MenuPage />)} />
+            <Route path="warehouse/*" element={g("warehouse", <WarehousePage />)} />
+            <Route path="purchasing/*" element={g("purchasing", <PurchasingPage />)} />
+            <Route path="costing/*" element={g("costing", <CostingPage />)} />
+            <Route path="expenses" element={g("expenses", <ExpensesPage />)} />
+            <Route path="assets" element={g("assets", <AssetsPage />)} />
+            <Route path="people/*" element={g("people", <PeoplePage />)} />
+            <Route path="reports" element={g("reports", <ReportsPage />)} />
+            <Route path="users" element={g("users", <UsersPage />)} />
+            <Route path="roles" element={g("roles", <RolesPage />)} />
+            <Route path="audit" element={g("audit", <AuditPage />)} />
+            <Route path="settings/*" element={g("settings", <SettingsPage />)} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AppSettingsProvider>
   );
 }

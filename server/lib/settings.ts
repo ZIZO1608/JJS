@@ -21,6 +21,41 @@ export interface FxConfig {
   jsonPath: string;
 }
 
+export interface LoyaltySettings {
+  enabled: boolean;
+  /** Buy this many items in a calendar month… */
+  buyQty: number;
+  /** …and get this many free. */
+  freeQty: number;
+}
+export interface OrderSettings {
+  defaultDeliveryFee: number;
+  /** When false, only the single best automatic discount applies. */
+  allowStacking: boolean;
+}
+export interface PrintSettings {
+  receiptWidthMm: 58 | 80;
+  labelWidthMm: number;
+  labelHeightMm: number;
+  receiptFooterAr: string;
+  receiptFooterEn: string;
+}
+export interface NetworkSettings {
+  /** Let phones on the same Wi-Fi open the system (needs a restart). */
+  lanAccess: boolean;
+}
+export interface SyncSettings {
+  enabled: boolean;
+  supabaseUrl: string;
+  serviceKey: string;
+}
+export interface SyncStatus {
+  lastRunAt: string | null;
+  lastOkAt: string | null;
+  lastError: string | null;
+  pushed: number;
+}
+
 export interface SettingsShape {
   business: BusinessInfo;
   "currency.default": Currency;
@@ -29,6 +64,12 @@ export interface SettingsShape {
   "fx.manualRate": number | null;
   "fx.lastCheckedAt": string | null;
   "fx.lastError": string | null;
+  loyalty: LoyaltySettings;
+  orders: OrderSettings;
+  printing: PrintSettings;
+  network: NetworkSettings;
+  sync: SyncSettings;
+  "sync.status": SyncStatus;
 }
 
 export const SETTING_DEFAULTS: SettingsShape = {
@@ -38,6 +79,12 @@ export const SETTING_DEFAULTS: SettingsShape = {
   "fx.manualRate": null,
   "fx.lastCheckedAt": null,
   "fx.lastError": null,
+  loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
+  orders: { defaultDeliveryFee: 0, allowStacking: false },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you" },
+  network: { lanAccess: false },
+  sync: { enabled: false, supabaseUrl: "", serviceKey: "" },
+  "sync.status": { lastRunAt: null, lastOkAt: null, lastError: null, pushed: 0 },
 };
 
 export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape[K] {

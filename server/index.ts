@@ -5,13 +5,32 @@ import { seed } from "./db/seed.js";
 import { DATA_DIR, HOST, PORT } from "./env.js";
 import { startBackupScheduler } from "./services/backup.js";
 import { startFxScheduler } from "./services/fx.js";
+import { db } from "./db/client.js";
+import { currentRate, localDate } from "./lib/biz.js";
+import { getSetting } from "./lib/settings.js";
+import { renewSubscriptions } from "./services/clients.js";
+import { startSyncScheduler } from "./services/sync.js";
 
 /** Start the local server. Used by `npm run dev`, `npm start` and the Electron wrapper. */
-export async function start(port = PORT, host = HOST) {
+export async function start(port = PORT, host?: string) {
   runMigrations();
   seed();
   startFxScheduler();
   startBackupScheduler();
+  startSyncScheduler();
+  const renew = () => {
+    try {
+      db.transaction((tx) => renewSubscriptions(tx, localDate(), currentRate()));
+    } catch (e) {
+      console.error("[subscriptions] renew failed", e);
+    }
+  };
+  renew();
+  setInterval(renew, 60 * 60 * 1000);
+  // Phones on the same Wi-Fi can reach the system only when the admin turned it on.
+  const lan = getSetting("network").lanAccess;
+  host = host ?? (lan ? "0.0.0.0" : HOST);
+  process.env.JJS_LAN_ACTIVE = host === "0.0.0.0" ? "1" : "0";
   const app = createApp();
   return new Promise<{ url: string; close: () => void }>((resolve) => {
     const server = app.listen(port, host, () => {

@@ -18,7 +18,6 @@ const OWNER_MODULE: Record<LookupType, Module> = {
   expense_item: "expenses",
   expense_category: "expenses",
   unit: "warehouse",
-  payment_method: "settings",
   client_tag: "clients",
   waste_reason: "warehouse",
 };

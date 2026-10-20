@@ -4,7 +4,7 @@ import { newId } from "./util.js";
 
 type AuditAction = (typeof auditLog.$inferInsert)["action"];
 
-const SECRET_KEYS = new Set(["passwordHash", "password", "apiKey"]);
+const SECRET_KEYS = new Set(["passwordHash", "password", "apiKey", "serviceKey"]);
 /** Never store secrets in the audit log. */
 const scrub = (value: unknown): unknown => {
   if (!value || typeof value !== "object") return value;

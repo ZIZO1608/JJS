@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
-import { MODULE_LABEL, MODULE_STAGE, type Module } from "@shared/permissions";
+import { MODULE_LABEL, type Module } from "@shared/permissions";
 import { ApiError, get, put } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
@@ -8,10 +8,26 @@ import { useToast } from "../lib/toast";
 import { Icon } from "./Icon";
 import { Field, Modal, TextInput } from "./ui";
 
-export const CURRENT_STAGE = 1;
-
 export const pathFor = (m: Module) =>
-  ({ home: "/", users: "/users", roles: "/roles", audit: "/audit", settings: "/settings" } as Partial<Record<Module, string>>)[m] ?? `/m/${m}`;
+  ({
+    home: "/",
+    dashboard: "/dashboard",
+    orders: "/orders",
+    daily_close: "/close",
+    clients: "/clients",
+    menu: "/menu",
+    warehouse: "/warehouse",
+    purchasing: "/purchasing",
+    costing: "/costing",
+    expenses: "/expenses",
+    assets: "/assets",
+    people: "/people",
+    reports: "/reports",
+    users: "/users",
+    roles: "/roles",
+    audit: "/audit",
+    settings: "/settings",
+  } as Record<Module, string>)[m];
 
 const FULL_GROUPS: Module[][] = [
   ["home", "dashboard"],
@@ -20,13 +36,7 @@ const FULL_GROUPS: Module[][] = [
   ["expenses", "assets", "people", "reports"],
   ["users", "roles", "audit", "settings"],
 ];
-const SIMPLE_ITEMS: Module[] = ["home", "orders", "warehouse", "clients", "daily_close"];
-
-function StageBadge({ m }: { m: Module }) {
-  const { t } = useI18n();
-  if (MODULE_STAGE[m] <= CURRENT_STAGE) return null;
-  return <span className="ms-auto rounded-full bg-sunken px-1.5 text-[11px] font-medium text-faint">{t("nav.stage", { n: MODULE_STAGE[m] })}</span>;
-}
+const SIMPLE_ITEMS: Module[] = ["home", "orders", "warehouse", "clients", "daily_close", "expenses", "reports"];
 
 function RateChip() {
   const { t } = useI18n();
@@ -166,7 +176,6 @@ export function Layout() {
                     <NavLink key={m} to={pathFor(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap`}>
                       <Icon name={m} />
                       <span>{pick(MODULE_LABEL[m])}</span>
-                      <StageBadge m={m} />
                     </NavLink>
                   ))}
                 </div>

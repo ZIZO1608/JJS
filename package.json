@@ -24,6 +24,7 @@
     "cookie-parser": "^1.4.7",
     "drizzle-orm": "^0.38.3",
     "express": "^4.21.2",
+    "jsbarcode": "^3.11.6",
     "uuid": "^11.0.5",
     "zod": "^3.24.1"
   },
@@ -55,8 +56,17 @@
   "build": {
     "appId": "com.jjs.erp",
     "productName": "JJ's ERP",
-    "files": ["dist/**/*", "electron/**/*", "drizzle/**/*", "package.json"],
-    "extraMetadata": { "main": "electron/main.cjs" },
-    "win": { "target": "nsis" }
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "drizzle/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "win": {
+      "target": "nsis"
+    }
   }
 }
