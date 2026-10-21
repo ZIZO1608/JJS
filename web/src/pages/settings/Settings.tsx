@@ -6,11 +6,23 @@ import { BusinessTab } from "./Business";
 import { CurrencyTab } from "./Currency";
 import { ListsTab } from "./Lists";
 import { TaxesTab } from "./Taxes";
+import { MoneyTab } from "./Money";
+import { NetworkTab } from "./Network";
+import { PriceListsTab } from "./PriceLists";
+import { PrintingTab } from "./Printing";
+import { SalesTab } from "./Sales";
 
-const TABS = ["business", "lists", "currency", "taxes", "backups"] as const;
+const TABS = ["business", "lists", "currency", "taxes", "money", "sales", "prices", "printing", "network", "backups"] as const;
+const EXTRA_LABEL: Record<string, { ar: string; en: string }> = {
+  money: { ar: "الصناديق والدفع", en: "Money" },
+  sales: { ar: "البيع والولاء", en: "Sales rules" },
+  prices: { ar: "قوائم الأسعار", en: "Price lists" },
+  printing: { ar: "الطباعة", en: "Printing" },
+  network: { ar: "الشبكة والسحابة", en: "Network & cloud" },
+};
 
 export function SettingsPage() {
-  const { t } = useI18n();
+  const { t, pick } = useI18n();
   return (
     <>
       <PageHeader title={t("settings.title")} />
@@ -23,7 +35,7 @@ export function SettingsPage() {
               `-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-semibold ${isActive ? "border-ink text-ink" : "border-transparent text-muted hover:text-ink"}`
             }
           >
-            {t(`settings.tabs.${k}`)}
+            {EXTRA_LABEL[k] ? pick(EXTRA_LABEL[k]!) : t(`settings.tabs.${k as "business"}`)}
           </NavLink>
         ))}
       </nav>
@@ -33,6 +45,11 @@ export function SettingsPage() {
         <Route path="lists" element={<ListsTab />} />
         <Route path="currency" element={<CurrencyTab />} />
         <Route path="taxes" element={<TaxesTab />} />
+        <Route path="money" element={<MoneyTab />} />
+        <Route path="sales" element={<SalesTab />} />
+        <Route path="prices" element={<PriceListsTab />} />
+        <Route path="printing" element={<PrintingTab />} />
+        <Route path="network" element={<NetworkTab />} />
         <Route path="backups" element={<BackupsTab />} />
       </Routes>
     </>

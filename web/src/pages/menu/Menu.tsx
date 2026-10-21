@@ -10,11 +10,12 @@ import { money, num, pct, usd, type Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { useData } from "../../lib/useData";
 import type { Category, Option, StockItem } from "../../lib/types";
-import { ActionDialog, Check, CurrencySelect, DeleteConfirm, NameFields, NumInput, RecipeEditor, RowActions, recipeBody, useSaver, type RecipeLine } from "../kit";
+import { ActionDialog, Check, CurrencySelect, DeleteConfirm, NameFields, NumInput, RecipeEditor, RowActions, recipeBody, recipeLinesFrom, useSaver, type RecipeLine } from "../kit";
 
 interface RecipeRow {
   itemId: string;
   qty: number;
+  wastePct?: number;
   nameAr: string;
   nameEn: string;
   kind: string;
@@ -39,6 +40,8 @@ interface Product {
   groupIds: string[];
   recipe: RecipeRow[];
   costUsd: number;
+  weightG?: number;
+  extraCost?: number;
 }
 interface Group {
   id: string;
@@ -105,8 +108,10 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
     sort: String(product?.sort ?? 0),
     active: product?.active ?? true,
     own: product?.ownGroupIds ?? [],
+    weightG: product?.weightG ? String(product.weightG) : "",
+    extraCost: product?.extraCost ? String(product.extraCost) : "",
   });
-  const [lines, setLines] = useState<RecipeLine[]>(product?.recipe.map((r) => ({ itemId: r.itemId, qty: String(r.qty) })) ?? []);
+  const [lines, setLines] = useState<RecipeLine[]>(product ? recipeLinesFrom(product.recipe, items) : []);
   const inherited = catGroups(f.categoryId);
 
   const save = async () => {
@@ -124,6 +129,8 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
       active: f.active,
       optionGroupIds: f.own.filter((g) => !inherited.includes(g)),
       recipe: recipeBody(lines),
+      weightG: num(f.weightG) > 0 ? num(f.weightG) : 0,
+      extraCost: num(f.extraCost) > 0 ? num(f.extraCost) : 0,
     };
     if (await run(() => (product ? put(`/menu/products/${product.id}`, body) : post("/menu/products", body)))) onSaved();
   };
@@ -190,6 +197,16 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
         <Field label={tr("الترتيب", "Order")} htmlFor="p-sort">
           <NumInput id="p-sort" step="1" value={f.sort} onChange={(v) => setF({ ...f, sort: v })} />
         </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={tr("وزن السندويشة (غرام)", "Weight (grams)")} htmlFor="p-w">
+          <NumInput id="p-w" value={f.weightG} onChange={(v) => setF({ ...f, weightG: v })} placeholder="220" />
+        </Field>
+        {seeCost && (
+          <Field label={tr(`تكلفة مباشرة إضافية للقطعة (${f.currency})`, `Other direct cost per piece (${f.currency})`)} htmlFor="p-x" hint={tr("غاز، يد عاملة… تنضاف على تكلفة الوصفة", "Gas, labour… added to the recipe cost")}>
+            <NumInput id="p-x" value={f.extraCost} onChange={(v) => setF({ ...f, extraCost: v })} placeholder="0" />
+          </Field>
+        )}
       </div>
       <Field label={tr("مسبّبات الحساسية (تنطبع على الملصق)", "Allergens (printed on the label)")} htmlFor="p-all" error={errors.allergens}>
         <TextInput id="p-all" value={f.allergens} placeholder={tr("مثلاً: غلوتين، ألبان", "e.g. Gluten, Dairy")} onChange={(e) => setF({ ...f, allergens: e.target.value })} />
@@ -501,7 +518,7 @@ function OptionDialog({ groupId, option, items, onClose, onSaved }: { groupId: s
   const recipe = useData<{ recipe: RecipeRow[] }>(option ? `/menu/options/${option.id}/recipe` : null);
   const [f, setF] = useState({ nameAr: option?.nameAr ?? "", nameEn: option?.nameEn ?? "", priceDelta: String(option?.priceDelta ?? 0), currency: option?.currency ?? s?.defaultCurrency ?? "USD", sort: String(option?.sort ?? 0), active: option?.active ?? true });
   const [lines, setLines] = useState<RecipeLine[] | null>(option ? null : []);
-  const shown = lines ?? recipe.data?.recipe.map((r) => ({ itemId: r.itemId, qty: String(r.qty) })) ?? [];
+  const shown = lines ?? (recipe.data ? recipeLinesFrom(recipe.data.recipe, items) : []);
   const save = async () => {
     const ok = await run(async () => {
       const body = { groupId, nameAr: f.nameAr, nameEn: f.nameEn, priceDelta: num(f.priceDelta) || 0, currency: f.currency, sort: Math.round(num(f.sort) || 0), active: f.active };

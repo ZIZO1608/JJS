@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { DataTable } from "../../components/DataTable";
 import { LookupSelect } from "../../components/LookupSelect";
 import { Tabs } from "../../components/Tabs";
@@ -12,7 +12,10 @@ import { openPrint } from "../../lib/print";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
 import type { Batch, BatchStatus, Catalog, Location, StockItem, Warehouse } from "../../lib/types";
-import { ActionDialog, Check, DeleteConfirm, NameFields, NumInput, RowActions, unitOf, useSaver } from "../kit";
+import { ALL_UNITS, ActionDialog, Check, DeleteConfirm, NameFields, NumInput, RowActions, unitOf, useSaver } from "../kit";
+
+/** Stock items as the server sends them (with the pack and supplier fields). */
+type Item = StockItem & { packUnit?: string; packSize?: number; supplierId?: string | null };
 
 /* ---------- shared bits ---------- */
 
@@ -159,6 +162,11 @@ function BatchDialog({ batch, initial, onClose, onDone }: { batch: Batch; initia
         )}
       </dl>
 
+      {action === null && batch.item.kind === "product" && (
+        <Link to={`/production/trace?code=${encodeURIComponent(batch.batchCode)}`} className="mb-2 block text-sm text-muted underline">
+          {tr("مين أخد من هالدفعة؟", "Who got this batch?")}
+        </Link>
+      )}
       {action === null && (
         <div className="grid grid-cols-2 gap-2">
           {actions
@@ -418,6 +426,12 @@ function MakeTab() {
 
   return (
     <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface p-4">
+        <p className="max-w-xl text-sm text-muted">{tr("دفعة الصبح بكذا صنف؟ استعمل «الإنتاج»: بيحسب المواد قبل الاعتماد وبيطبع كل الملصقات. هون بتحضّر صنف واحد بسرعة.", "Making several products in the morning? Use Production: it checks the materials first and prints every label. Here you make one product quickly.")}</p>
+        <Link to="/production/new" className="btn btn-primary min-h-[48px] px-5 text-base">
+          {tr("افتح دفعة إنتاج", "Open production run")}
+        </Link>
+      </div>
       <section>
         <h2 className="mb-2 font-semibold">{tr("١. شو حضّرت؟", "1. What did you make?")}</h2>
         {catalog.data.categories.length > 1 && (
@@ -491,7 +505,7 @@ function MakeTab() {
 
 const KIND_LABEL: Record<StockItem["kind"], { ar: string; en: string }> = { ingredient: { ar: "مكوّن", en: "Ingredient" }, packaging: { ar: "تغليف", en: "Packaging" }, product: { ar: "منتج جاهز", en: "Ready product" } };
 
-function ItemDialog({ item, onClose, onSaved }: { item: StockItem | null; onClose: () => void; onSaved: () => void }) {
+function ItemDialog({ item, onClose, onSaved }: { item: Item | null; onClose: () => void; onSaved: () => void }) {
   const { tr, pick, lang, t } = useI18n();
   const { can } = useAuth();
   const { errors, busy, run } = useSaver();
@@ -500,13 +514,30 @@ function ItemDialog({ item, onClose, onSaved }: { item: StockItem | null; onClos
     kind: (item?.kind === "product" ? "ingredient" : item?.kind) ?? ("ingredient" as "ingredient" | "packaging"),
     nameAr: item?.nameAr ?? "",
     nameEn: item?.nameEn ?? "",
-    unitCode: item?.unitCode ?? ("kg" as StockItem["unitCode"]),
+    unitCode: (item?.unitCode ?? "kg") as string,
     minLevel: String(item?.minLevel ?? 0),
     avgCostUsd: String(item?.avgCostUsd ?? 0),
     active: item?.active ?? true,
+    packUnit: item?.packUnit ?? "",
+    packSize: item?.packSize ? String(item.packSize) : "",
+    supplierId: item?.supplierId ?? "",
   });
+  const suppliers = useData<{ rows: { id: string; name: string; active: boolean }[] }>(can("purchasing", "view") && !isProduct ? "/purchases/suppliers" : null);
   const save = async () => {
-    const body = isProduct ? { minLevel: num(f.minLevel) || 0 } : { kind: f.kind, nameAr: f.nameAr, nameEn: f.nameEn, unitCode: f.unitCode, minLevel: num(f.minLevel) || 0, avgCostUsd: num(f.avgCostUsd) || 0, active: f.active };
+    const body = isProduct
+      ? { minLevel: num(f.minLevel) || 0 }
+      : {
+          kind: f.kind,
+          nameAr: f.nameAr,
+          nameEn: f.nameEn,
+          unitCode: f.unitCode,
+          minLevel: num(f.minLevel) || 0,
+          avgCostUsd: num(f.avgCostUsd) || 0,
+          active: f.active,
+          packUnit: num(f.packSize) > 0 ? f.packUnit.trim() : "",
+          packSize: num(f.packSize) > 0 ? num(f.packSize) : 0,
+          supplierId: f.supplierId || null,
+        };
     if (await run(() => (item ? put(`/stock/items/${item.id}`, body) : post("/stock/items", body)))) onSaved();
   };
   return (
@@ -521,8 +552,8 @@ function ItemDialog({ item, onClose, onSaved }: { item: StockItem | null; onClos
               </Select>
             </Field>
             <Field label={tr("الوحدة", "Unit")} htmlFor="i-unit">
-              <Select id="i-unit" value={f.unitCode} onChange={(e) => setF({ ...f, unitCode: e.target.value as StockItem["unitCode"] })}>
-                {(["kg", "g", "l", "ml", "pc"] as const).map((u) => (
+              <Select id="i-unit" value={f.unitCode} onChange={(e) => setF({ ...f, unitCode: e.target.value })}>
+                {ALL_UNITS.map((u) => (
                   <option key={u} value={u}>
                     {unitOf(u, lang)}
                   </option>
@@ -531,6 +562,26 @@ function ItemDialog({ item, onClose, onSaved }: { item: StockItem | null; onClos
             </Field>
           </div>
           <NameFields f={f} set={setF} errors={errors} idp="i" />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={tr("بينشرى بـ (اختياري)", "Bought in (optional)")} htmlFor="i-pu" hint={tr("مثلاً: كيس، كرتونة", "e.g. Bag, Carton")}>
+              <TextInput id="i-pu" value={f.packUnit} onChange={(e) => setF({ ...f, packUnit: e.target.value })} />
+            </Field>
+            <Field label={tr(`كم ${unitOf(f.unitCode, lang)} فيها`, `How many ${unitOf(f.unitCode, lang)} inside`)} htmlFor="i-ps" hint={f.packUnit && num(f.packSize) > 0 ? tr(`1 ${f.packUnit} = ${num(f.packSize)} ${unitOf(f.unitCode, lang)}`, `1 ${f.packUnit} = ${num(f.packSize)} ${unitOf(f.unitCode, lang)}`) : undefined}>
+              <NumInput id="i-ps" value={f.packSize} onChange={(v) => setF({ ...f, packSize: v })} />
+            </Field>
+          </div>
+          {suppliers.data && (
+            <Field label={tr("المورّد الأساسي", "Main supplier")} htmlFor="i-sup">
+              <Select id="i-sup" value={f.supplierId} onChange={(e) => setF({ ...f, supplierId: e.target.value })}>
+                <option value="">—</option>
+                {suppliers.data.rows.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
         </>
       )}
       <div className="grid grid-cols-2 gap-3">
@@ -548,6 +599,30 @@ function ItemDialog({ item, onClose, onSaved }: { item: StockItem | null; onClos
           {t("common.active")}
         </Check>
       )}
+    </ActionDialog>
+  );
+}
+
+/** Material used outside production (cleaning, staff meal, a test recipe…). */
+function UseDialog({ item, onClose, onSaved }: { item: StockItem; onClose: () => void; onSaved: () => void }) {
+  const { tr, pick, lang } = useI18n();
+  const { errors, busy, run } = useSaver();
+  const [f, setF] = useState({ qty: "", reasonId: "", note: "" });
+  const save = async () => {
+    if (await run(() => post("/stock/use", { itemId: item.id, qty: num(f.qty), reasonId: f.reasonId || null, note: f.note }), tr("انسجّل الاستعمال.", "Use recorded."))) onSaved();
+  };
+  return (
+    <ActionDialog title={tr(`استعمال داخلي: ${pick(item)}`, `Internal use: ${pick(item)}`)} onClose={onClose} onSave={save} busy={busy} disabled={!(num(f.qty) > 0)}>
+      <p className="text-sm text-muted">{tr("مادة طلعت من المخزن لغير الإنتاج: تنظيف، وجبة موظفين، تجربة وصفة…", "Material used outside production: cleaning, a staff meal, a recipe test…")}</p>
+      <Field label={`${tr("الكمية", "Quantity")} (${unitOf(item.unitCode, lang)})`} htmlFor="u-qty" error={errors.qty}>
+        <NumInput id="u-qty" value={f.qty} onChange={(v) => setF({ ...f, qty: v })} />
+      </Field>
+      <Field label={tr("السبب", "Reason")} htmlFor="u-r">
+        <LookupSelect id="u-r" listType="waste_reason" value={f.reasonId} onChange={(v) => setF({ ...f, reasonId: v })} />
+      </Field>
+      <Field label={tr("ملاحظة", "Note")} htmlFor="u-n">
+        <TextInput id="u-n" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+      </Field>
     </ActionDialog>
   );
 }
@@ -605,13 +680,13 @@ function CountItemDialog({ item, onClose, onSaved }: { item: StockItem; onClose:
 }
 
 function ItemsTab() {
-  const { tr, pick } = useI18n();
+  const { tr, pick, lang } = useI18n();
   const { can } = useAuth();
   const seeCost = can("costing", "see_cost");
   const items = useData<{ rows: StockItem[] }>("/stock/items");
   const [kind, setKind] = useState<"" | StockItem["kind"]>("");
   const [lowOnly, setLowOnly] = useState(false);
-  const [dlg, setDlg] = useState<{ t: "edit" | "receive" | "count"; item: StockItem } | "new" | null>(null);
+  const [dlg, setDlg] = useState<{ t: "edit" | "receive" | "count" | "use"; item: StockItem } | "new" | null>(null);
   const [toDelete, setToDelete] = useState<StockItem | null>(null);
   if (!items.data) return <Spinner />;
   const rows = items.data.rows.filter((i) => (!kind || i.kind === kind) && (!lowOnly || i.low));
@@ -655,7 +730,10 @@ function ItemsTab() {
             render: (i) => (
               <div className={i.active ? "" : "opacity-60"}>
                 <div className="font-semibold">{pick(i)}</div>
-                <div className="text-xs text-faint">{pick(KIND_LABEL[i.kind])}</div>
+                <div className="text-xs text-faint">
+                  {pick(KIND_LABEL[i.kind])}
+                  {(i as Item).packSize ? ` · ${(i as Item).packUnit || "pack"} = ${(i as Item).packSize} ${unitOf(i.unitCode, lang)}` : ""}
+                </div>
               </div>
             ),
             sortValue: (i) => pick(i),
@@ -694,6 +772,11 @@ function ItemsTab() {
                         {tr("استلام", "Receive")}
                       </button>
                     )}
+                    {can("warehouse", "create") && i.kind !== "product" && (
+                      <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setDlg({ t: "use", item: i })}>
+                        {tr("استعمال", "Use")}
+                      </button>
+                    )}
                     {can("warehouse", "edit") && (
                       <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setDlg({ t: "count", item: i })}>
                         {tr("جرد", "Count")}
@@ -715,6 +798,7 @@ function ItemsTab() {
       {dlg && dlg !== "new" && dlg.t === "edit" && <ItemDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} />}
       {dlg && dlg !== "new" && dlg.t === "receive" && <ReceiveDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} />}
       {dlg && dlg !== "new" && dlg.t === "count" && <CountItemDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} />}
+      {dlg && dlg !== "new" && dlg.t === "use" && <UseDialog item={dlg.item} onClose={() => setDlg(null)} onSaved={done} />}
       {toDelete && <DeleteConfirm name={pick(toDelete)} path={`/stock/items/${toDelete.id}`} onClose={() => setToDelete(null)} onDone={reload} />}
     </>
   );
@@ -731,6 +815,8 @@ const MOVE_TYPE: Record<string, { ar: string; en: string }> = {
   waste: { ar: "هدر", en: "Waste" },
   count: { ar: "جرد", en: "Count" },
   adjust: { ar: "استلام / تعديل", en: "Received / adjust" },
+  return: { ar: "مرتجع", en: "Returned" },
+  consign: { ar: "بالأمانة", en: "Consignment" },
 };
 interface Move {
   id: string;

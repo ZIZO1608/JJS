@@ -113,7 +113,10 @@ export interface Warehouse extends Named {
 export interface StockItem extends Named {
   kind: "ingredient" | "packaging" | "product";
   productId: string | null;
-  unitCode: "kg" | "g" | "l" | "ml" | "pc";
+  unitCode: "kg" | "g" | "l" | "ml" | "pc" | "pack" | "carton";
+  packUnit: string;
+  packSize: number;
+  supplierId: string | null;
   minLevel: number;
   avgCostUsd: number;
   active: boolean;
