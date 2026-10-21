@@ -22,7 +22,7 @@ Desktop app (its own window, data kept in the Windows app-data folder):
 
 ```bash
 npm run desktop
-npm run dist:win     # Windows installer (.exe) in dist/ — run this on Windows
+npm run dist:win     # Windows installer (.exe) in release/ — run this on Windows
 ```
 
 > On Windows, if Electron complains about `better-sqlite3`, run `npx electron-builder install-app-deps` once. It rebuilds the database module for Electron.
