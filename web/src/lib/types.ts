@@ -58,6 +58,12 @@ export interface ClientSummary {
   loyalty: { count: number; progress: number; buyQty: number; available: number; enabled: boolean };
   subscription: { planNameAr: string; planNameEn: string; endDate: string; availableIncluded: number } | null;
   lastOrderDate: string | null;
+  areaId: string | null;
+  paymentTermsDays: number;
+  priceListId: string | null;
+  consignment: boolean;
+  repId: string | null;
+  aging: { balanceUsd: number; oldestUnpaidDate: string | null; daysOutstanding: number; termsDays: number; overdueDays: number };
 }
 export interface PaymentMethod extends Named {
   kind: "box" | "credit" | "salary";

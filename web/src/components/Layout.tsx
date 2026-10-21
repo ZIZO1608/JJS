@@ -29,14 +29,23 @@ export const pathFor = (m: Module) =>
     settings: "/settings",
   } as Record<Module, string>)[m];
 
-const FULL_GROUPS: Module[][] = [
+/** Screens that are not a permission module of their own: they follow another module's "view". */
+type Extra = "distribution" | "production";
+type NavKey = Module | Extra;
+const EXTRA: Record<Extra, { module: Module; to: string; ar: string; en: string }> = {
+  distribution: { module: "orders", to: "/distribution", ar: "التوزيع", en: "Distribution" },
+  production: { module: "warehouse", to: "/production", ar: "الإنتاج", en: "Production" },
+};
+const isExtra = (k: NavKey): k is Extra => k in EXTRA;
+
+const FULL_GROUPS: NavKey[][] = [
   ["home", "dashboard"],
-  ["orders", "daily_close", "clients"],
-  ["menu", "warehouse", "purchasing", "costing"],
+  ["orders", "distribution", "daily_close", "clients"],
+  ["production", "menu", "warehouse", "purchasing", "costing"],
   ["expenses", "assets", "people", "reports"],
   ["users", "roles", "audit", "settings"],
 ];
-const SIMPLE_ITEMS: Module[] = ["home", "orders", "warehouse", "clients", "daily_close", "expenses", "reports"];
+const SIMPLE_ITEMS: NavKey[] = ["home", "orders", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
 
 function RateChip() {
   const { t } = useI18n();
@@ -102,7 +111,9 @@ export function Layout() {
   const [pw, setPw] = useState(false);
   if (!me) return null;
 
-  const visible = (m: Module) => can(m, "view");
+  const visible = (k: NavKey) => can(isExtra(k) ? EXTRA[k].module : k, "view");
+  const to = (k: NavKey) => (isExtra(k) ? EXTRA[k].to : pathFor(k));
+  const label = (k: NavKey) => (isExtra(k) ? pick(EXTRA[k]) : pick(MODULE_LABEL[k]));
   const navClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-2.5 rounded-lg px-3 py-2 text-[14.5px] ${isActive ? "bg-sunken font-semibold text-ink" : "text-muted hover:text-ink"}`;
 
@@ -154,9 +165,9 @@ export function Layout() {
         <div className="flex min-h-0 flex-1 flex-col">
           <nav className="sticky top-[57px] z-20 flex gap-1.5 overflow-x-auto border-b border-line bg-surface px-4 py-2" aria-label="Sections">
             {SIMPLE_ITEMS.filter(visible).map((m) => (
-              <NavLink key={m} to={pathFor(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap px-4 py-2.5 text-[15.5px]`}>
+              <NavLink key={m} to={to(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap px-4 py-2.5 text-[15.5px]`}>
                 <Icon name={m} />
-                {pick(MODULE_LABEL[m])}
+                {label(m)}
               </NavLink>
             ))}
           </nav>
@@ -173,9 +184,9 @@ export function Layout() {
               return (
                 <div key={i} className="flex gap-1 md:flex-col md:border-b md:border-line md:pb-2 md:last:border-b-0 [&:not(:first-child)]:md:pt-2">
                   {items.map((m) => (
-                    <NavLink key={m} to={pathFor(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap`}>
+                    <NavLink key={m} to={to(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap`}>
                       <Icon name={m} />
-                      <span>{pick(MODULE_LABEL[m])}</span>
+                      <span>{label(m)}</span>
                     </NavLink>
                   ))}
                 </div>

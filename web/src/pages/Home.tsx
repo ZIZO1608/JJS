@@ -5,11 +5,14 @@ import { pathFor } from "../components/Layout";
 import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { DashboardPage } from "./Dashboard";
+import { FiveAnswersCard } from "./five/FiveAnswers";
 
 /** What each big button on the simple home is for (manager & members). */
-const SIMPLE_TILES: { m: Module; to?: string; ar: string; en: string; titleAr?: string; titleEn?: string }[] = [
-  { m: "orders", to: "/orders/new", titleAr: "طلب جديد", titleEn: "New order", ar: "سجّل طلب زبون واطبع الفاتورة", en: "Take an order and print the receipt" },
-  { m: "warehouse", ar: "حضّر، اطبع ملصقات الصلاحية، وسجّل الهدر", en: "Make, print expiry labels and log waste" },
+const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution"; to?: string; ar: string; en: string; titleAr?: string; titleEn?: string }[] = [
+  { m: "orders", to: "/orders/new", titleAr: "فاتورة جديدة", titleEn: "New invoice", ar: "فاتورة لمحل أو زبون، دفع كامل أو جزئي، واطبعها", en: "Invoice a shop or client, full or part payment, and print it" },
+  { m: "warehouse", icon: "production", to: "/production/new", titleAr: "إنتاج الصبح", titleEn: "Morning production", ar: "اعمل دفعة بكل الأصناف واطبع الملصقات", en: "Make the batch for every product and print labels" },
+  { m: "orders", icon: "distribution", to: "/distribution/route", titleAr: "خط التوزيع", titleEn: "Route sheet", ar: "المحلات اليوم، بالأمانة، والمرتجعات", en: "Today's shops, consignment and returns" },
+  { m: "warehouse", ar: "البرّاد، الهدر والجرد", en: "Fridge, waste and counts" },
   { m: "clients", ar: "سجّل دفعة من زبون وشوف رصيده", en: "Record a client's payment and see the balance" },
   { m: "orders", ar: "طلبات اليوم والتوصيل", en: "Today's orders and deliveries" },
   { m: "daily_close", ar: "عدّ الصندوق واقفل اليوم", en: "Count the cash and lock the day" },
@@ -18,7 +21,7 @@ const SIMPLE_TILES: { m: Module; to?: string; ar: string; en: string; titleAr?: 
 function SimpleHome() {
   const { pick, tr } = useI18n();
   const { can } = useAuth();
-  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.to ? "create" : "view"));
+  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.to && !x.icon ? "create" : "view"));
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {tiles.map((x, i) => (
@@ -29,7 +32,7 @@ function SimpleHome() {
             i === 0 ? "border-ink bg-ink text-bg sm:col-span-2" : "border-line bg-surface hover:border-ink"
           }`}
         >
-          <Icon name={x.m} className="mb-1 h-7 w-7" />
+          <Icon name={x.icon ?? x.m} className="mb-1 h-7 w-7" />
           <span className="text-xl font-bold">{x.titleAr ? tr(x.titleAr, x.titleEn!) : pick(MODULE_LABEL[x.m])}</span>
           <span className={`text-sm ${i === 0 ? "opacity-75" : "text-muted"}`}>{pick(x)}</span>
         </Link>
@@ -58,8 +61,13 @@ export function HomePage() {
               </Link>
             )}
             {can("warehouse", "create") && (
-              <Link to="/warehouse/produce" className="btn">
-                {tr("تحضير وملصقات", "Make & label")}
+              <Link to="/production/new" className="btn">
+                {tr("إنتاج وملصقات", "Make & label")}
+              </Link>
+            )}
+            {can("orders", "view") && (
+              <Link to="/distribution/route" className="btn">
+                {tr("خط التوزيع", "Route sheet")}
               </Link>
             )}
             {can("daily_close", "view") && (
@@ -70,7 +78,14 @@ export function HomePage() {
           </div>
         )}
       </div>
-      {simple ? <SimpleHome /> : can("dashboard", "view") ? <DashboardPage embedded /> : null}
+      {simple ? (
+        <SimpleHome />
+      ) : can("dashboard", "view") ? (
+        <div className="grid gap-5">
+          <FiveAnswersCard />
+          <DashboardPage embedded />
+        </div>
+      ) : null}
     </div>
   );
 }

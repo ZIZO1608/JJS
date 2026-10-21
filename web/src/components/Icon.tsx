@@ -1,6 +1,8 @@
 import type { Module } from "@shared/permissions";
 
-const P: Record<Module, string> = {
+const P: Record<Module | "distribution" | "production", string> = {
+  distribution: "M2 7h11v9H2zM13 10h4l3 3v3h-7zM6 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
+  production: "M4 20h16M6 20V10l4 3V10l4 3V6h4v14",
   home: "M3.5 10.5 12 4l8.5 6.5V20a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1z",
   dashboard: "M3 3h7v9H3zM14 3h7v5h-7zM14 12h7v9h-7zM3 16h7v5H3z",
   orders: "M4 9h16l-1.5 9.5a2 2 0 0 1-2 1.5h-9a2 2 0 0 1-2-1.5zM8 9a4 4 0 0 1 8 0",
@@ -20,7 +22,7 @@ const P: Record<Module, string> = {
   audit: "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
 };
 
-export function Icon({ name, className = "h-[18px] w-[18px]" }: { name: Module; className?: string }) {
+export function Icon({ name, className = "h-[18px] w-[18px]" }: { name: Module | "distribution" | "production"; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d={P[name]} />

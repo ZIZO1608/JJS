@@ -63,7 +63,7 @@ ADMIN_ROUTES = [
     "/", "/dashboard", "/orders", "/orders/new", "/close", "/clients", f"/clients/{focus}",
     "/menu/products", "/menu/categories", "/menu/addons",
     "/warehouse/fridge", "/warehouse/produce", "/warehouse/items", "/warehouse/moves", "/warehouse/places",
-    "/purchasing/list", "/purchasing/new", "/purchasing/suppliers",
+    "/production/new", "/production/runs", "/production/trace", "/distribution/route", "/distribution/consignments", "/distribution/returns", "/purchasing/list", "/purchasing/new", "/purchasing/suppliers",
     "/costing/products", "/costing/ingredients", "/costing/overheads", "/costing/prep",
     "/expenses", "/assets", "/people/employees", "/people/advances", "/people/payroll", "/people/calls",
     "/reports", "/users", "/roles", "/audit",

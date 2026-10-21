@@ -468,3 +468,58 @@ peopleRouter.use(
 );
 
 /* ---------- advances (سلف) ---------- */
+
+## Wholesale & distribution pack (new request bodies)
+
+```ts
+// POST /orders and /orders/quote — new fields
+type: "normal" | "trial" | "staff" | "internal"   // internal = tasting / kitchen use, total 0, cost recorded
+paidAmount?: number | null   // with a box method: paid now (order currency). Less than total → status "partial", rest on the client's account (client required)
+// response receipt now has: payment: { paid, remaining }, account: { beforeUsd, afterUsd, nowUsd } | null, client.phone/address/contactPerson
+// quote lines have priceFrom: "menu" | "list" | "client" | "agreed"
+// POST /orders/:id/cancel  { reason?: string }   (consignment invoices → 409 consignment_order)
+
+// POST /returns
+{ clientId?, orderId?, repId?, settlement: "credit" | "refund" | "none", boxId? (refund), note?,
+  lines: [{ productId, qty:int, action: "restock" | "waste", expiresAt? }] }
+// with orderId: priced from that invoice (after its discount), max = sold − already returned (400 return_too_many)
+
+// POST /consignments  { clientId, repId?, note?, lines: [{ productId, qty }] }   → stock leaves now, priced at the client's price
+// POST /consignments/:id/settle { lines: [{ productId, returnedQty, action }], methodId?, paidAmount?, note? }
+//   → returned goods back/waste, sold part becomes an invoice (default method: on credit)
+// POST /consignments/:id/cancel   (open only; stock comes back)
+
+// POST /production/preview { lines: [{ productId, qty }] } → { products, materials[{need,have,short}], itemsCount, costUsd, shortages }
+// POST /production { lines, employeeId?, locationId?, note? } → { id, number, batches[{productId,batchId,batchCode,qty,costUsd}], costUsd, itemsCount }
+// GET  /production?from&to, /production/:id, /trace/:batchIdOrCode, /route-sheet?date&repId
+
+// clients: new fields areaId, paymentTermsDays, priceListId, consignment (bool), repId
+//   POST /clients also accepts openingBalance (+ owes us / − prepaid) and openingCurrency
+//   summary rows now have aging: { balanceUsd, oldestUnpaidDate, daysOutstanding, termsDays, overdueDays }
+//   GET /clients/:id/snapshot (for the invoice screen), GET /clients/:id adds totals, area, priceList, rep, returns, consignments
+// price lists: crud /clients/price-lists {nameAr,nameEn,active}; GET/PUT /clients/price-lists/:id/items { items: [{productId, price, currency}] }
+
+// items: unitCode adds "pack" | "carton"; packUnit (label), packSize (base units per pack), supplierId
+// products: weightG, extraCost (per piece, product currency); recipe lines: wastePct
+// suppliers: openingBalance, openingCurrency, paymentTermsDays (+ out: dueUsd, overdueUsd, openInvoices)
+//   GET /purchases/suppliers/:id/statement?from&to, POST /purchases/suppliers/:id/pay {amount,currency,boxId,note?}
+//   GET /purchases/debts, GET /purchases/price-changes?from, GET /purchases/:id/photo
+// purchases: supplierRef, discount, transport, dueDate, photo (data URL); lines inPacks:boolean
+
+// expenses: status "paid"|"due", dueDate, paidBy, beneficiary, photo, employeeId (rep/route)
+//   GET /expenses?status=due, POST /expenses/:id/pay {boxId?, paidBy?}, GET /expenses/:id/photo
+//   crud /expenses/recurring {categoryId,itemId,amount,currency,dayOfMonth 1–28,beneficiary,note,active}; POST /expenses/recurring/run
+// money: POST /money/withdraw {boxId, amount, person, note} (daily_close:edit = owner), GET /money/withdrawals?from&to
+// stock: POST /stock/use {itemId, qty, reasonId?, note}  (material used outside production)
+// costing: /costing/products adds cleanQty/wastePct per line, extraUsd, cost50Usd, cost100Usd, targetPriceUsd, targetPrice, costInCurrency, belowTarget
+//   GET /costing/impact?days, GET /costing/forecast?date, /costing/overheads adds breakEvenItems, itemsLeftToBreakEven, reached
+// reports: /reports/range adds returnsUsd, netSalesUsd, collectedUsd, purchasesUsd, internalUse, withdrawalsUsd, dueExpensesUsd, avgRate, operatingProfitUsd;
+//   byClient adds returnsUsd, costUsd, profitUsd, marginPct, overdueDays; byCategory adds revenueUsd, costUsd, marginPct
+//   GET /reports/five, /reports/production, /reports/cashflow, /reports/months?n, /reports/delivery-cost
+//   CSV kinds: orders, products, clients, expenses, returns, purchases, supplier-debts, client-debts, withdrawals, production
+// dashboard adds five (same as /reports/five), stockValueUsd; alerts add overdueClients, dueExpenses, suppliersOverdueUsd
+// days/:date adds cashFlow {currency, opening, moves[{type,amount,n}], expected}, repSettlement[], production[]
+// settings: PUT /system/settings/costing {targetMarginPct, priceAlertPct}; orders adds defaultPaymentTermsDays, defaultReturnAction; printing adds invoiceSize "thermal"|"a4"
+// backups: POST /backups/restore {name} (applies on next start), POST /backups/restore/cancel, GET /backups/restore → {pending}
+// lookups: new list types "area", "cancel_reason"
+```

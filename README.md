@@ -53,6 +53,29 @@ On first open you see **Set up JJ's ERP**: enter the business name and create th
 | Settings | Business, lists, currency and rate API, taxes (% or fixed), cash boxes and payment methods, loyalty and order rules, tiers and subscription plans, printing sizes, LAN access, cloud copy, backups. |
 | Users & roles | Admin, Manager, Member plus custom roles with a permission grid. Anyone without **see costs** gets the simple big-button screens. Every change is in the audit log. |
 
+## Wholesale & distribution (from JJ's requirements document)
+
+| Need in the document | Where it is |
+| --- | --- |
+| Invoice of 600,000 paid 400,000 | New order → payment method + **Paid now**. The rest goes on the shop's account; the invoice prints paid / remaining and the balance before and after. |
+| Different prices per client type | Settings → Price lists (distributor, big shop, small shop…). Order of priority: the client's own price → their price list → the menu price. Every change is in the audit log. |
+| Returns (30 delivered, 25 sold, 5 back) | Distribution → Returns, or a client's page. Each line goes **back to the fridge** or **waste**, chosen each time. The client is credited, refunded from a box, or nothing. |
+| Shops that pay only for what they sold | Mark the client **consignment**. Distribution → Consignment: leave goods, then **settle**: count what came back, the sold part becomes an invoice at the agreed price. |
+| Daily production (50 + 30 + 40 + 20) | Production → New run. Materials needed vs in stock are shown before you confirm; one batch per product with its own labels. |
+| Batch log & which shops got it | Production → Trace a batch (scan the label). |
+| Distribution lines, rep settlement | Distribution → Route sheet (printable), Daily close → each rep's cash, returns and road expenses. Reps can be added and removed in People. |
+| Supplier invoice no., discount, transport, due date, photo, debts | Purchasing. Discount and transport are spread over the lines' real cost. Supplier balances, statement, pay oldest first. |
+| Units: kg, g, L, ml, piece, pack, carton | Items have a base unit and an optional pack (e.g. Bag = 10 rolls). Purchases can be entered in packs. |
+| Waste % and other direct cost in a recipe | Menu → product → recipe line waste %, and extra cost per piece. |
+| Price of turkey goes up | The purchase records a price change; Costing → Price changes shows which products lost margin and the price that brings it back to the target. Old invoices never change. |
+| Recurring rent/salaries, paid vs due, who paid, beneficiary | Expenses → Monthly expenses; due expenses are created on their day and paid later. |
+| Personal withdrawals | Daily close / Settings → Money → Withdraw. They lower the box, not the profit, and have their own report. |
+| Late payers | Each client has payment terms (days). Ageing shows the oldest unpaid invoice and days late; alerts and the route sheet show it. |
+| Tasting and internal use | Order type **Internal** (no money, cost recorded) and Warehouse → internal use of materials. |
+| The 20 reports + 3 extra | Reports: daily/monthly, P&L, product cost and margin, purchases, expenses, stock moves, waste, client and supplier debts, cash flow, per shop, best and least profitable, month comparison, production vs sales, withdrawals, delivery cost, profit by product/client/period, price changes, shop profitability, forecast. CSV export. |
+| "Five questions at the end of the day" | Home → Your day in five answers (also on the phone dashboard and as a WhatsApp message). |
+| Restore a backup | Settings → Backups → Restore: applied when the app is opened again; the replaced data is kept as a backup. |
+
 ## Money rules
 
 - Two currencies: USD and SYP. Every money row keeps its currency, the rate used (1 USD = x SYP) and the USD value, so reports never change when the rate changes.
@@ -100,13 +123,13 @@ The laptop is always the source of truth; the cloud copy is one-way.
 
 ```bash
 npm run build
-npm test                         # 3 API suites, each on a throwaway database
+npm test                         # 4 API suites, each on a throwaway database
 # browser tour of every screen (needs Python + Playwright):
 JJS_DATA_DIR=/tmp/jjs-tour PORT=4396 npm start &
 python3 tests/ui-tour.py http://127.0.0.1:4396 docs/screens
 ```
 
-`tests/api-full.mjs` walks one full business day: production, fridge-first sales, add-ons, tier discount, credit and the credit-limit block, free trial and conversion, subscriptions, loyalty, taxes, staff purchase, payments and statement, cancel, purchase and average cost, expenses, waste, counts, prep list, advances and payroll, delivery cash handover, manager/member permissions, daily close and lock, reports, depreciation, and sync. `tests/api-sync.mjs` checks the cloud copy against a fake Supabase.
+`tests/api-wholesale.mjs` covers the wholesale pack (price lists, partial payment, consignment, returns, production runs, tracing, suppliers, due/recurring expenses, withdrawals, the new reports, restore). `tests/api-full.mjs` walks one full business day: production, fridge-first sales, add-ons, tier discount, credit and the credit-limit block, free trial and conversion, subscriptions, loyalty, taxes, staff purchase, payments and statement, cancel, purchase and average cost, expenses, waste, counts, prep list, advances and payroll, delivery cash handover, manager/member permissions, daily close and lock, reports, depreciation, and sync. `tests/api-sync.mjs` checks the cloud copy against a fake Supabase.
 
 ## Backups
 

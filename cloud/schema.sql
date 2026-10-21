@@ -69,7 +69,8 @@ create table if not exists public."batches" (
   "expires_at" text,
   "qty_in" double precision,
   "qty_left" double precision,
-  "unit_cost_usd" double precision
+  "unit_cost_usd" double precision,
+  "run_id" text
 );
 alter table public."batches" enable row level security;
 
@@ -205,9 +206,52 @@ create table if not exists public."clients" (
   "credit_block" boolean,
   "note" text,
   "active" boolean,
-  "converted_at" text
+  "converted_at" text,
+  "area_id" text,
+  "payment_terms_days" bigint,
+  "price_list_id" text,
+  "consignment" boolean,
+  "rep_id" text
 );
 alter table public."clients" enable row level security;
+
+create table if not exists public."consignment_lines" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "consignment_id" text,
+  "product_id" text,
+  "name_ar" text,
+  "name_en" text,
+  "qty" bigint,
+  "unit_price" double precision,
+  "unit_cost_usd" double precision,
+  "returned_qty" bigint
+);
+alter table public."consignment_lines" enable row level security;
+
+create table if not exists public."consignments" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "number" bigint,
+  "business_date" text,
+  "client_id" text,
+  "rep_id" text,
+  "status" text,
+  "currency" text,
+  "fx_rate" double precision,
+  "note" text,
+  "user_id" text,
+  "settled_at" text,
+  "order_id" text,
+  "return_id" text
+);
+alter table public."consignments" enable row level security;
 
 create table if not exists public."employees" (
   "id" text primary key,
@@ -246,7 +290,15 @@ create table if not exists public."expenses" (
   "box_id" text,
   "asset_id" text,
   "note" text,
-  "user_id" text
+  "user_id" text,
+  "status" text,
+  "due_date" text,
+  "paid_date" text,
+  "paid_by" text,
+  "beneficiary" text,
+  "photo" text,
+  "employee_id" text,
+  "recurring_id" text
 );
 alter table public."expenses" enable row level security;
 
@@ -273,6 +325,9 @@ create table if not exists public."items" (
   "name_en" text,
   "unit_id" text,
   "unit_code" text,
+  "pack_unit" text,
+  "pack_size" double precision,
+  "supplier_id" text,
   "min_level" double precision,
   "avg_cost_usd" double precision,
   "active" boolean
@@ -400,7 +455,10 @@ create table if not exists public."orders" (
   "sub_free" bigint,
   "note" text,
   "user_id" text,
-  "cancelled_at" text
+  "cancelled_at" text,
+  "cancel_reason" text,
+  "paid_amount" double precision,
+  "consignment_id" text
 );
 alter table public."orders" enable row level security;
 
@@ -483,6 +541,62 @@ create table if not exists public."permissions" (
 );
 alter table public."permissions" enable row level security;
 
+create table if not exists public."price_changes" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "item_id" text,
+  "old_cost_usd" double precision,
+  "new_cost_usd" double precision,
+  "change_pct" double precision,
+  "purchase_id" text,
+  "business_date" text
+);
+alter table public."price_changes" enable row level security;
+
+create table if not exists public."price_list_items" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "list_id" text,
+  "product_id" text,
+  "price" double precision,
+  "currency" text
+);
+alter table public."price_list_items" enable row level security;
+
+create table if not exists public."price_lists" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "name_ar" text,
+  "name_en" text,
+  "active" boolean
+);
+alter table public."price_lists" enable row level security;
+
+create table if not exists public."production_runs" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "number" bigint,
+  "business_date" text,
+  "employee_id" text,
+  "items_count" bigint,
+  "cost_usd" double precision,
+  "note" text,
+  "user_id" text
+);
+alter table public."production_runs" enable row level security;
+
 create table if not exists public."products" (
   "id" text primary key,
   "created_at" text,
@@ -499,7 +613,9 @@ create table if not exists public."products" (
   "allergens" text,
   "photo" text,
   "sort" bigint,
-  "active" boolean
+  "active" boolean,
+  "weight_g" double precision,
+  "extra_cost_usd" double precision
 );
 alter table public."products" enable row level security;
 
@@ -534,6 +650,11 @@ create table if not exists public."purchases" (
   "total_usd" double precision,
   "paid" double precision,
   "paid_from_box_id" text,
+  "supplier_ref" text,
+  "discount" double precision,
+  "transport" double precision,
+  "due_date" text,
+  "photo" text,
   "note" text,
   "user_id" text
 );
@@ -548,9 +669,28 @@ create table if not exists public."recipes" (
   "product_id" text,
   "option_id" text,
   "item_id" text,
-  "qty" double precision
+  "qty" double precision,
+  "waste_pct" double precision
 );
 alter table public."recipes" enable row level security;
+
+create table if not exists public."recurring_expenses" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "category_id" text,
+  "item_id" text,
+  "amount" double precision,
+  "currency" text,
+  "day_of_month" bigint,
+  "beneficiary" text,
+  "note" text,
+  "active" boolean,
+  "last_month" text
+);
+alter table public."recurring_expenses" enable row level security;
 
 create table if not exists public."recurring_orders" (
   "id" text primary key,
@@ -565,6 +705,49 @@ create table if not exists public."recurring_orders" (
   "active" boolean
 );
 alter table public."recurring_orders" enable row level security;
+
+create table if not exists public."return_lines" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "return_id" text,
+  "product_id" text,
+  "name_ar" text,
+  "name_en" text,
+  "qty" bigint,
+  "unit_price" double precision,
+  "line_total" double precision,
+  "unit_cost_usd" double precision,
+  "action" text,
+  "batch_id" text
+);
+alter table public."return_lines" enable row level security;
+
+create table if not exists public."returns" (
+  "id" text primary key,
+  "created_at" text,
+  "updated_at" text,
+  "deleted_at" text,
+  "synced_at" text,
+  "number" bigint,
+  "business_date" text,
+  "client_id" text,
+  "order_id" text,
+  "consignment_id" text,
+  "currency" text,
+  "fx_rate" double precision,
+  "total" double precision,
+  "total_usd" double precision,
+  "cost_usd" double precision,
+  "settlement" text,
+  "box_id" text,
+  "rep_id" text,
+  "note" text,
+  "user_id" text
+);
+alter table public."returns" enable row level security;
 
 create table if not exists public."roles" (
   "id" text primary key,
@@ -664,6 +847,11 @@ create table if not exists public."suppliers" (
   "name" text,
   "phone" text,
   "note" text,
+  "opening_balance" double precision,
+  "opening_currency" text,
+  "opening_usd" double precision,
+  "opening_paid_usd" double precision,
+  "payment_terms_days" bigint,
   "active" boolean
 );
 alter table public."suppliers" enable row level security;

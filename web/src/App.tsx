@@ -24,6 +24,9 @@ import { RolesPage } from "./pages/Roles";
 import { SettingsPage } from "./pages/settings/Settings";
 import { UsersPage } from "./pages/Users";
 import { WarehousePage } from "./pages/warehouse/Warehouse";
+import { DistributionPage } from "./pages/distribution/Distribution";
+import { PrintRouteSheet } from "./pages/distribution/PrintRoute";
+import { ProductionPage } from "./pages/production/Production";
 import { AppSettingsProvider } from "./lib/appSettings";
 import { useAuth } from "./lib/auth";
 import { useI18n } from "./lib/i18n";
@@ -51,12 +54,15 @@ export function App() {
           <Route path="print/labels" element={g("warehouse", <PrintLabels />)} />
           <Route path="print/statement/:id" element={g("clients", <PrintStatement />)} />
           <Route path="print/report" element={g("reports", <PrintReport />)} />
+          <Route path="print/route" element={g("orders", <PrintRouteSheet />)} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
             <Route path="orders" element={g("orders", <OrdersPage />)} />
             <Route path="orders/new" element={g("orders", <NewOrderPage />)} />
             <Route path="close" element={g("daily_close", <DailyClosePage />)} />
+            <Route path="distribution/*" element={g("orders", <DistributionPage />)} />
+            <Route path="production/*" element={g("warehouse", <ProductionPage />)} />
             <Route path="clients" element={g("clients", <ClientsPage />)} />
             <Route path="clients/:id" element={g("clients", <ClientDetailPage />)} />
             <Route path="menu/*" element={g("menu", <MenuPage />)} />
