@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Stat, Tabs } from "../../components/Tabs";
 import { ConfirmDialog, Empty, Field, Modal, PageHeader, Select, Spinner, TextInput } from "../../components/ui";
-import { del, post, put } from "../../lib/api";
+import { del, get, post, put } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { money, monthStartOf, num, today, type Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -11,8 +11,10 @@ import { useToast } from "../../lib/toast";
 import type { Catalog, ClientSummary, Named } from "../../lib/types";
 import { useData } from "../../lib/useData";
 import { AdjustDialog, BalanceText, ClientDialog, PaymentDialog } from "./ClientDialogs";
+import { LateBadge } from "./Clients";
+import { ConsignmentDialog, ReturnDialog, STATUS_LABEL, SettleDialog, waLink, type Consignment } from "../distribution/common";
 
-type MoveType = "charge" | "payment" | "topup" | "refund" | "adjust" | "subscription";
+type MoveType = "charge" | "payment" | "topup" | "refund" | "adjust" | "subscription" | "return" | "opening";
 interface ClientMove {
   id: string;
   createdAt: string;
@@ -71,6 +73,28 @@ interface Detail {
   subscriptions: Subscription[];
   prices: { id: string; productId: string; price: number; currency: Currency; nameAr: string; nameEn: string }[];
   recurring: Recurring[];
+  totals?: { salesUsd: number; paidUsd: number; returnsUsd: number };
+  area?: Named | null;
+  priceList?: Named | null;
+  rep?: { id: string; name: string } | null;
+  returns?: ReturnRow[];
+  consignments?: ConsRow[];
+}
+interface ReturnRow {
+  id: string;
+  number: number;
+  businessDate: string;
+  total: number;
+  currency: Currency;
+  settlement: "credit" | "refund" | "none";
+  note: string;
+}
+interface ConsRow {
+  id: string;
+  number: number;
+  businessDate: string;
+  status: "open" | "settled" | "cancelled";
+  currency: Currency;
 }
 
 const DAYS: { ar: string; en: string }[] = [
@@ -93,7 +117,9 @@ export function useMoveLabel() {
       refund: tr("إرجاع", "Refund"),
       adjust: tr("تعديل", "Adjustment"),
       subscription: tr("اشتراك شهري", "Monthly subscription"),
-    })[t];
+      return: tr("مرتجع", "Return"),
+      opening: tr("رصيد سابق", "Opening balance"),
+    })[t] ?? t;
 }
 
 function MovesTable({ moves, showBalance }: { moves: ClientMove[]; showBalance?: boolean }) {
@@ -194,8 +220,8 @@ function Overview({ d }: { d: Detail }) {
                 </span>
               </div>
               <p className="mt-2 text-sm">
-                {tr("اشترى هذا الشهر:", "Bought this month:")} <b className="num">{L.count}</b> · {tr("مجاني متاح:", "Free available:")} <b className="num">{L.available}</b> · {tr("استخدم:", "Used:")}{" "}
-                <b className="num">{L.redeemed}</b>
+                {tr("اشترى هذا الشهر:", "Bought this month:")} <b className="num">{L.count}</b> · {tr("مجاني متاح:", "Free available:")} <b className="num">{L.available}</b> ·{" "}
+                {tr("استخدم:", "Used:")} <b className="num">{L.redeemed}</b>
               </p>
             </>
           ) : (
@@ -244,9 +270,13 @@ function Overview({ d }: { d: Detail }) {
 function Statement({ clientId }: { clientId: string }) {
   const { tr } = useI18n();
   const [range, setRange] = useState({ from: monthStartOf(today()), to: today() });
-  const { data } = useData<{ openingUsd: number; closingUsd: number; lines: ClientMove[]; orders: { id: string; number: number; date: string; total: number; currency: Currency; itemsCount: number }[] }>(
-    `/clients/${clientId}/statement?from=${range.from}&to=${range.to}`,
-  );
+  const { data } = useData<{
+    openingUsd: number;
+    closingUsd: number;
+    lines: ClientMove[];
+    returns?: ReturnRow[];
+    orders: { id: string; number: number; date: string; total: number; currency: Currency; itemsCount: number }[];
+  }>(`/clients/${clientId}/statement?from=${range.from}&to=${range.to}`);
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-end gap-3">
@@ -301,8 +331,61 @@ function Statement({ clientId }: { clientId: string }) {
               </table>
             </div>
           )}
+          {(data.returns?.length ?? 0) > 0 && <ReturnsTable rows={data.returns!} />}
         </>
       )}
+    </div>
+  );
+}
+
+function ReturnsTable({ rows }: { rows: ReturnRow[] }) {
+  const { tr, pick } = useI18n();
+  if (!rows.length) return <Empty text={tr("ما في مرتجعات", "No returns")} />;
+  return (
+    <div className="card p-0">
+      <div className="border-b border-line px-3 py-2 text-sm font-semibold">{tr("المرتجعات", "Returns")}</div>
+      <table className="w-full border-collapse text-sm">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td className="td num">R{r.number}</td>
+              <td className="td num ltr text-start">{r.businessDate}</td>
+              <td className="td">{pick(STATUS_LABEL[r.settlement === "credit" ? "credit_s" : r.settlement]!)}</td>
+              <td className="td text-muted">{r.note}</td>
+              <td className="td text-end num ltr">{money(r.total, r.currency)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ConsignmentsTable({ rows, onSettle }: { rows: ConsRow[]; onSettle?: (id: string) => void }) {
+  const { tr, pick } = useI18n();
+  if (!rows.length) return <Empty text={tr("ما في بضاعة بالأمانة", "No consignments")} />;
+  return (
+    <div className="card p-0">
+      <table className="w-full border-collapse text-sm">
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td className="td num">C{r.number}</td>
+              <td className="td num ltr text-start">{r.businessDate}</td>
+              <td className="td">
+                <span className="chip">{pick(STATUS_LABEL[r.status]!)}</span>
+              </td>
+              <td className="td text-end">
+                {r.status === "open" && onSettle && (
+                  <button className="btn btn-primary px-3 py-1 text-sm" onClick={() => onSettle(r.id)}>
+                    {tr("تسوية", "Settle")}
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -332,7 +415,12 @@ function SpecialPrices({ d, onSaved }: { d: Detail; onSaved: () => void }) {
   };
   return (
     <div className="grid gap-3">
-      <p className="text-sm text-muted">{tr("سعر خاص لهذا الزبون بدل السعر العادي. اتركه فاضي ليستخدم السعر العادي.", "A special price for this client instead of the menu price. Leave empty to use the normal price.")}</p>
+      <p className="text-sm text-muted">
+        {tr(
+          "سعر خاص لهذا الزبون بدل السعر العادي. اتركه فاضي ليستخدم السعر العادي.",
+          "A special price for this client instead of the menu price. Leave empty to use the normal price.",
+        )}
+      </p>
       <div className="card overflow-x-auto p-0">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -362,7 +450,13 @@ function SpecialPrices({ d, onSaved }: { d: Detail; onSaved: () => void }) {
                           onChange={(e) => setVals({ ...vals, [p.id]: { ...v, price: e.target.value } })}
                           aria-label={tr(`سعر خاص ${p.nameAr}`, `Special price ${p.nameEn}`)}
                         />
-                        <select className="input w-20 py-1" disabled={!editable} value={v.currency} onChange={(e) => setVals({ ...vals, [p.id]: { ...v, currency: e.target.value as Currency } })} aria-label={tr("العملة", "Currency")}>
+                        <select
+                          className="input w-20 py-1"
+                          disabled={!editable}
+                          value={v.currency}
+                          onChange={(e) => setVals({ ...vals, [p.id]: { ...v, currency: e.target.value as Currency } })}
+                          aria-label={tr("العملة", "Currency")}
+                        >
                           <option value="USD">USD</option>
                           <option value="SYP">SYP</option>
                         </select>
@@ -417,10 +511,12 @@ function SubscriptionTab({ d, onSaved }: { d: Detail; onSaved: () => void }) {
               <div className="text-sm text-muted">{tr("الاشتراك الحالي", "Current subscription")}</div>
               <div className="text-xl font-bold">{pick(active.plan)}</div>
               <div className="text-sm text-muted">
-                <span className="num ltr">{active.startDate}</span> → <span className="num ltr">{active.endDate}</span> · {active.autoRenew ? tr("يتجدد تلقائياً", "renews automatically") : tr("لا يتجدد", "does not renew")}
+                <span className="num ltr">{active.startDate}</span> → <span className="num ltr">{active.endDate}</span> ·{" "}
+                {active.autoRenew ? tr("يتجدد تلقائياً", "renews automatically") : tr("لا يتجدد", "does not renew")}
               </div>
               <div className="mt-2">
-                {tr("القطع المشمولة الباقية:", "Included items left:")} <b className="num">{d.client.subscription.availableIncluded}</b> / <span className="num">{active.plan.includedItems}</span>
+                {tr("القطع المشمولة الباقية:", "Included items left:")} <b className="num">{d.client.subscription.availableIncluded}</b> /{" "}
+                <span className="num">{active.plan.includedItems}</span>
                 {active.plan.discountPct > 0 && <span className="chip ms-2">{tr(`خصم ${active.plan.discountPct}%`, `${active.plan.discountPct}% off`)}</span>}
               </div>
             </div>
@@ -517,7 +613,12 @@ function SubscriptionTab({ d, onSaved }: { d: Detail; onSaved: () => void }) {
             </>
           }
         >
-          <p className="text-muted">{tr("ما في إرجاع تلقائي لرسم هذا الشهر. إذا بدك ترجع مبلغ استخدم «تعديل الرصيد».", "This month's fee is not refunded automatically. Use “Adjust balance” to give money back.")}</p>
+          <p className="text-muted">
+            {tr(
+              "ما في إرجاع تلقائي لرسم هذا الشهر. إذا بدك ترجع مبلغ استخدم «تعديل الرصيد».",
+              "This month's fee is not refunded automatically. Use “Adjust balance” to give money back.",
+            )}
+          </p>
         </Modal>
       )}
     </div>
@@ -584,15 +685,32 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
           <div className="grid gap-2">
             {lines.map((l, i) => (
               <div key={i} className="flex gap-2">
-                <select className="input flex-1" value={l.productId} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, productId: e.target.value, optionIds: [] } : x)))} aria-label={tr("المنتج", "Product")}>
+                <select
+                  className="input flex-1"
+                  value={l.productId}
+                  onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, productId: e.target.value, optionIds: [] } : x)))}
+                  aria-label={tr("المنتج", "Product")}
+                >
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
                       {pick(p)}
                     </option>
                   ))}
                 </select>
-                <input className="input w-24 num" dir="ltr" inputMode="numeric" value={l.qty} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} aria-label={tr("الكمية", "Quantity")} />
-                <button className="btn btn-ghost btn-danger px-2" onClick={() => setLines(lines.filter((_, j) => j !== i))} aria-label={tr("حذف", "Remove")} disabled={lines.length === 1}>
+                <input
+                  className="input w-24 num"
+                  dir="ltr"
+                  inputMode="numeric"
+                  value={l.qty}
+                  onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+                  aria-label={tr("الكمية", "Quantity")}
+                />
+                <button
+                  className="btn btn-ghost btn-danger px-2"
+                  onClick={() => setLines(lines.filter((_, j) => j !== i))}
+                  aria-label={tr("حذف", "Remove")}
+                  disabled={lines.length === 1}
+                >
                   ✕
                 </button>
               </div>
@@ -627,7 +745,12 @@ function StandingOrders({ d, onSaved }: { d: Detail; onSaved: () => void }) {
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-sm text-muted">{tr("طلبات تتكرر بنفس الأيام (مثلاً كل يوم ٢٠ ساندويش). بتطلع بقائمة التحضير وبتذكير «طلبات اليوم».", "Orders that repeat on the same days (e.g. 20 sandwiches every weekday). They feed the prep list and the “due today” reminder.")}</p>
+        <p className="max-w-xl text-sm text-muted">
+          {tr(
+            "طلبات تتكرر بنفس الأيام (مثلاً كل يوم ٢٠ ساندويش). بتطلع بقائمة التحضير وبتذكير «طلبات اليوم».",
+            "Orders that repeat on the same days (e.g. 20 sandwiches every weekday). They feed the prep list and the “due today” reminder.",
+          )}
+        </p>
         {editable && (
           <button className="btn btn-primary" onClick={() => setEditing("new")}>
             {tr("+ طلب ثابت", "+ Standing order")}
@@ -706,15 +829,24 @@ function StandingOrders({ d, onSaved }: { d: Detail; onSaved: () => void }) {
   );
 }
 
-type TabKey = "overview" | "moves" | "statement" | "prices" | "subscription" | "standing";
+type TabKey = "overview" | "moves" | "statement" | "returns" | "consignments" | "prices" | "subscription" | "standing";
 
 export function ClientDetailPage() {
   const { id = "" } = useParams();
-  const { tr } = useI18n();
+  const { tr, pick, fmtDate, err } = useI18n();
   const { can, simple } = useAuth();
+  const toast = useToast();
   const { data, reload, error } = useData<Detail>(`/clients/${id}`);
   const [tab, setTab] = useState<TabKey>("overview");
-  const [dialog, setDialog] = useState<"pay" | "edit" | "adjust" | null>(null);
+  const [dialog, setDialog] = useState<"pay" | "edit" | "adjust" | "return" | "consign" | null>(null);
+  const [settle, setSettle] = useState<Consignment | null>(null);
+  const openSettle = async (cid: string) => {
+    try {
+      setSettle((await get<{ consignment: Consignment }>(`/consignments/${cid}`)).consignment);
+    } catch (e) {
+      toast(err(e), "error");
+    }
+  };
 
   if (error) return <p className="py-10 text-center text-muted">{tr("ما لقينا هذا الزبون.", "Client not found.")}</p>;
   if (!data) return <Spinner />;
@@ -724,6 +856,19 @@ export function ClientDetailPage() {
     void reload();
   };
   const overLimit = c.creditLimitUsd > 0 && -c.balanceUsd > c.creditLimitUsd;
+  const owes = c.balanceUsd < -0.009;
+  const waText = owes
+    ? tr(
+        `مرحباً ${c.name}، رصيدكم المستحق لدى JJ's هو ${money(-c.balanceUsd)}${c.aging?.oldestUnpaidDate ? ` (أقدم فاتورة غير مدفوعة ${c.aging.oldestUnpaidDate})` : ""}. شكراً لكم.`,
+        `Hello ${c.name}, your balance due to JJ's is ${money(-c.balanceUsd)}${c.aging?.oldestUnpaidDate ? ` (oldest unpaid invoice ${c.aging.oldestUnpaidDate})` : ""}. Thank you.`,
+      )
+    : tr(`مرحباً ${c.name}، شكراً لتعاملكم مع JJ's.`, `Hello ${c.name}, thank you for working with JJ's.`);
+  const info = [
+    data.area ? pick(data.area) : null,
+    data.priceList ? `${tr("قائمة", "List")}: ${pick(data.priceList)}` : null,
+    data.rep ? `${tr("المندوب", "Rep")}: ${data.rep.name}` : null,
+    c.paymentTermsDays ? tr(`مدة السداد ${c.paymentTermsDays} يوم`, `${c.paymentTermsDays} days to pay`) : tr("الدفع فوراً", "Pays on the spot"),
+  ].filter(Boolean);
 
   const tabs: { key: TabKey; label: string }[] = simple
     ? [{ key: "moves", label: tr("حركات الحساب", "Account moves") }]
@@ -731,6 +876,8 @@ export function ClientDetailPage() {
         { key: "overview", label: tr("نظرة عامة", "Overview") },
         { key: "moves", label: tr("حركات الحساب", "Account moves") },
         { key: "statement", label: tr("كشف حساب", "Statement") },
+        { key: "returns", label: tr("المرتجعات", "Returns") },
+        ...(c.consignment || (data.consignments?.length ?? 0) > 0 ? [{ key: "consignments" as TabKey, label: tr("بالأمانة", "Consignment") }] : []),
         { key: "prices", label: tr("أسعار خاصة", "Special prices") },
         { key: "subscription", label: tr("الاشتراك", "Subscription") },
         { key: "standing", label: tr("طلبات ثابتة", "Standing orders") },
@@ -744,7 +891,7 @@ export function ClientDetailPage() {
       </Link>
       <PageHeader
         title={c.name}
-        subtitle={[c.contactPerson, c.phone, c.address].filter(Boolean).join(" · ") || undefined}
+        subtitle={[c.contactPerson, c.address].filter(Boolean).join(" · ") || undefined}
         actions={
           <>
             {can("clients", "create") && (
@@ -756,6 +903,21 @@ export function ClientDetailPage() {
               <Link className="btn" to={`/orders/new?client=${c.id}`}>
                 {tr("طلب جديد", "New order")}
               </Link>
+            )}
+            {can("orders", "create") && (
+              <button className="btn" onClick={() => setDialog("return")}>
+                {tr("مرتجع", "Return")}
+              </button>
+            )}
+            {can("orders", "create") && c.consignment && (
+              <button className="btn" onClick={() => setDialog("consign")}>
+                {tr("بضاعة بالأمانة", "Consignment")}
+              </button>
+            )}
+            {c.phone && (
+              <a className="btn btn-ghost" href={waLink(c.phone, waText)} target="_blank" rel="noreferrer">
+                {tr("واتساب", "WhatsApp")}
+              </a>
             )}
             {!simple && can("clients", "edit") && (
               <>
@@ -770,11 +932,52 @@ export function ClientDetailPage() {
           </>
         }
       />
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="-mt-3 mb-4 flex flex-wrap items-center gap-2 text-sm text-muted">
+        {c.phone && <span className="ltr">{c.phone}</span>}
+        {info.map((x) => (
+          <span key={x as string} className="chip">
+            {x}
+          </span>
+        ))}
+        {c.consignment && <span className="chip">{tr("بالأمانة", "Consignment")}</span>}
+      </div>
+      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="card">
           <div className="text-sm text-muted">{tr("الرصيد", "Balance")}</div>
           <BalanceText usd={c.balanceUsd} big />
+          {c.aging && owes && (
+            <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted">
+              {c.aging.oldestUnpaidDate && (
+                <span>
+                  {tr(
+                    `أقدم دين ${fmtDate(c.aging.oldestUnpaidDate)} (${c.aging.daysOutstanding} يوم)`,
+                    `Oldest unpaid ${fmtDate(c.aging.oldestUnpaidDate)} (${c.aging.daysOutstanding} days)`,
+                  )}
+                </span>
+              )}
+              <LateBadge c={c} />
+            </div>
+          )}
         </div>
+        {!simple && data.totals && (
+          <div className="card">
+            <div className="text-sm text-muted">{tr("الحساب من البداية", "Account so far")}</div>
+            <div className="mt-1 grid gap-0.5 text-sm">
+              <div className="flex justify-between gap-2">
+                <span>{tr("المبيعات", "Sales")}</span>
+                <span className="num ltr font-semibold">{money(data.totals.salesUsd)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>{tr("المقبوض", "Paid")}</span>
+                <span className="num ltr font-semibold">{money(data.totals.paidUsd)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span>{tr("المرتجعات", "Returns")}</span>
+                <span className="num ltr font-semibold">{money(data.totals.returnsUsd)}</span>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="card">
           <div className="text-sm text-muted">{tr("حد الدين", "Credit limit")}</div>
           <div className={`text-xl font-bold num ltr text-start ${overLimit ? "text-bad" : ""}`}>{c.creditLimitUsd > 0 ? money(c.creditLimitUsd) : tr("بلا حد", "No limit")}</div>
@@ -793,6 +996,8 @@ export function ClientDetailPage() {
       {current === "overview" && <Overview d={data} />}
       {current === "moves" && <MovesTable moves={data.moves} />}
       {current === "statement" && <Statement clientId={c.id} />}
+      {current === "returns" && <ReturnsTable rows={data.returns ?? []} />}
+      {current === "consignments" && <ConsignmentsTable rows={data.consignments ?? []} onSettle={can("orders", "create") ? (cid) => void openSettle(cid) : undefined} />}
       {current === "prices" && <SpecialPrices d={data} onSaved={() => void reload()} />}
       {current === "subscription" && <SubscriptionTab d={data} onSaved={() => void reload()} />}
       {current === "standing" && <StandingOrders d={data} onSaved={() => void reload()} />}
@@ -800,7 +1005,18 @@ export function ClientDetailPage() {
       {dialog === "pay" && <PaymentDialog client={c} onClose={() => setDialog(null)} onSaved={done} />}
       {dialog === "edit" && <ClientDialog client={c} onClose={() => setDialog(null)} onSaved={done} />}
       {dialog === "adjust" && <AdjustDialog clientId={c.id} onClose={() => setDialog(null)} onSaved={done} />}
+      {dialog === "return" && <ReturnDialog clientId={c.id} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog === "consign" && <ConsignmentDialog clientId={c.id} onClose={() => setDialog(null)} onDone={done} />}
+      {settle && (
+        <SettleDialog
+          c={settle}
+          onClose={() => setSettle(null)}
+          onDone={() => {
+            setSettle(null);
+            void reload();
+          }}
+        />
+      )}
     </>
   );
 }
-

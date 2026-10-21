@@ -134,7 +134,14 @@ function EmployeeDialog({ emp, onClose, onSaved }: { emp: Employee | null; onClo
               <TextInput id="e-pct" dir="ltr" inputMode="decimal" className="num" value={f.commissionPct} onChange={(e) => set("commissionPct", e.target.value)} />
             </Field>
             <Field label={tr("$ عن كل زبون جديد (بعد التجربة)", "$ per new client won (after a trial)")} htmlFor="e-per" error={errors.commissionPerClientUsd}>
-              <TextInput id="e-per" dir="ltr" inputMode="decimal" className="num" value={f.commissionPerClientUsd} onChange={(e) => set("commissionPerClientUsd", e.target.value)} />
+              <TextInput
+                id="e-per"
+                dir="ltr"
+                inputMode="decimal"
+                className="num"
+                value={f.commissionPerClientUsd}
+                onChange={(e) => set("commissionPerClientUsd", e.target.value)}
+              />
             </Field>
           </>
         )}
@@ -173,14 +180,20 @@ function Employees() {
       render: (e) => (
         <div>
           <div className="font-semibold">
-            {e.name} {e.isDeliveryRep && <span className="chip ms-1">{tr("توصيل", "delivery")}</span>} {!e.active && <span className="chip ms-1">{tr("موقوف", "inactive")}</span>}
+            {e.name} {e.isDeliveryRep && <span className="chip ms-1">{tr("مندوب توصيل", "Delivery rep")}</span>}{" "}
+            {!e.active && <span className="chip ms-1">{tr("موقوف", "inactive")}</span>}
           </div>
           <div className="text-xs text-faint">{[e.jobTitle, e.phone, e.userName && `@${e.userName}`].filter(Boolean).join(" · ")}</div>
         </div>
       ),
     },
     { key: "model", header: tr("الراتب", "Pay"), render: (e) => model(e.payModel) },
-    { key: "base", header: tr("الثابت", "Base"), align: "end", render: (e) => (e.payModel === "commission" ? "—" : <span className="num ltr">{money(e.baseSalary, e.currency)}</span>) },
+    {
+      key: "base",
+      header: tr("الثابت", "Base"),
+      align: "end",
+      render: (e) => (e.payModel === "commission" ? "—" : <span className="num ltr">{money(e.baseSalary, e.currency)}</span>),
+    },
     {
       key: "comm",
       header: tr("العمولة", "Commission"),
@@ -207,8 +220,15 @@ function Employees() {
       ),
     },
   ];
+  const repCount = data.rows.filter((e) => e.isDeliveryRep && e.active).length;
   return (
     <>
+      <p className="mb-3 max-w-2xl text-sm text-muted">
+        {tr(
+          `المندوبين الفعّالين: ${repCount}. لإضافة مندوب: «+ موظف» وعلّم «مندوب مبيعات وتوصيل» — بياخد صندوق نقد وبيظهر بخط التوزيع. لإيقافه: «تعديل» وشيل «فعّال».`,
+          `Active delivery reps: ${repCount}. To add one: “+ Employee” and tick “Sales & delivery person” — they get a cash box and appear on the route sheet. To stop one: “Edit” and untick “Active”.`,
+        )}
+      </p>
       <DataTable
         rows={data.rows}
         columns={columns}
@@ -489,7 +509,11 @@ function PayrollTab() {
         <Empty text={tr("ما في موظفين فعّالين", "No active employees")} />
       ) : (
         <>
-          {data.status === "preview" && <p className="text-sm text-muted">{tr("هذه معاينة محسوبة لحد اليوم. الأرقام بتتثبت لما تدفع.", "This is a preview calculated up to today. Numbers are fixed when you pay.")}</p>}
+          {data.status === "preview" && (
+            <p className="text-sm text-muted">
+              {tr("هذه معاينة محسوبة لحد اليوم. الأرقام بتتثبت لما تدفع.", "This is a preview calculated up to today. Numbers are fixed when you pay.")}
+            </p>
+          )}
           <div className="card overflow-x-auto p-0">
             <table className="w-full border-collapse text-sm">
               <thead>
@@ -513,7 +537,10 @@ function PayrollTab() {
                         <span className="num ltr">{money(r.commissionUsd)}</span>
                         {(det.deliveredOrders > 0 || det.convertedClients > 0) && (
                           <span className="block text-xs text-faint">
-                            {tr(`توصيل ${det.deliveredOrders} طلب (${money(det.deliveredSalesUsd)}) · ${det.convertedClients} زبون جديد`, `${det.deliveredOrders} deliveries (${money(det.deliveredSalesUsd)}) · ${det.convertedClients} new client(s)`)}
+                            {tr(
+                              `توصيل ${det.deliveredOrders} طلب (${money(det.deliveredSalesUsd)}) · ${det.convertedClients} زبون جديد`,
+                              `${det.deliveredOrders} deliveries (${money(det.deliveredSalesUsd)}) · ${det.convertedClients} new client(s)`,
+                            )}
                           </span>
                         )}
                       </td>
@@ -521,7 +548,9 @@ function PayrollTab() {
                       <td className="td text-end num ltr">
                         {r.advancesUsd ? `−${money(r.advancesUsd)}` : "—"}
                         {r.openAdvancesUsd !== undefined && r.openAdvancesUsd > r.advancesUsd + 0.001 && (
-                          <span className="block text-xs text-warn">{tr(`باقي ${money(r.openAdvancesUsd - r.advancesUsd)} للشهر الجاي`, `${money(r.openAdvancesUsd - r.advancesUsd)} carries to next month`)}</span>
+                          <span className="block text-xs text-warn">
+                            {tr(`باقي ${money(r.openAdvancesUsd - r.advancesUsd)} للشهر الجاي`, `${money(r.openAdvancesUsd - r.advancesUsd)} carries to next month`)}
+                          </span>
                         )}
                       </td>
                       <td className="td text-end num ltr text-base font-bold">{money(r.netUsd)}</td>
@@ -556,7 +585,12 @@ function PayrollTab() {
             </>
           }
         >
-          <p className="text-muted">{tr("بيطلع المبلغ من الصندوق، وبتنخصم السلف، وما بتقدر تدفع نفس الشهر مرتين.", "The money leaves the box, advances are settled, and the same month cannot be paid twice.")}</p>
+          <p className="text-muted">
+            {tr(
+              "بيطلع المبلغ من الصندوق، وبتنخصم السلف، وما بتقدر تدفع نفس الشهر مرتين.",
+              "The money leaves the box, advances are settled, and the same month cannot be paid twice.",
+            )}
+          </p>
         </Modal>
       )}
     </div>
@@ -716,7 +750,15 @@ function SalesCalls() {
       sortValue: (c) => c.clientName ?? c.prospectName,
       render: (c) => (
         <div>
-          <div className="font-semibold">{c.clientId ? <Link to={`/clients/${c.clientId}`} className="underline-offset-2 hover:underline">{c.clientName}</Link> : c.prospectName}</div>
+          <div className="font-semibold">
+            {c.clientId ? (
+              <Link to={`/clients/${c.clientId}`} className="underline-offset-2 hover:underline">
+                {c.clientName}
+              </Link>
+            ) : (
+              c.prospectName
+            )}
+          </div>
           <div className="text-xs text-faint">
             <span className="ltr">{c.phone}</span> {c.employeeName && `· ${c.employeeName}`}
           </div>
@@ -828,7 +870,10 @@ export function PeoplePage() {
   ];
   return (
     <>
-      <PageHeader title={tr("الموظفين والرواتب", "People & pay")} subtitle={tr("الرواتب الثابتة والعمولات والسلف ومكالمات البيع والتجارب المجانية.", "Salaries, commissions, advances, sales calls and free trials.")} />
+      <PageHeader
+        title={tr("الموظفين والرواتب", "People & pay")}
+        subtitle={tr("الرواتب الثابتة والعمولات والسلف ومكالمات البيع والتجارب المجانية.", "Salaries, commissions, advances, sales calls and free trials.")}
+      />
       <Tabs tabs={tabs} base="/people" />
       <Routes>
         <Route index element={<Navigate to="employees" replace />} />

@@ -10,7 +10,15 @@ import type { ClientSummary, Lookup } from "../../lib/types";
 import { useData } from "../../lib/useData";
 import { BalanceText, ClientDialog, PaymentDialog, type Tier } from "./ClientDialogs";
 
-type Filter = "all" | "owes" | "subs" | "business" | "individual";
+type Filter = "all" | "owes" | "late" | "subs" | "business" | "individual";
+
+/** Red "late N days" badge when the client is past their payment terms. */
+export function LateBadge({ c }: { c: { aging?: ClientSummary["aging"] } }) {
+  const { tr } = useI18n();
+  const d = c.aging?.overdueDays ?? 0;
+  if (d <= 0) return null;
+  return <span className="chip !bg-bad/10 !text-bad">{tr(`متأخر ${d} يوم`, `late ${d} days`)}</span>;
+}
 
 function LoyaltyCell({ c }: { c: ClientSummary }) {
   const { tr } = useI18n();
@@ -39,7 +47,15 @@ function SimpleClients({ rows, onPay }: { rows: ClientSummary[]; onPay: (c: Clie
   const shown = rows.filter((c) => !q.trim() || `${c.name} ${c.contactPerson} ${c.phone}`.toLowerCase().includes(q.trim().toLowerCase()));
   return (
     <>
-      <input className="input mb-4 py-3 text-lg" type="search" placeholder={tr("ابحث عن زبون…", "Find a client…")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={tr("بحث", "Search")} autoFocus />
+      <input
+        className="input mb-4 py-3 text-lg"
+        type="search"
+        placeholder={tr("ابحث عن زبون…", "Find a client…")}
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        aria-label={tr("بحث", "Search")}
+        autoFocus
+      />
       {shown.length === 0 ? (
         <Empty text={tr("ما في زبائن", "No clients")} />
       ) : (
@@ -50,7 +66,10 @@ function SimpleClients({ rows, onPay }: { rows: ClientSummary[]; onPay: (c: Clie
                 <div className="truncate text-lg font-bold">{c.name}</div>
                 <div className="text-sm text-muted">{c.contactPerson || c.phone || " "}</div>
               </button>
-              <BalanceText usd={c.balanceUsd} />
+              <div className="flex flex-col items-end gap-1">
+                <BalanceText usd={c.balanceUsd} />
+                <LateBadge c={c} />
+              </div>
               <button className="btn btn-primary px-5 py-3" onClick={() => onPay(c)}>
                 {tr("سجّل دفعة", "Record payment")}
               </button>
@@ -69,12 +88,15 @@ export function ClientsPage() {
   const { data, reload } = useData<{ rows: ClientSummary[] }>("/clients");
   const tiers = useData<{ rows: Tier[] }>("/clients/tiers");
   const tags = useData<{ items: Lookup[] }>("/lookups?type=client_tag");
+  const areas = useData<{ items: Lookup[] }>("/lookups?type=area");
   const [filter, setFilter] = useState<Filter>("all");
+  const [area, setArea] = useState("");
   const [creating, setCreating] = useState(false);
   const [paying, setPaying] = useState<ClientSummary | null>(null);
 
   const tierOf = useMemo(() => new Map((tiers.data?.rows ?? []).map((t) => [t.id, t])), [tiers.data]);
   const tagOf = useMemo(() => new Map((tags.data?.items ?? []).map((t) => [t.id, t])), [tags.data]);
+  const areaOf = useMemo(() => new Map((areas.data?.items ?? []).map((t) => [t.id, t])), [areas.data]);
 
   if (!data) return <Spinner />;
   const rows = data.rows;
@@ -82,9 +104,22 @@ export function ClientsPage() {
   const totalOwed = owing.reduce((s, c) => s - c.balanceUsd, 0);
   const subs = rows.filter((c) => c.subscription);
 
-  const filtered = rows.filter((c) =>
-    filter === "owes" ? c.balanceUsd < -0.009 : filter === "subs" ? !!c.subscription : filter === "business" ? c.type === "business" : filter === "individual" ? c.type === "individual" : true,
-  );
+  const late = rows.filter((c) => (c.aging?.overdueDays ?? 0) > 0);
+  const filtered = rows
+    .filter((c) =>
+      filter === "owes"
+        ? c.balanceUsd < -0.009
+        : filter === "late"
+          ? (c.aging?.overdueDays ?? 0) > 0
+          : filter === "subs"
+            ? !!c.subscription
+            : filter === "business"
+              ? c.type === "business"
+              : filter === "individual"
+                ? c.type === "individual"
+                : true,
+    )
+    .filter((c) => !area || c.areaId === area);
 
   const columns: Column<ClientSummary>[] = [
     {
@@ -93,22 +128,50 @@ export function ClientsPage() {
       sortValue: (c) => c.name,
       render: (c) => (
         <div className="min-w-0">
-          <div className="font-semibold">
-            {c.name} {!c.active && <span className="chip ms-1">{tr("موقوف", "inactive")}</span>}
+          <div className="flex flex-wrap items-center gap-1 font-semibold">
+            {c.name} {!c.active && <span className="chip">{tr("موقوف", "inactive")}</span>}
+            {c.consignment && <span className="chip">{tr("بالأمانة", "consignment")}</span>}
+            <LateBadge c={c} />
           </div>
-          <div className="text-xs text-faint">{[c.contactPerson, c.phone].filter(Boolean).join(" · ") || (c.type === "business" ? tr("محل", "Business") : tr("فرد", "Individual"))}</div>
+          <div className="text-xs text-faint">
+            {c.tagId && tagOf.get(c.tagId) ? `${pick(tagOf.get(c.tagId)!)} · ` : ""}
+            {c.contactPerson || (c.type === "business" ? tr("محل", "Business") : tr("فرد", "Individual"))}
+            {c.phone && (
+              <>
+                {" · "}
+                <span className="ltr">{c.phone}</span>
+              </>
+            )}
+          </div>
         </div>
       ),
     },
-    { key: "tag", header: tr("التصنيف", "Tag"), render: (c) => (c.tagId && tagOf.get(c.tagId) ? <span className="chip">{pick(tagOf.get(c.tagId)!)}</span> : <span className="text-faint">—</span>) },
-    { key: "tier", header: tr("الفئة", "Tier"), render: (c) => (c.tierId && tierOf.get(c.tierId) ? `${pick(tierOf.get(c.tierId)!)} · ${tierOf.get(c.tierId)!.discountPct}%` : <span className="text-faint">—</span>) },
+    {
+      key: "area",
+      header: tr("المنطقة", "Area"),
+      sortValue: (c) => (c.areaId && areaOf.get(c.areaId) ? pick(areaOf.get(c.areaId)!) : ""),
+      render: (c) => (c.areaId && areaOf.get(c.areaId) ? pick(areaOf.get(c.areaId)!) : <span className="text-faint">—</span>),
+    },
+    {
+      key: "tier",
+      header: tr("الفئة", "Tier"),
+      render: (c) => (c.tierId && tierOf.get(c.tierId) ? `${pick(tierOf.get(c.tierId)!)} · ${tierOf.get(c.tierId)!.discountPct}%` : <span className="text-faint">—</span>),
+    },
     { key: "bal", header: tr("الرصيد", "Balance"), align: "end", sortValue: (c) => c.balanceUsd, render: (c) => <BalanceText usd={c.balanceUsd} /> },
     {
       key: "limit",
       header: tr("حد الدين", "Credit limit"),
       align: "end",
       sortValue: (c) => c.creditLimitUsd,
-      render: (c) => (c.creditLimitUsd > 0 ? <span className="num ltr">{money(c.creditLimitUsd)}{c.creditBlock ? " ⛔" : ""}</span> : <span className="text-faint">{tr("بلا حد", "none")}</span>),
+      render: (c) =>
+        c.creditLimitUsd > 0 ? (
+          <span className="num ltr">
+            {money(c.creditLimitUsd)}
+            {c.creditBlock ? " ⛔" : ""}
+          </span>
+        ) : (
+          <span className="text-faint">{tr("بلا حد", "none")}</span>
+        ),
     },
     { key: "loyalty", header: tr("الولاء (هذا الشهر)", "Loyalty (this month)"), render: (c) => <LoyaltyCell c={c} /> },
     {
@@ -130,6 +193,7 @@ export function ClientsPage() {
   const FILTERS: { k: Filter; label: string; n: number }[] = [
     { k: "all", label: tr("الكل", "All"), n: rows.length },
     { k: "owes", label: tr("عليهم دين", "Owe money"), n: owing.length },
+    { k: "late", label: tr("متأخرين بالدفع", "Late payers"), n: late.length },
     { k: "subs", label: tr("مشتركين", "Subscribers"), n: subs.length },
     { k: "business", label: tr("محلات", "Businesses"), n: rows.filter((c) => c.type === "business").length },
     { k: "individual", label: tr("أفراد", "Individuals"), n: rows.filter((c) => c.type === "individual").length },
@@ -139,7 +203,11 @@ export function ClientsPage() {
     <>
       <PageHeader
         title={tr("الزبائن", "Clients")}
-        subtitle={simple ? tr("اختر الزبون لتسجيل دفعة أو لرؤية حسابه.", "Pick a client to record a payment or see their account.") : tr("حساب كل زبون (صندوقه)، الدين، الولاء والاشتراكات.", "Each client's box: balance, credit, loyalty and subscriptions.")}
+        subtitle={
+          simple
+            ? tr("اختر الزبون لتسجيل دفعة أو لرؤية حسابه.", "Pick a client to record a payment or see their account.")
+            : tr("حساب كل زبون (صندوقه)، الدين، الولاء والاشتراكات.", "Each client's box: balance, credit, loyalty and subscriptions.")
+        }
         actions={
           can("clients", "create") && (
             <button className="btn btn-primary" onClick={() => setCreating(true)}>
@@ -154,7 +222,12 @@ export function ClientsPage() {
         <>
           <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label={tr("عدد الزبائن", "Clients")} value={String(rows.filter((c) => c.active).length)} />
-            <Stat label={tr("ديون على الزبائن", "Owed to the shop")} value={money(totalOwed)} tone={totalOwed > 0 ? "bad" : undefined} sub={tr(`${owing.length} زبون`, `${owing.length} client(s)`)} />
+            <Stat
+              label={tr("ديون على الزبائن", "Owed to the shop")}
+              value={money(totalOwed)}
+              tone={totalOwed > 0 ? "bad" : undefined}
+              sub={tr(`${owing.length} زبون`, `${owing.length} client(s)`)}
+            />
             <Stat label={tr("أرصدة مسبقة", "Prepaid balances")} value={money(rows.reduce((s, c) => s + Math.max(0, c.balanceUsd), 0))} />
             <Stat label={tr("مشتركين", "Subscribers")} value={String(subs.length)} />
           </div>
@@ -165,9 +238,24 @@ export function ClientsPage() {
             searchText={(c) => `${c.name} ${c.contactPerson} ${c.phone}`}
             onRowClick={(c) => navigate(`/clients/${c.id}`)}
             toolbar={
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap items-center gap-1">
+                {(areas.data?.items.length ?? 0) > 0 && (
+                  <select className="input w-auto py-1 text-sm" value={area} onChange={(e) => setArea(e.target.value)} aria-label={tr("المنطقة", "Area")}>
+                    <option value="">{tr("كل المناطق", "All areas")}</option>
+                    {areas.data!.items.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {pick(a)}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 {FILTERS.map((x) => (
-                  <button key={x.k} className={`btn px-3 py-1 text-sm ${filter === x.k ? "btn-primary" : "btn-ghost"}`} aria-pressed={filter === x.k} onClick={() => setFilter(x.k)}>
+                  <button
+                    key={x.k}
+                    className={`btn px-3 py-1 text-sm ${filter === x.k ? "btn-primary" : "btn-ghost"}`}
+                    aria-pressed={filter === x.k}
+                    onClick={() => setFilter(x.k)}
+                  >
                     {x.label} <span className="num opacity-70">{x.n}</span>
                   </button>
                 ))}

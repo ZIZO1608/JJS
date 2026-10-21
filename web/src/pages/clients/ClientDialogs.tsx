@@ -15,10 +15,17 @@ export interface Tier extends Named {
 }
 
 /** Create or edit a client (shop, café, study zone, freelancer…). */
+export interface PriceListRow extends Named {
+  active: boolean;
+}
+
 export function ClientDialog({ client, onClose, onSaved }: { client: ClientSummary | null; onClose: () => void; onSaved: (id: string) => void }) {
   const { tr, pick, err, fieldErrors } = useI18n();
   const toast = useToast();
+  const { s: app } = useAppSettings();
   const tiers = useData<{ rows: Tier[] }>("/clients/tiers");
+  const lists = useData<{ rows: PriceListRow[] }>("/clients/price-lists");
+  const reps = useData<{ rows: { id: string; name: string }[] }>("/money/reps");
   const [f, setF] = useState({
     type: client?.type ?? ("business" as ClientSummary["type"]),
     name: client?.name ?? "",
@@ -32,7 +39,13 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
     creditBlock: client?.creditBlock ?? false,
     note: client?.note ?? "",
     active: client?.active ?? true,
+    areaId: client?.areaId ?? "",
+    paymentTermsDays: String(client?.paymentTermsDays ?? (app?.orders as { defaultPaymentTermsDays?: number } | undefined)?.defaultPaymentTermsDays ?? 7),
+    priceListId: client?.priceListId ?? "",
+    consignment: client?.consignment ?? false,
+    repId: client?.repId ?? "",
   });
+  const [opening, setOpening] = useState({ amount: "", currency: (app?.defaultCurrency ?? "USD") as Currency });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
@@ -42,7 +55,24 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
     setErrors({});
     try {
       const limit = num(f.creditLimitUsd);
-      const body = { ...f, tierId: f.tierId || null, tagId: f.tagId || null, creditLimitUsd: Number.isNaN(limit) ? 0 : limit };
+      const terms = num(f.paymentTermsDays);
+      const body: Record<string, unknown> = {
+        ...f,
+        tierId: f.tierId || null,
+        tagId: f.tagId || null,
+        areaId: f.areaId || null,
+        priceListId: f.priceListId || null,
+        repId: f.repId || null,
+        paymentTermsDays: Number.isNaN(terms) ? 0 : Math.round(terms),
+        creditLimitUsd: Number.isNaN(limit) ? 0 : limit,
+      };
+      if (!client) {
+        const ob = num(opening.amount);
+        if (!Number.isNaN(ob) && ob !== 0) {
+          body.openingBalance = ob;
+          body.openingCurrency = opening.currency;
+        }
+      }
       const r = client ? await put<{ row: ClientSummary }>(`/clients/${client.id}`, body) : await post<{ row: ClientSummary }>("/clients", body);
       toast(tr("تم الحفظ", "Saved"));
       onSaved(r.row.id);
@@ -104,6 +134,34 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
         <Field label={tr("التصنيف", "Tag")} htmlFor="c-tag">
           <LookupSelect id="c-tag" listType="client_tag" value={f.tagId} onChange={(v) => set("tagId", v)} />
         </Field>
+        <Field label={tr("المنطقة", "Area")} htmlFor="c-area">
+          <LookupSelect id="c-area" listType="area" value={f.areaId} onChange={(v) => set("areaId", v)} />
+        </Field>
+        <Field label={tr("قائمة الأسعار", "Price list")} htmlFor="c-pl" hint={tr("فاضي = سعر المنيو", "Empty = menu price")}>
+          <Select id="c-pl" value={f.priceListId} onChange={(e) => set("priceListId", e.target.value)}>
+            <option value="">—</option>
+            {lists.data?.rows
+              .filter((l) => l.active || l.id === f.priceListId)
+              .map((l) => (
+                <option key={l.id} value={l.id}>
+                  {pick(l)}
+                </option>
+              ))}
+          </Select>
+        </Field>
+        <Field label={tr("المندوب", "Delivery rep")} htmlFor="c-rep">
+          <Select id="c-rep" value={f.repId} onChange={(e) => set("repId", e.target.value)}>
+            <option value="">—</option>
+            {reps.data?.rows.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label={tr("مدة السداد (أيام)", "Days to pay")} htmlFor="c-terms" error={errors.paymentTermsDays} hint={tr("٠ = الدفع فوراً", "0 = pay on the spot")}>
+          <TextInput id="c-terms" type="number" min={0} step="1" dir="ltr" className="num" value={f.paymentTermsDays} onChange={(e) => set("paymentTermsDays", e.target.value)} />
+        </Field>
         <Field label={tr("لغة الفاتورة", "Receipt language")} htmlFor="c-lang">
           <Select id="c-lang" value={f.receiptLanguage} onChange={(e) => set("receiptLanguage", e.target.value as "ar" | "en")}>
             <option value="ar">عربي</option>
@@ -117,6 +175,31 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
           <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.creditBlock} onChange={(e) => set("creditBlock", e.target.checked)} />
           {tr("امنع الطلب بالدين إذا تجاوز الحد", "Block credit orders above the limit")}
         </label>
+        <label className="inline-flex items-center gap-2 sm:col-span-2">
+          <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment} onChange={(e) => set("consignment", e.target.checked)} />
+          {tr("محل بالأمانة (بيدفع بس على اللي باعه)", "Consignment shop (pays only for what it sold)")}
+        </label>
+        {!client && (
+          <div className="grid grid-cols-[1fr_auto] gap-2 sm:col-span-2">
+            <Field label={tr("رصيد سابق (اختياري)", "Opening balance (optional)")} htmlFor="c-open" hint={tr("موجب = عليه لنا، سالب = دافع سلف", "+ owes us · − prepaid")}>
+              <TextInput
+                id="c-open"
+                inputMode="decimal"
+                dir="ltr"
+                className="num"
+                placeholder="0"
+                value={opening.amount}
+                onChange={(e) => setOpening({ ...opening, amount: e.target.value })}
+              />
+            </Field>
+            <Field label={tr("العملة", "Currency")} htmlFor="c-open-cur">
+              <Select id="c-open-cur" value={opening.currency} onChange={(e) => setOpening({ ...opening, currency: e.target.value as Currency })}>
+                <option value="USD">USD</option>
+                <option value="SYP">SYP</option>
+              </Select>
+            </Field>
+          </div>
+        )}
         <div className="sm:col-span-2">
           <Field label={tr("ملاحظة", "Note")} htmlFor="c-note" error={errors.note}>
             <TextInput id="c-note" value={f.note} onChange={(e) => set("note", e.target.value)} />
@@ -201,7 +284,13 @@ export function PaymentDialog({ client, onClose, onSaved }: { client: { id: stri
         <Field label={tr("طريقة الدفع", "Paid by")} htmlFor="p-method">
           <div className="flex flex-wrap gap-2" id="p-method">
             {boxMethods.map((m) => (
-              <button key={m.id} type="button" aria-pressed={methodId === m.id} className={`btn ${methodId === m.id ? "btn-primary" : ""}`} onClick={() => setF({ ...f, methodId: m.id })}>
+              <button
+                key={m.id}
+                type="button"
+                aria-pressed={methodId === m.id}
+                className={`btn ${methodId === m.id ? "btn-primary" : ""}`}
+                onClick={() => setF({ ...f, methodId: m.id })}
+              >
                 {pick(m)}
               </button>
             ))}

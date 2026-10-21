@@ -5,8 +5,9 @@ import type { Currency } from "./format";
 export interface AppSettings {
   defaultCurrency: Currency;
   loyalty: { enabled: boolean; buyQty: number; freeQty: number };
-  orders: { defaultDeliveryFee: number; allowStacking: boolean };
-  printing: { receiptWidthMm: 58 | 80; labelWidthMm: number; labelHeightMm: number; receiptFooterAr: string; receiptFooterEn: string };
+  orders: { defaultDeliveryFee: number; allowStacking: boolean; defaultPaymentTermsDays: number; defaultReturnAction: "restock" | "waste" };
+  costing?: { targetMarginPct: number; priceAlertPct: number };
+  printing: { receiptWidthMm: 58 | 80; labelWidthMm: number; labelHeightMm: number; receiptFooterAr: string; receiptFooterEn: string; invoiceSize: "thermal" | "a4" };
   business: { nameAr: string; nameEn: string; phone?: string; address?: string; logo?: string };
 }
 
