@@ -79,6 +79,7 @@ export interface CashBox extends Named {
   systemKey: string | null;
   active: boolean;
   balance: number | null;
+  hasOpening?: boolean;
 }
 export interface Employee {
   id: string;

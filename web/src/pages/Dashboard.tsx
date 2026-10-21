@@ -29,7 +29,11 @@ interface Dashboard {
     lowStock: { id: string; nameAr: string; nameEn: string; unitCode: string; qty: number; minLevel: number }[];
     nearCreditLimit: { id: string; name: string; balanceUsd: number; limitUsd: number }[];
     repCash: { id: string; nameAr: string; nameEn: string; currency: Currency; balance: number }[];
+    overdueClients?: { id: string; name: string; balanceUsd: number; overdueDays: number }[];
+    dueExpenses?: { id: string; date: string; amount: number; currency: Currency; note: string }[];
+    suppliersOverdueUsd?: number;
   };
+  stockValueUsd?: number;
   boxes: { id: string; nameAr: string; nameEn: string; kind: string; currency: Currency; balance: number; todayIn: number }[];
   unpaid: { id: string; name: string; balanceUsd: number; creditLimitUsd: number }[];
 }
@@ -56,14 +60,18 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
   const t = data.today;
   const maxWeek = Math.max(1, ...data.week.map((d) => d.salesUsd));
   const a = data.alerts;
-  const alertCount = a.expired.length + a.expiresToday.length + a.lowStock.length + a.nearCreditLimit.length + a.repCash.length;
+  const overdue = a.overdueClients ?? [];
+  const dueExp = a.dueExpenses ?? [];
+  const supOverdue = a.suppliersOverdueUsd ?? 0;
+  const alertCount =
+    a.expired.length + a.expiresToday.length + a.lowStock.length + a.nearCreditLimit.length + a.repCash.length + overdue.length + dueExp.length + (supOverdue > 0.009 ? 1 : 0);
   const dayName = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(lang === "ar" ? "ar-SY-u-nu-latn" : "en-GB", { weekday: "short", day: "numeric" });
 
   return (
     <div>
       {!embedded && <PageHeader title={tr("لوحة اليوم", "Dashboard")} subtitle={fmtDate(`${data.date}T12:00:00`)} />}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Stat label={tr("مبيعات اليوم", "Sales today")} value={usd(t.salesUsd)} sub={t.discountUsd > 0 ? `${tr("خصومات", "Discounts")} ${usd(t.discountUsd)}` : undefined} />
         <Stat label={tr("طلبات", "Orders")} value={String(t.orders)} sub={`${qty(t.items)} ${tr("قطعة", "items")}`} />
         {t.grossProfitUsd !== undefined && <Stat label={tr("الربح الإجمالي", "Gross profit")} value={usd(t.grossProfitUsd)} sub={`${tr("هامش", "Margin")} ${pct(t.marginPct)}`} />}
@@ -75,6 +83,9 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
             tone={t.grossProfitUsd - t.expensesUsd - t.wasteUsd < 0 ? "bad" : undefined}
             sub={tr("الرواتب والاستهلاك بالتقارير الشهرية", "Salaries & depreciation: see monthly reports")}
           />
+        )}
+        {data.stockValueUsd !== undefined && can("costing", "see_cost") && (
+          <Stat label={tr("قيمة المخزون", "Stock value")} value={usd(data.stockValueUsd)} sub={tr("بمتوسط التكلفة", "At average cost")} />
         )}
       </div>
 
@@ -106,10 +117,33 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
             {a.nearCreditLimit.map((c) => (
               <li key={c.id}>
                 <Link to={`/clients/${c.id}`} className="text-warn hover:underline">
-                  {tr("قريب من حد الدين", "Near credit limit")}: {c.name} — <span className="num ltr">{usd(-c.balanceUsd)}</span> / <span className="num ltr">{usd(c.limitUsd)}</span>
+                  {tr("قريب من حد الدين", "Near credit limit")}: {c.name} — <span className="num ltr">{usd(-c.balanceUsd)}</span> /{" "}
+                  <span className="num ltr">{usd(c.limitUsd)}</span>
                 </Link>
               </li>
             ))}
+            {overdue.slice(0, 6).map((c) => (
+              <li key={`o${c.id}`}>
+                <Link to={`/clients/${c.id}`} className="text-bad hover:underline">
+                  {tr("متأخر بالدفع", "Late paying")}: {c.name} — {tr(`${c.overdueDays} يوم`, `${c.overdueDays} days`)} · <span className="num ltr">{usd(-c.balanceUsd)}</span>
+                </Link>
+              </li>
+            ))}
+            {overdue.length > 6 && <li className="text-muted">+{overdue.length - 6}</li>}
+            {dueExp.length > 0 && (
+              <li>
+                <Link to="/expenses" className="text-warn hover:underline">
+                  {tr("مصاريف مستحقة لازم تندفع", "Expenses due to pay")}: {dueExp.length} · {dueExp.map((e) => money(e.amount, e.currency, lang)).join("، ")}
+                </Link>
+              </li>
+            )}
+            {supOverdue > 0.009 && (
+              <li>
+                <Link to="/purchasing" className="text-warn hover:underline">
+                  {tr("فواتير موردين فات موعدها", "Supplier invoices past due")}: <span className="num ltr">{usd(supOverdue)}</span>
+                </Link>
+              </li>
+            )}
             {a.repCash.map((b) => (
               <li key={b.id}>
                 <Link to="/close" className="text-warn hover:underline">
@@ -122,7 +156,16 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Section title={tr("آخر 7 أيام", "Last 7 days")} action={can("reports", "view") ? <Link to="/reports" className="text-sm text-muted hover:text-ink">{tr("التقارير", "Reports")}</Link> : undefined}>
+        <Section
+          title={tr("آخر 7 أيام", "Last 7 days")}
+          action={
+            can("reports", "view") ? (
+              <Link to="/reports" className="text-sm text-muted hover:text-ink">
+                {tr("التقارير", "Reports")}
+              </Link>
+            ) : undefined
+          }
+        >
           <div className="grid gap-1.5">
             {data.week.map((d) => (
               <div key={d.date} className="grid grid-cols-[5.5rem_1fr_5.5rem] items-center gap-2 text-sm">
@@ -159,7 +202,14 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
           </table>
         </Section>
 
-        <Section title={tr("آخر الطلبات", "Recent orders")} action={<Link to="/orders" className="text-sm text-muted hover:text-ink">{tr("كل الطلبات", "All orders")}</Link>}>
+        <Section
+          title={tr("آخر الطلبات", "Recent orders")}
+          action={
+            <Link to="/orders" className="text-sm text-muted hover:text-ink">
+              {tr("كل الطلبات", "All orders")}
+            </Link>
+          }
+        >
           {data.recent.length === 0 ? (
             <Empty text={tr("لا يوجد طلبات اليوم", "No orders today")} />
           ) : (
@@ -246,7 +296,8 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
             </table>
             {t.trials.given > 0 && (
               <p className="mt-2 text-sm text-muted">
-                {tr("تجارب مجانية", "Free trials")}: <span className="num">{t.trials.given}</span> · {tr("صاروا زبائن", "became clients")}: <span className="num">{t.trials.converted}</span>
+                {tr("تجارب مجانية", "Free trials")}: <span className="num">{t.trials.given}</span> · {tr("صاروا زبائن", "became clients")}:{" "}
+                <span className="num">{t.trials.converted}</span>
               </p>
             )}
           </Section>

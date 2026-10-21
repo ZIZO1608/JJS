@@ -8,6 +8,8 @@ import { useI18n } from "../../lib/i18n";
 import { openPrint } from "../../lib/print";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
+import type { Lookup } from "../../lib/types";
+import { ReturnDialog } from "../distribution/common";
 import { Confirm, discountWords, payStatusLabel, statusLabel, timeOf, typeLabel, type OrderDetail, type OrderRow } from "./shared";
 
 interface DueRow {
@@ -26,7 +28,10 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
   const reps = useData<{ rows: { id: string; name: string }[] }>(can("orders", "edit") ? "/money/reps" : null);
   const [assign, setAssign] = useState<string>("");
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [reason, setReason] = useState("");
+  const [returning, setReturning] = useState(false);
   const [busy, setBusy] = useState(false);
+  const reasons = useData<{ items: Lookup[] }>(confirmCancel ? "/lookups?type=cancel_reason" : null);
   const o = data?.order;
 
   const act = async (fn: () => Promise<unknown>, okText: string) => {
@@ -50,24 +55,36 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
       footer={
         o && (
           <>
-            {o.status !== "cancelled" && can("orders", "delete") && (
+            {o.status !== "cancelled" && !o.consignmentId && can("orders", "delete") && (
               <button className="btn btn-ghost btn-danger me-auto" disabled={busy} onClick={() => setConfirmCancel(true)}>
                 {tr("إلغاء الطلب", "Cancel order")}
+              </button>
+            )}
+            {o.status !== "cancelled" && o.type === "normal" && can("orders", "create") && (
+              <button className="btn" disabled={busy} onClick={() => setReturning(true)}>
+                {tr("مرتجع", "Return")}
               </button>
             )}
             <button className="btn" onClick={onClose}>
               {tr("إغلاق", "Close")}
             </button>
             {o.status === "confirmed" && can("orders", "edit") && (
-              <button className="btn" disabled={busy} onClick={() => act(() => post(`/orders/${o.id}/deliver`, { assignedTo: assign || o.assignedTo || null }), tr("تم التسليم", "Marked delivered"))}>
+              <button
+                className="btn"
+                disabled={busy}
+                onClick={() => act(() => post(`/orders/${o.id}/deliver`, { assignedTo: assign || o.assignedTo || null }), tr("تم التسليم", "Marked delivered"))}
+              >
                 {tr("تم التسليم", "Mark delivered")}
               </button>
             )}
-            {o.status !== "cancelled" && (
-              <button className="btn btn-primary" onClick={() => openPrint(`/print/receipt/${o.id}`)}>
-                {tr("طباعة الفاتورة", "Print receipt")}
+            {!simple && (
+              <button className="btn" onClick={() => openPrint(`/print/receipt/${o.id}?size=a4`)}>
+                A4
               </button>
             )}
+            <button className="btn btn-primary" onClick={() => openPrint(`/print/receipt/${o.id}`)}>
+              {tr("طباعة الفاتورة", "Print receipt")}
+            </button>
           </>
         )
       }
@@ -105,7 +122,11 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
                   <td className="td">
                     <div className="font-semibold">{pick(l)}</div>
                     {l.options.length > 0 && <div className="text-xs text-muted">{l.options.map((x) => pick(x)).join("، ")}</div>}
-                    {l.freeQty > 0 && <div className="text-xs text-good">{tr("مجاني", "Free")} ×{l.freeQty}</div>}
+                    {l.freeQty > 0 && (
+                      <div className="text-xs text-good">
+                        {tr("مجاني", "Free")} ×{l.freeQty}
+                      </div>
+                    )}
                   </td>
                   <td className="td text-end">
                     <span className="num ltr">{money(l.lineTotal, o.currency, lang)}</span>
@@ -152,6 +173,23 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
               </>
             )}
           </dl>
+          {o.paymentStatus === "partial" && o.paidAmount !== undefined && (
+            <p className="rounded-lg bg-sunken p-2">
+              {tr("المدفوع", "Paid")} <span className="num ltr font-semibold">{money(o.paidAmount, o.currency, lang)}</span> · {tr("الباقي على الحساب", "Rest on account")}{" "}
+              <span className="num ltr font-semibold">{money(o.total - o.paidAmount, o.currency, lang)}</span>
+            </p>
+          )}
+          {o.status === "cancelled" && (
+            <p className="rounded-lg border border-bad/40 p-2 text-bad">
+              {tr("ملغى", "Cancelled")}
+              {o.cancelReason ? ` · ${o.cancelReason}` : ""}
+            </p>
+          )}
+          {o.consignmentId && (
+            <p className="text-muted">
+              {tr("هالفاتورة من تسوية بضاعة بالأمانة. للتصحيح سجّل مرتجع.", "This invoice comes from a consignment settlement. Use a return to correct it.")}
+            </p>
+          )}
           {o.note && <p className="rounded-lg bg-sunken p-2">{o.note}</p>}
           {o.status === "confirmed" && o.fulfilment === "delivery" && can("orders", "edit") && (reps.data?.rows.length ?? 0) > 0 && (
             <label className="flex items-center gap-2">
@@ -172,13 +210,43 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
         <Confirm
           danger
           title={tr(`إلغاء الطلب #${o.number}؟`, `Cancel order #${o.number}?`)}
-          body={<p className="text-muted">{tr("يرجع المخزون، ويرجع المبلغ من الصندوق أو من حساب الزبون.", "Stock goes back, and the money is reversed from the box or the client's account.")}</p>}
+          body={
+            <div className="grid gap-3">
+              <p className="text-muted">
+                {tr("يرجع المخزون، ويرجع المبلغ من الصندوق أو من حساب الزبون.", "Stock goes back, and the money is reversed from the box or the client's account.")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(reasons.data?.items ?? []).map((r) => (
+                  <button key={r.id} type="button" className={`btn px-3 py-1 text-sm ${reason === pick(r) ? "btn-primary" : ""}`} onClick={() => setReason(pick(r))}>
+                    {pick(r)}
+                  </button>
+                ))}
+              </div>
+              <TextInput
+                placeholder={tr("سبب الإلغاء", "Reason for cancelling")}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                aria-label={tr("سبب الإلغاء", "Reason for cancelling")}
+              />
+            </div>
+          }
           yes={tr("نعم، ألغِ الطلب", "Yes, cancel it")}
           no={tr("رجوع", "Back")}
           onClose={() => setConfirmCancel(false)}
           onYes={() => {
             setConfirmCancel(false);
-            void act(() => post(`/orders/${o.id}/cancel`), tr("تم إلغاء الطلب", "Order cancelled"));
+            void act(() => post(`/orders/${o.id}/cancel`, { reason: reason.trim() }), tr("تم إلغاء الطلب", "Order cancelled"));
+          }}
+        />
+      )}
+      {returning && o && (
+        <ReturnDialog
+          clientId={o.clientId ?? undefined}
+          orderId={o.id}
+          onClose={() => setReturning(false)}
+          onDone={() => {
+            setReturning(false);
+            onChanged();
           }}
         />
       )}
@@ -302,7 +370,11 @@ export function OrdersPage() {
                   </td>
                   <td className="td num">
                     {o.itemsCount}
-                    {o.freeItems > 0 && <span className="ms-1 text-xs text-good">(+{o.freeItems} {tr("مجاني", "free")})</span>}
+                    {o.freeItems > 0 && (
+                      <span className="ms-1 text-xs text-good">
+                        (+{o.freeItems} {tr("مجاني", "free")})
+                      </span>
+                    )}
                   </td>
                   <td className="td">
                     {o.fulfilment === "delivery" ? (

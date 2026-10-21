@@ -300,7 +300,7 @@ export function MoneyTab() {
                           <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setMoves(b)}>
                             {tr("الحركات", "Moves")}
                           </button>
-                          {can("settings", "edit") && (
+                          {can("settings", "edit") && !(b as CashBox & { hasOpening?: boolean }).hasOpening && (
                             <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setOpening(b)}>
                               {tr("افتتاحي", "Opening")}
                             </button>

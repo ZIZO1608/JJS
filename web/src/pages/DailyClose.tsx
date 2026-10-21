@@ -10,6 +10,7 @@ import { useToast } from "../lib/toast";
 import { useData } from "../lib/useData";
 import type { PeriodReport } from "../lib/types";
 import { Confirm } from "./orders/shared";
+import { WithdrawDialog } from "./five/FiveAnswers";
 
 interface DayTotals extends PeriodReport {
   cash?: { currency: Currency; expected: number; counted: number; difference: number };
@@ -31,6 +32,132 @@ interface DayView {
   report: PeriodReport;
   mainBox: { id: string; nameAr: string; nameEn: string; currency: Currency; expected: number };
   reps: { id: string; nameAr: string; nameEn: string; currency: Currency; balance: number }[];
+  cashFlow?: { currency: Currency; opening: number; moves: { type: string; amount: number; n: number }[]; expected: number };
+  repSettlement?: {
+    employeeId: string;
+    name: string;
+    boxId: string | null;
+    cash: number;
+    currency: Currency;
+    deliveries: number;
+    items: number;
+    returns: number;
+    returnsUsd: number;
+    expensesUsd: number;
+    openConsignments: number;
+  }[];
+  production?: {
+    productId: string | null;
+    nameAr: string;
+    nameEn: string;
+    opening: number;
+    made: number;
+    fromFridge: number;
+    madeFresh: number;
+    consigned: number;
+    returnedIn: number;
+    wasted: number;
+    counted: number;
+    closing: number;
+    soldTotal: number;
+    consignSold: number;
+  }[];
+}
+
+/** Box move types, the way the shop says them. */
+export const MOVE_TYPE: Record<string, [string, string]> = {
+  sale: ["مبيعات", "Sales"],
+  client_payment: ["دفعات زبائن", "Client payments"],
+  topup: ["شحن أرصدة", "Top-ups"],
+  expense: ["مصاريف", "Expenses"],
+  purchase: ["مدفوعات موردين", "Paid to suppliers"],
+  transfer: ["تحويلات بين الصناديق", "Transfers between boxes"],
+  handover: ["كاش من المندوب", "Cash from delivery"],
+  count_adjust: ["فرق جرد سابق", "Earlier count difference"],
+  salary: ["رواتب", "Salaries"],
+  advance: ["سلف", "Advances"],
+  opening: ["رصيد افتتاحي", "Opening balance"],
+  withdrawal: ["سحوبات شخصية", "Personal withdrawals"],
+  refund: ["استرداد للزبائن", "Refunds to clients"],
+};
+
+/** Opening + money in − money out = what should be in the box (JJ's own way of counting). */
+function BoxFlow({ f }: { f: NonNullable<DayView["cashFlow"]> }) {
+  const { tr, lang } = useI18n();
+  const m = (v: number) => money(v, f.currency, lang);
+  return (
+    <table className="mb-3 w-full max-w-lg text-sm">
+      <tbody>
+        <tr>
+          <td className="py-1 text-muted">{tr("رصيد بداية اليوم", "Start of the day")}</td>
+          <td className="py-1 text-end num ltr">{m(f.opening)}</td>
+        </tr>
+        {f.moves.map((x) => (
+          <tr key={x.type}>
+            <td className="py-1">
+              {x.amount >= 0 ? "+ " : "− "}
+              {tr(...(MOVE_TYPE[x.type] ?? [x.type, x.type]))} <span className="text-faint">({x.n})</span>
+            </td>
+            <td className={`py-1 text-end num ltr ${x.amount < 0 ? "text-muted" : ""}`}>{m(Math.abs(x.amount))}</td>
+          </tr>
+        ))}
+        <tr className="border-t border-line font-bold">
+          <td className="py-1.5">= {tr("المفروض يكون بالصندوق", "Should be in the box")}</td>
+          <td className="py-1.5 text-end num ltr">{m(f.expected)}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+/** Made vs sold, straight from the stock moves. */
+function MadeVsSold({ rows }: { rows: NonNullable<DayView["production"]> }) {
+  const { tr, pick } = useI18n();
+  if (!rows.length) return null;
+  return (
+    <div className="card overflow-x-auto">
+      <h3 className="mb-2 font-semibold">{tr("المُنتَج مقابل المباع", "Made vs sold")}</h3>
+      <table className="w-full text-sm">
+        <thead>
+          <tr>
+            <th className="th">{tr("الصنف", "Product")}</th>
+            <th className="th text-end">{tr("من أمس", "From yesterday")}</th>
+            <th className="th text-end">{tr("انصنع", "Made")}</th>
+            <th className="th text-end">{tr("انباع", "Sold")}</th>
+            <th className="th text-end">{tr("بالأمانة", "Consigned")}</th>
+            <th className="th text-end">{tr("رجع", "Returned")}</th>
+            <th className="th text-end">{tr("تالف", "Wasted")}</th>
+            <th className="th text-end">{tr("باقي", "Left")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.productId ?? i}>
+              <td className="td font-semibold">{pick(r)}</td>
+              <td className="td text-end num">{qty(r.opening)}</td>
+              <td className="td text-end num">{qty(r.made)}</td>
+              <td className="td text-end num">
+                {qty(r.fromFridge)}
+                {r.madeFresh > 0 && (
+                  <span className="text-xs text-faint">
+                    {" "}
+                    (+{qty(r.madeFresh)} {tr("طازة", "fresh")})
+                  </span>
+                )}
+              </td>
+              <td className="td text-end num">{qty(r.consigned)}</td>
+              <td className="td text-end num">{qty(r.returnedIn)}</td>
+              <td className={`td text-end num ${r.wasted > 0 ? "text-bad" : ""}`}>{qty(r.wasted)}</td>
+              <td className="td text-end num font-semibold">{qty(r.closing)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.some((r) => Math.abs(r.counted) > 0.001) && (
+        <p className="mt-2 text-xs text-muted">{tr("في فروقات جرد مسجّلة: شوف المستودع ← الحركات.", "Count differences were recorded: see Warehouse → Moves.")}</p>
+      )}
+    </div>
+  );
 }
 
 /** The numbers of one day (used after closing and for past days). */
@@ -40,7 +167,11 @@ function DaySummary({ r, cash }: { r: PeriodReport; cash?: DayTotals["cash"] | n
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label={tr("المبيعات", "Sales")} value={usd(r.salesUsd)} />
-        <Stat label={tr("الطلبات", "Orders")} value={String(r.orders)} sub={`${qty(r.items)} ${tr("قطعة", "items")}${r.freeItems ? ` · ${r.freeItems} ${tr("مجاني", "free")}` : ""}`} />
+        <Stat
+          label={tr("الطلبات", "Orders")}
+          value={String(r.orders)}
+          sub={`${qty(r.items)} ${tr("قطعة", "items")}${r.freeItems ? ` · ${r.freeItems} ${tr("مجاني", "free")}` : ""}`}
+        />
         <Stat label={tr("الخصومات", "Discounts")} value={usd(r.discountUsd)} />
         {cash ? (
           <Stat
@@ -135,6 +266,7 @@ export function DailyClosePage() {
   const history = useData<{ rows: DayRow[] }>(!simple ? "/days" : null);
   const [counted, setCounted] = useState("");
   const [confirm, setConfirm] = useState<"close" | "reopen" | null>(null);
+  const [withdraw, setWithdraw] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const run = async (fn: () => Promise<unknown>, ok: string) => {
@@ -165,6 +297,11 @@ export function DailyClosePage() {
         subtitle={tr("سلّم نقد التوصيل، عدّ الصندوق، واقفل اليوم.", "Receive delivery cash, count the box, and lock the day.")}
         actions={
           <div className="flex items-center gap-2">
+            {can("daily_close", "edit") && isToday && (
+              <button className="btn" onClick={() => setWithdraw(true)}>
+                {tr("سحب شخصي", "Personal withdrawal")}
+              </button>
+            )}
             <button className="btn btn-ghost px-2" onClick={() => setDate(addDaysTo(date, -1))} aria-label={tr("اليوم السابق", "Previous day")}>
               {lang === "ar" ? "→" : "←"}
             </button>
@@ -200,13 +337,49 @@ export function DailyClosePage() {
             </div>
           </div>
           <DaySummary r={d.day.totals ?? d.report} cash={d.day.totals?.cash} />
+          {d.production && <MadeVsSold rows={d.production} />}
         </div>
       ) : (
         <div className="grid gap-4">
           {/* step 1: delivery cash */}
           <section className="card">
-            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>1 · {tr("استلام نقد التوصيل", "Receive delivery cash")}</h2>
-            {d.reps.filter((r) => r.balance > 0.009).length === 0 ? (
+            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>1 · {tr("تسوية المندوب", "Settle with the delivery person")}</h2>
+            {d.repSettlement && d.repSettlement.length > 0 ? (
+              <div className="grid gap-2">
+                {d.repSettlement.map((r) => (
+                  <div key={r.employeeId} className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-line p-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold">{r.name}</div>
+                      <div className="text-sm text-muted">
+                        {tr("توصيلات", "Deliveries")} <span className="num">{r.deliveries}</span> ({r.items} {tr("قطعة", "pcs")}) · {tr("مرتجعات", "Returns")}{" "}
+                        <span className="num">{r.returns}</span>
+                        {r.expensesUsd > 0 && (
+                          <>
+                            {" "}
+                            · {tr("مصاريف طريق", "Road expenses")} <span className="num ltr">{usd(r.expensesUsd)}</span>
+                          </>
+                        )}
+                        {r.openConsignments > 0 && ` · ${tr(`${r.openConsignments} بضاعة بالأمانة مفتوحة`, `${r.openConsignments} open consignment(s)`)}`}
+                      </div>
+                    </div>
+                    <div className="ms-auto flex items-center gap-3">
+                      <span className={`num ltr text-lg font-bold ${r.cash > 0.009 ? "" : "text-faint"}`}>{money(r.cash, r.currency, lang)}</span>
+                      {r.cash > 0.009 && r.boxId && can("daily_close", "create") && isToday ? (
+                        <button
+                          className={`btn btn-primary ${big ? "min-h-[52px] px-6 text-lg" : ""}`}
+                          disabled={busy}
+                          onClick={() => run(() => post("/money/handover", { boxId: r.boxId }), tr("تم استلام النقد", "Cash received"))}
+                        >
+                          {tr("استلمت الكاش", "Cash received")}
+                        </button>
+                      ) : (
+                        r.cash <= 0.009 && <span className="text-sm text-good">✓</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : d.reps.filter((r) => r.balance > 0.009).length === 0 ? (
               <p className="text-muted">{tr("ما في نقد عند موظفي التوصيل. ✓", "No delivery person is holding cash. ✓")}</p>
             ) : (
               <ul className="grid gap-2">
@@ -237,6 +410,7 @@ export function DailyClosePage() {
             <p className="mb-3 text-sm text-muted">
               {pick(box)} — {tr("عدّ كل النقد الموجود واكتب المجموع.", "Count all the cash in it and type the total.")}
             </p>
+            {d.cashFlow && !simple && <BoxFlow f={d.cashFlow} />}
             <div className="grid items-end gap-4 sm:grid-cols-3">
               <label className="block">
                 <span className="label">{tr("المعدود", "Counted")}</span>
@@ -256,7 +430,9 @@ export function DailyClosePage() {
               </div>
               <div>
                 <div className="text-sm text-muted">{tr("الفرق", "Difference")}</div>
-                <div className={`num ltr text-2xl font-bold text-start ${diff === null ? "text-faint" : Math.abs(diff) < 0.005 ? "text-good" : diff < 0 ? "text-bad" : "text-warn"}`}>
+                <div
+                  className={`num ltr text-2xl font-bold text-start ${diff === null ? "text-faint" : Math.abs(diff) < 0.005 ? "text-good" : diff < 0 ? "text-bad" : "text-warn"}`}
+                >
                   {diff === null ? "—" : `${diff > 0 ? "+" : ""}${money(diff, box.currency, lang)}`}
                 </div>
                 {diff !== null && Math.abs(diff) >= 0.005 && <div className="text-xs text-muted">{diff < 0 ? tr("ناقص من الصندوق", "Short") : tr("زيادة بالصندوق", "Over")}</div>}
@@ -264,11 +440,16 @@ export function DailyClosePage() {
             </div>
           </section>
 
+          {d.production && d.production.length > 0 && <MadeVsSold rows={d.production} />}
+
           {/* step 3: close */}
           <section className="card">
             <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>3 · {tr("اقفل اليوم", "Lock the day")}</h2>
             <p className="mb-3 text-sm text-muted">
-              {tr("بعد الإقفال ما بينفع تسجيل طلبات أو حركات لهذا اليوم إلا إذا فتحه المدير.", "After closing, no orders or moves can be added for this day unless the admin reopens it.")}
+              {tr(
+                "بعد الإقفال ما بينفع تسجيل طلبات أو حركات لهذا اليوم إلا إذا فتحه المدير.",
+                "After closing, no orders or moves can be added for this day unless the admin reopens it.",
+              )}
             </p>
             <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label={tr("الطلبات", "Orders")} value={String(d.report.orders)} />
@@ -277,7 +458,11 @@ export function DailyClosePage() {
               <Stat label={tr("الخصومات", "Discounts")} value={usd(d.report.discountUsd)} />
             </div>
             {can("daily_close", "create") ? (
-              <button className={`btn btn-primary w-full ${big ? "min-h-[64px] text-xl" : "py-3 text-lg"}`} disabled={busy || counted === "" || Number.isNaN(c) || c < 0} onClick={() => setConfirm("close")}>
+              <button
+                className={`btn btn-primary w-full ${big ? "min-h-[64px] text-xl" : "py-3 text-lg"}`}
+                disabled={busy || counted === "" || Number.isNaN(c) || c < 0}
+                onClick={() => setConfirm("close")}
+              >
                 {tr("اقفل اليوم", "Close the day")}
               </button>
             ) : (
@@ -312,7 +497,9 @@ export function DailyClosePage() {
                     <td className="td num text-end">{h.totals?.orders ?? "—"}</td>
                     <td className="td text-end">
                       {h.totals?.cash ? (
-                        <span className={`num ltr ${Math.abs(h.totals.cash.difference) < 0.005 ? "" : h.totals.cash.difference < 0 ? "text-bad" : "text-warn"}`}>{money(h.totals.cash.difference, h.totals.cash.currency, lang)}</span>
+                        <span className={`num ltr ${Math.abs(h.totals.cash.difference) < 0.005 ? "" : h.totals.cash.difference < 0 ? "text-bad" : "text-warn"}`}>
+                          {money(h.totals.cash.difference, h.totals.cash.currency, lang)}
+                        </span>
                       ) : (
                         "—"
                       )}
@@ -348,6 +535,7 @@ export function DailyClosePage() {
           }}
         />
       )}
+      {withdraw && <WithdrawDialog onClose={() => setWithdraw(false)} onDone={() => (setWithdraw(false), void view.reload())} />}
       {confirm === "reopen" && (
         <Confirm
           title={tr(`إعادة فتح يوم ${date}؟`, `Reopen ${date}?`)}

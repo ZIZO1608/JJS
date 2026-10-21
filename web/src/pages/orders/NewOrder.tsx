@@ -12,7 +12,7 @@ import { useData } from "../../lib/useData";
 import type { Catalog, CatalogProduct, ClientSummary, Employee, OptionGroup, PaymentMethod } from "../../lib/types";
 import { discountWords, type AppliedTax } from "./shared";
 
-type WhoKind = "walkin" | "client" | "trial" | "staff";
+type WhoKind = "walkin" | "client" | "trial" | "staff" | "internal";
 interface CartLine {
   key: string;
   productId: string;
@@ -24,7 +24,18 @@ interface Quote {
   currency: Currency;
   rate: number | null;
   client: { id: string; name: string; creditLimitUsd: number; creditBlock: boolean; balanceUsd: number | null } | null;
-  lines: { productId: string; nameAr: string; nameEn: string; qty: number; freeQty: number; unitPrice: number; lineTotal: number; specialPrice: boolean; options: { id: string; nameAr: string; nameEn: string }[] }[];
+  lines: {
+    productId: string;
+    nameAr: string;
+    nameEn: string;
+    qty: number;
+    freeQty: number;
+    unitPrice: number;
+    lineTotal: number;
+    specialPrice: boolean;
+    priceFrom?: "menu" | "list" | "client" | "agreed";
+    options: { id: string; nameAr: string; nameEn: string }[];
+  }[];
   subtotal: number;
   discount: number;
   discountPct: number;
@@ -45,6 +56,61 @@ interface DueRow {
   id: string;
   clientId: string;
   lines: { productId: string; qty: number; optionIds?: string[] }[];
+}
+
+interface Snapshot {
+  client: { id: string; name: string; phone: string; creditLimitUsd: number; consignment: boolean; paymentTermsDays: number };
+  lastOrder: { id: string; number: number; date: string; total: number; currency: Currency; items: number } | null;
+  aging: { balanceUsd: number; overdueDays: number; daysOutstanding: number; termsDays: number };
+  month: { orders: number; salesUsd: number; items: number };
+  tier: { nameAr: string; nameEn: string; discountPct: number } | null;
+  agreedPrices: { productId: string }[];
+  openConsignments: number;
+}
+
+/** What you need to know the moment a shop is picked: last order, debt, late or not, agreed prices. */
+function SnapshotCard({ clientId }: { clientId: string }) {
+  const { tr, fmtDate, lang, pick } = useI18n();
+  const snap = useData<Snapshot>(`/clients/${clientId}/snapshot`);
+  const d = snap.data;
+  if (!d) return null;
+  const owes = d.aging.balanceUsd < -0.009;
+  return (
+    <div className="card mb-3 grid gap-1 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">{d.client.name}</span>
+        <span className={`num ltr font-bold ${owes ? "text-bad" : ""}`}>
+          {owes
+            ? `${tr("عليه", "Owes")} ${usd(-d.aging.balanceUsd)}`
+            : d.aging.balanceUsd > 0.009
+              ? `${tr("له", "Credit")} ${usd(d.aging.balanceUsd)}`
+              : tr("ما عليه شي", "Nothing owed")}
+        </span>
+      </div>
+      {d.aging.overdueDays > 0 && <div className="font-semibold text-bad">{tr(`متأخر بالدفع ${d.aging.overdueDays} يوم`, `${d.aging.overdueDays} days late paying`)}</div>}
+      <div className="text-muted">
+        {tr("آخر طلب", "Last order")}:{" "}
+        {d.lastOrder ? (
+          <>
+            {fmtDate(d.lastOrder.date)} · <span className="num ltr">{money(d.lastOrder.total, d.lastOrder.currency, lang)}</span>
+          </>
+        ) : (
+          "—"
+        )}
+      </div>
+      <div className="text-muted">
+        {tr("هالشهر", "This month")}: <span className="num ltr">{usd(d.month.salesUsd)}</span> · <span className="num">{d.month.items}</span> {tr("قطعة", "pcs")}
+      </div>
+      {(d.agreedPrices.length > 0 || d.tier) && (
+        <div className="text-muted">
+          {d.agreedPrices.length > 0 && tr(`${d.agreedPrices.length} سعر متفق عليه`, `${d.agreedPrices.length} agreed prices`)}
+          {d.agreedPrices.length > 0 && d.tier && " · "}
+          {d.tier && `${pick(d.tier)} ${d.tier.discountPct}%`}
+        </div>
+      )}
+      {d.openConsignments > 0 && <div className="text-muted">{tr(`عنده ${d.openConsignments} بضاعة بالأمانة`, `${d.openConsignments} open consignment(s)`)}</div>}
+    </div>
+  );
 }
 
 const keyOf = (productId: string, optionIds: string[]) => `${productId}|${[...optionIds].sort().join(",")}`;
@@ -82,7 +148,17 @@ function Choice({ active, onClick, children, big, disabled }: { active?: boolean
 }
 
 /* ---------------- add-ons dialog ---------------- */
-function AddonsDialog({ product, groups, onClose, onAdd }: { product: CatalogProduct; groups: OptionGroup[]; onClose: () => void; onAdd: (optionIds: string[], qty: number) => void }) {
+function AddonsDialog({
+  product,
+  groups,
+  onClose,
+  onAdd,
+}: {
+  product: CatalogProduct;
+  groups: OptionGroup[];
+  onClose: () => void;
+  onAdd: (optionIds: string[], qty: number) => void;
+}) {
   const { tr, pick, lang } = useI18n();
   const [sel, setSel] = useState<Record<string, string[]>>({});
   const [q, setQ] = useState(1);
@@ -248,6 +324,7 @@ export function NewOrderPage() {
   const [manualPct, setManualPct] = useState("");
   const [useLoyalty, setUseLoyalty] = useState(true);
   const [note, setNote] = useState("");
+  const [paidNow, setPaidNow] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteErr, setQuoteErr] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -298,26 +375,30 @@ export function NewOrderPage() {
     const valid = (m: PaymentMethod) => (m.kind === "credit" ? !!clientId && who !== "staff" : m.kind === "salary" ? who === "staff" : true);
     const cur = methods.find((m) => m.id === methodId);
     if (cur && valid(cur)) return;
-    const def = who === "staff" ? methods.find((m) => m.kind === "salary") : methods.find((m) => m.systemKey === "cash") ?? methods.find((m) => m.kind === "box");
+    const def = who === "staff" ? methods.find((m) => m.kind === "salary") : (methods.find((m) => m.systemKey === "cash") ?? methods.find((m) => m.kind === "box"));
     setMethodId(def?.id ?? null);
   }, [methods, who, clientId, methodId]);
 
   /* ----- live quote ----- */
+  const noPay = who === "trial" || who === "internal";
+  const methodKind = methods.find((m) => m.id === methodId)?.kind;
+  const paidValue = !noPay && methodKind === "box" && paidNow.trim() !== "" && !Number.isNaN(num(paidNow)) ? Math.max(0, num(paidNow)) : null;
   const payload = useMemo(
     () => ({
       clientId: who === "client" || who === "trial" ? clientId : null,
-      type: who === "trial" ? "trial" : who === "staff" ? "staff" : "normal",
+      type: who === "trial" ? "trial" : who === "staff" ? "staff" : who === "internal" ? "internal" : "normal",
       employeeId: who === "staff" ? employeeId : null,
-      fulfilment,
+      fulfilment: who === "internal" ? "pickup" : fulfilment,
       deliveryFee: fulfilment === "delivery" && fee !== "" && !Number.isNaN(num(fee)) ? num(fee) : null,
       assignedTo: fulfilment === "delivery" && assignedTo ? assignedTo : null,
-      methodId: who === "trial" ? null : methodId,
-      ...(can("orders", "edit") && manualPct !== "" && num(manualPct) > 0 ? { manualDiscountPct: Math.min(100, num(manualPct)) } : {}),
+      methodId: noPay ? null : methodId,
+      ...(can("orders", "edit") && !noPay && manualPct !== "" && num(manualPct) > 0 ? { manualDiscountPct: Math.min(100, num(manualPct)) } : {}),
+      ...(paidValue !== null ? { paidAmount: paidValue } : {}),
       useLoyalty,
       note: note.trim() || undefined,
       lines: cart.map((l) => ({ productId: l.productId, qty: l.qty, optionIds: l.optionIds })),
     }),
-    [who, clientId, employeeId, fulfilment, fee, assignedTo, methodId, manualPct, useLoyalty, note, cart, can],
+    [who, clientId, employeeId, fulfilment, fee, assignedTo, methodId, manualPct, useLoyalty, note, cart, can, noPay, paidValue],
   );
   useEffect(() => {
     if (!cart.length) {
@@ -387,6 +468,7 @@ export function NewOrderPage() {
     setManualPct("");
     setUseLoyalty(true);
     setNote("");
+    setPaidNow("");
     setQuote(null);
     setDone(null);
     nav("/orders/new", { replace: true });
@@ -409,6 +491,11 @@ export function NewOrderPage() {
           <button className="btn btn-primary min-h-[60px] text-lg" onClick={() => openPrint(`/print/receipt/${done.id}`)}>
             {tr("طباعة الفاتورة", "Print receipt")}
           </button>
+          {!simple && (
+            <button className="btn" onClick={() => openPrint(`/print/receipt/${done.id}?size=a4`)}>
+              {tr("فاتورة A4", "A4 invoice")}
+            </button>
+          )}
           <button className="btn min-h-[60px] text-lg" onClick={reset}>
             {tr("طلب جديد", "New order")}
           </button>
@@ -423,10 +510,12 @@ export function NewOrderPage() {
   const whoName =
     who === "walkin"
       ? tr("زبون عابر", "Walk-in")
-      : who === "staff"
-        ? (employee?.name ?? tr("موظف", "Staff"))
-        : `${client?.name ?? "…"}${who === "trial" ? ` · ${tr("تجربة مجانية", "free trial")}` : ""}`;
-  const whoReady = who === "walkin" || ((who === "client" || who === "trial") && !!clientId) || (who === "staff" && !!employeeId);
+      : who === "internal"
+        ? tr("تذوّق / استهلاك داخلي", "Tasting / internal use")
+        : who === "staff"
+          ? (employee?.name ?? tr("موظف", "Staff"))
+          : `${client?.name ?? "…"}${who === "trial" ? ` · ${tr("تجربة مجانية", "free trial")}` : ""}`;
+  const whoReady = who === "walkin" || who === "internal" || ((who === "client" || who === "trial") && !!clientId) || (who === "staff" && !!employeeId);
   const cartCount = cart.reduce((s, l) => s + l.qty, 0);
   const cur = quote?.currency ?? settings?.defaultCurrency ?? "USD";
 
@@ -494,7 +583,8 @@ export function NewOrderPage() {
                       {tr("مجاني", "Free")} ×{ql.freeQty}
                     </div>
                   )}
-                  {ql?.specialPrice && <div className="text-xs text-muted">{tr("سعر خاص للزبون", "Client's special price")}</div>}
+                  {ql?.priceFrom === "list" && <div className="text-xs text-muted">{tr("سعر القائمة", "Price list")}</div>}
+                  {ql?.priceFrom === "client" && <div className="text-xs text-muted">{tr("سعر خاص للزبون", "Client's special price")}</div>}
                 </div>
                 {editable ? (
                   <div className="flex items-center gap-1">
@@ -552,7 +642,10 @@ export function NewOrderPage() {
       {quote?.client && quote.client.balanceUsd !== null && (
         <p className="mt-2 text-sm text-muted">
           {tr("رصيد الزبون", "Client balance")}:{" "}
-          <span className={`num ltr ${quote.client.balanceUsd < 0 ? "text-bad" : ""}`}>{usd(quote.client.balanceUsd)}</span>
+          <span className={quote.client.balanceUsd < -0.009 ? "text-bad" : ""}>
+            {quote.client.balanceUsd < -0.009 ? tr("عليه", "owes") : quote.client.balanceUsd > 0.009 ? tr("له", "credit") : ""}{" "}
+            <span className="num ltr">{usd(Math.abs(quote.client.balanceUsd))}</span>
+          </span>
           {quote.client.creditLimitUsd > 0 && (
             <>
               {" "}
@@ -563,8 +656,8 @@ export function NewOrderPage() {
       )}
       {quote?.subscription && (
         <p className="mt-1 text-sm text-muted">
-          {pick({ nameAr: quote.subscription.planNameAr, nameEn: quote.subscription.planNameEn })}: {tr("باقي", "left")} <span className="num">{quote.subscription.availableIncluded}</span>{" "}
-          {tr("قطعة ضمن الاشتراك", "included items")}
+          {pick({ nameAr: quote.subscription.planNameAr, nameEn: quote.subscription.planNameEn })}: {tr("باقي", "left")}{" "}
+          <span className="num">{quote.subscription.availableIncluded}</span> {tr("قطعة ضمن الاشتراك", "included items")}
         </p>
       )}
       {quote?.loyalty?.enabled && who === "client" && (
@@ -582,7 +675,9 @@ export function NewOrderPage() {
     </div>
   );
 
-  const clientList = (clientsQ.data?.rows ?? []).filter((c) => c.active && (!clientSearch.trim() || `${c.name} ${c.contactPerson} ${c.phone}`.toLowerCase().includes(clientSearch.trim().toLowerCase())));
+  const clientList = (clientsQ.data?.rows ?? []).filter(
+    (c) => c.active && (!clientSearch.trim() || `${c.name} ${c.contactPerson} ${c.phone}`.toLowerCase().includes(clientSearch.trim().toLowerCase())),
+  );
   const big = simple;
 
   return (
@@ -602,7 +697,7 @@ export function NewOrderPage() {
       {/* ---------- step 1: who ---------- */}
       {step === 1 && (
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
             <Choice big active={who === "walkin"} onClick={() => (setWho("walkin"), setClientId(null), setStep(2))}>
               {tr("زبون عابر", "Walk-in")}
             </Choice>
@@ -621,13 +716,31 @@ export function NewOrderPage() {
                 {tr("شراء موظف", "Staff purchase")}
               </Choice>
             )}
+            <Choice big active={who === "internal"} onClick={() => (setWho("internal"), setClientId(null), setStep(2))}>
+              {tr("تذوّق / داخلي", "Tasting / internal")}
+            </Choice>
           </div>
+          {who === "internal" && (
+            <p className="text-sm text-muted">
+              {tr("بدون فاتورة ولا دفع: البضاعة بتطلع من المخزون وتكلفتها بتنحسب.", "No invoice, no payment: the goods leave stock and their cost is recorded.")}
+            </p>
+          )}
 
           {(who === "client" || who === "trial") && (
             <div className="card">
-              {who === "trial" && <p className="mb-3 text-sm text-muted">{tr("التجربة مجانية بالكامل. اختر الزبون أو أضفه كزبون جديد.", "A trial is completely free. Choose the prospect or add them as a new client.")}</p>}
+              {who === "trial" && (
+                <p className="mb-3 text-sm text-muted">
+                  {tr("التجربة مجانية بالكامل. اختر الزبون أو أضفه كزبون جديد.", "A trial is completely free. Choose the prospect or add them as a new client.")}
+                </p>
+              )}
               <div className="mb-3 flex gap-2">
-                <TextInput type="search" autoFocus placeholder={tr("ابحث بالاسم أو الهاتف", "Search name or phone")} value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} />
+                <TextInput
+                  type="search"
+                  autoFocus
+                  placeholder={tr("ابحث بالاسم أو الهاتف", "Search name or phone")}
+                  value={clientSearch}
+                  onChange={(e) => setClientSearch(e.target.value)}
+                />
                 {can("clients", "create") && (
                   <button className="btn whitespace-nowrap" onClick={() => setNewClient(true)}>
                     {tr("+ زبون جديد", "+ New client")}
@@ -670,7 +783,11 @@ export function NewOrderPage() {
                   {employeesQ.data.rows
                     .filter((e) => e.active)
                     .map((e) => (
-                      <button key={e.id} onClick={() => (setEmployeeId(e.id), setStep(2))} className={`rounded-xl border p-3 text-start hover:border-ink ${employeeId === e.id ? "border-ink" : "border-line"}`}>
+                      <button
+                        key={e.id}
+                        onClick={() => (setEmployeeId(e.id), setStep(2))}
+                        className={`rounded-xl border p-3 text-start hover:border-ink ${employeeId === e.id ? "border-ink" : "border-line"}`}
+                      >
                         <div className="font-semibold">{e.name}</div>
                         <div className="text-xs text-muted">
                           {tr("خصم الموظف", "Staff discount")} <span className="num">{e.staffDiscountPct}%</span>
@@ -707,7 +824,15 @@ export function NewOrderPage() {
                 onScan();
               }}
             >
-              <input ref={scanRef} className="input" id="scan" dir="ltr" placeholder={tr("امسح الباركود أو اكتب كود المنتج ثم Enter", "Scan a barcode or type a product code, then Enter")} value={scan} onChange={(e) => setScan(e.target.value)} />
+              <input
+                ref={scanRef}
+                className="input"
+                id="scan"
+                dir="ltr"
+                placeholder={tr("امسح الباركود أو اكتب كود المنتج ثم Enter", "Scan a barcode or type a product code, then Enter")}
+                value={scan}
+                onChange={(e) => setScan(e.target.value)}
+              />
             </form>
             {products.length === 0 ? (
               <Empty text={tr("ما في منتجات بالمنيو بعد", "No products on the menu yet")} />
@@ -727,7 +852,9 @@ export function NewOrderPage() {
                         <span className={`font-semibold leading-tight ${big ? "text-lg" : ""}`}>{pick(p)}</span>
                         <span className="num ltr text-sm text-muted">{money(p.price, p.currency, lang)}</span>
                         {groupsFor(p).length > 0 && <span className="text-xs text-faint">{tr("+ إضافات", "+ add-ons")}</span>}
-                        {inCart > 0 && <span className="num absolute end-2 top-2 grid h-7 min-w-7 place-items-center rounded-full bg-ink px-1.5 text-sm font-bold text-bg">{inCart}</span>}
+                        {inCart > 0 && (
+                          <span className="num absolute end-2 top-2 grid h-7 min-w-7 place-items-center rounded-full bg-ink px-1.5 text-sm font-bold text-bg">{inCart}</span>
+                        )}
                       </button>
                     );
                   })}
@@ -736,6 +863,7 @@ export function NewOrderPage() {
           </div>
           <div className="min-w-0">
             <div className="lg:sticky lg:top-20">
+              {clientId && (who === "client" || who === "trial") && <SnapshotCard clientId={clientId} />}
               {renderSummary(true)}
               <button className={`btn btn-primary mt-3 w-full ${big ? "min-h-[60px] text-lg" : "py-3"}`} disabled={!cart.length} onClick={() => setStep(3)}>
                 {tr("التالي: الدفع", "Next: payment")}
@@ -749,42 +877,62 @@ export function NewOrderPage() {
       {step === 3 && (
         <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
           <div className="grid min-w-0 content-start gap-4">
-            <div className="card">
-              <h2 className="mb-2 font-semibold">{tr("الاستلام", "Pickup or delivery")}</h2>
-              <div className="flex flex-wrap gap-2">
-                <Choice big={big} active={fulfilment === "pickup"} onClick={() => setFulfilment("pickup")}>
-                  {tr("استلام من المحل", "Pickup")}
-                </Choice>
-                <Choice big={big} active={fulfilment === "delivery"} onClick={() => setFulfilment("delivery")}>
-                  {tr("توصيل", "Delivery")}
-                </Choice>
-              </div>
-              {fulfilment === "delivery" && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  {who !== "trial" && (
-                    <Field label={tr("أجرة التوصيل", "Delivery fee")} htmlFor="fee" hint={tr(`الافتراضي ${settings?.orders.defaultDeliveryFee ?? 0}`, `Default ${settings?.orders.defaultDeliveryFee ?? 0}`)}>
-                      <TextInput id="fee" inputMode="decimal" dir="ltr" className="num" placeholder={String(settings?.orders.defaultDeliveryFee ?? 0)} value={fee} onChange={(e) => setFee(e.target.value)} />
-                    </Field>
-                  )}
-                  <Field label={tr("مين يوصّل؟", "Delivered by")} htmlFor="rep">
-                    <Select id="rep" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
-                      <option value="">—</option>
-                      {(repsQ.data?.rows ?? []).map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
+            {who !== "internal" && (
+              <div className="card">
+                <h2 className="mb-2 font-semibold">{tr("الاستلام", "Pickup or delivery")}</h2>
+                <div className="flex flex-wrap gap-2">
+                  <Choice big={big} active={fulfilment === "pickup"} onClick={() => setFulfilment("pickup")}>
+                    {tr("استلام من المحل", "Pickup")}
+                  </Choice>
+                  <Choice big={big} active={fulfilment === "delivery"} onClick={() => setFulfilment("delivery")}>
+                    {tr("توصيل", "Delivery")}
+                  </Choice>
                 </div>
-              )}
-              {fulfilment === "delivery" && assignedTo && method?.kind === "box" && (
-                <p className="mt-2 text-sm text-muted">{tr("المبلغ النقدي يبقى مع موظف التوصيل حتى يسلّمه عند إقفال اليوم.", "Cash stays with the delivery person until they hand it over at day close.")}</p>
-              )}
-            </div>
+                {fulfilment === "delivery" && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    {who !== "trial" && (
+                      <Field
+                        label={tr("أجرة التوصيل", "Delivery fee")}
+                        htmlFor="fee"
+                        hint={tr(`الافتراضي ${settings?.orders.defaultDeliveryFee ?? 0}`, `Default ${settings?.orders.defaultDeliveryFee ?? 0}`)}
+                      >
+                        <TextInput
+                          id="fee"
+                          inputMode="decimal"
+                          dir="ltr"
+                          className="num"
+                          placeholder={String(settings?.orders.defaultDeliveryFee ?? 0)}
+                          value={fee}
+                          onChange={(e) => setFee(e.target.value)}
+                        />
+                      </Field>
+                    )}
+                    <Field label={tr("مين يوصّل؟", "Delivered by")} htmlFor="rep">
+                      <Select id="rep" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}>
+                        <option value="">—</option>
+                        {(repsQ.data?.rows ?? []).map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                )}
+                {fulfilment === "delivery" && assignedTo && method?.kind === "box" && (
+                  <p className="mt-2 text-sm text-muted">
+                    {tr("المبلغ النقدي يبقى مع موظف التوصيل حتى يسلّمه عند إقفال اليوم.", "Cash stays with the delivery person until they hand it over at day close.")}
+                  </p>
+                )}
+              </div>
+            )}
 
-            {who === "trial" ? (
-              <div className="card text-muted">{tr("تجربة مجانية — بدون دفع.", "Free trial — no payment.")}</div>
+            {who === "trial" || who === "internal" ? (
+              <div className="card text-muted">
+                {who === "trial"
+                  ? tr("تجربة مجانية — بدون دفع.", "Free trial — no payment.")
+                  : tr("تذوّق / استهلاك داخلي — بدون دفع، والتكلفة بتنحسب.", "Tasting / internal use — no payment, the cost is recorded.")}
+              </div>
             ) : (
               <div className="card">
                 <h2 className="mb-2 font-semibold">{tr("طريقة الدفع", "How did they pay?")}</h2>
@@ -799,12 +947,40 @@ export function NewOrderPage() {
                     );
                   })}
                 </div>
-                {!clientId && who !== "staff" && <p className="mt-2 text-xs text-faint">{tr("الدفع على الحساب فقط للزبائن المسجّلين.", "On account is only for account clients.")}</p>}
+                {!clientId && who !== "staff" && (
+                  <p className="mt-2 text-xs text-faint">{tr("الدفع على الحساب فقط للزبائن المسجّلين.", "On account is only for account clients.")}</p>
+                )}
                 {creditWarn && <p className="mt-2 text-sm font-semibold text-bad">{creditWarn}</p>}
+                {methodKind === "box" && quote && quote.total > 0 && (
+                  <div className="mt-3 grid gap-1">
+                    <Field label={tr("المقبوض الآن", "Paid now")} htmlFor="paidnow" hint={tr("اتركه فاضي إذا دفع كامل المبلغ", "Leave empty when they pay all of it")}>
+                      <TextInput
+                        id="paidnow"
+                        inputMode="decimal"
+                        dir="ltr"
+                        className={`num max-w-[12rem] ${big ? "text-lg" : ""}`}
+                        placeholder={String(quote.total)}
+                        value={paidNow}
+                        onChange={(e) => setPaidNow(e.target.value)}
+                      />
+                    </Field>
+                    {paidValue !== null &&
+                      paidValue < quote.total &&
+                      (clientId && who === "client" ? (
+                        <p className="text-sm font-semibold">
+                          {tr("الباقي على الحساب", "Rest on account")}: <span className="num ltr">{money(quote.total - paidValue, cur, lang)}</span>
+                        </p>
+                      ) : (
+                        <p className="text-sm font-semibold text-bad">
+                          {tr("الدفع الجزئي بس للزبائن المسجّلين. اختار الزبون من الخطوة 1.", "Part payment is only for account clients. Choose the client in step 1.")}
+                        </p>
+                      ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {(can("orders", "edit") || (quote?.loyalty?.enabled && (quote.loyalty.available > 0 || quote.loyaltyFree > 0))) && who !== "trial" && (
+            {(can("orders", "edit") || (quote?.loyalty?.enabled && (quote.loyalty.available > 0 || quote.loyaltyFree > 0))) && !noPay && (
               <div className="card grid gap-3">
                 {quote?.loyalty?.enabled && (quote.loyalty.available > 0 || quote.loyaltyFree > 0) && (
                   <label className="inline-flex items-center gap-2">
@@ -813,7 +989,11 @@ export function NewOrderPage() {
                   </label>
                 )}
                 {can("orders", "edit") && (
-                  <Field label={tr("خصم يدوي %", "Manual discount %")} htmlFor="mdisc" hint={tr("يُستعمل أفضل خصم واحد إلا إذا سُمح بالجمع بالإعدادات", "The best single discount applies unless stacking is allowed in settings")}>
+                  <Field
+                    label={tr("خصم يدوي %", "Manual discount %")}
+                    htmlFor="mdisc"
+                    hint={tr("يُستعمل أفضل خصم واحد إلا إذا سُمح بالجمع بالإعدادات", "The best single discount applies unless stacking is allowed in settings")}
+                  >
                     <TextInput id="mdisc" inputMode="decimal" dir="ltr" className="num max-w-[8rem]" value={manualPct} onChange={(e) => setManualPct(e.target.value)} />
                   </Field>
                 )}
@@ -829,6 +1009,7 @@ export function NewOrderPage() {
 
           <div className="min-w-0">
             <div className="lg:sticky lg:top-20">
+              {clientId && who === "client" && <SnapshotCard clientId={clientId} />}
               {renderSummary(false)}
               <label className="mt-3 flex items-center gap-2 text-sm">
                 <input
@@ -844,10 +1025,17 @@ export function NewOrderPage() {
               </label>
               <button
                 className={`btn btn-primary mt-3 w-full ${big ? "min-h-[64px] text-xl" : "py-3 text-lg"}`}
-                disabled={saving || !cart.length || (!methodId && who !== "trial" && (quote?.total ?? 0) > 0) || !!quoteErr || (!!creditWarn && !!quote?.client?.creditBlock)}
+                disabled={
+                  saving ||
+                  !cart.length ||
+                  (!methodId && !noPay && (quote?.total ?? 0) > 0) ||
+                  !!quoteErr ||
+                  (!!creditWarn && !!quote?.client?.creditBlock) ||
+                  (paidValue !== null && !!quote && paidValue < quote.total && !(clientId && who === "client"))
+                }
                 onClick={confirm}
               >
-                {saving ? tr("جارٍ الحفظ…", "Saving…") : tr("تأكيد الطلب", "Confirm order")}
+                {saving ? tr("جارٍ الحفظ…", "Saving…") : who === "internal" ? tr("تسجيل الاستهلاك", "Record internal use") : tr("تأكيد الطلب", "Confirm order")}
               </button>
               <button className="btn btn-ghost mt-2 w-full" onClick={() => setStep(2)}>
                 {tr("رجوع للأصناف", "Back to items")}

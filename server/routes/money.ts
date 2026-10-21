@@ -13,7 +13,7 @@ import { addBoxMove, boxBalance, getBox, systemBox } from "../services/money.js"
 export const moneyRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(60), nameEn: z.string().trim().min(1).max(60) };
 
-const boxOut = (b: typeof cashBoxes.$inferSelect) => ({ ...b, balance: boxBalance(db, b.id) });
+const boxOut = (b: typeof cashBoxes.$inferSelect) => ({ ...b, balance: boxBalance(db, b.id), hasOpening: !!db.select({ id: boxMoves.id }).from(boxMoves).where(and(eq(boxMoves.boxId, b.id), eq(boxMoves.type, "opening"), isNull(boxMoves.deletedAt))).get() });
 
 moneyRouter.get(
   "/boxes",

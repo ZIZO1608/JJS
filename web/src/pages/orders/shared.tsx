@@ -9,12 +9,12 @@ export interface OrderRow {
   businessDate: string;
   createdAt?: string;
   clientId: string | null;
-  type: "normal" | "trial" | "staff";
+  type: "normal" | "trial" | "staff" | "internal";
   employeeId: string | null;
   fulfilment: "pickup" | "delivery";
   assignedTo: string | null;
   status: "confirmed" | "delivered" | "cancelled";
-  paymentStatus: "paid" | "credit" | "free" | "salary";
+  paymentStatus: "paid" | "partial" | "credit" | "free" | "salary";
   methodId: string | null;
   currency: Currency;
   fxRate: number;
@@ -32,6 +32,9 @@ export interface OrderRow {
   subFree: number;
   note: string;
   cancelledAt: string | null;
+  cancelReason?: string;
+  paidAmount?: number;
+  consignmentId?: string | null;
   clientName: string | null;
   method: { nameAr: string; nameEn: string } | null;
   userName: string | null;
@@ -79,6 +82,7 @@ export function discountWords(reason: string, tr: Tr) {
     subscription: ["خصم الاشتراك", "Subscription discount"],
     staff: ["خصم موظف", "Staff discount"],
     trial: ["تجربة مجانية", "Free trial"],
+    internal: ["استهلاك داخلي", "Internal use"],
     manual: ["خصم يدوي", "Manual discount"],
     loyalty: ["قطع مجانية (ولاء)", "Free items (loyalty)"],
     sub_free: ["قطع ضمن الاشتراك", "Included in subscription"],
@@ -100,13 +104,13 @@ export function discountWords(reason: string, tr: Tr) {
 }
 
 export function payStatusLabel(s: OrderRow["paymentStatus"], tr: Tr) {
-  return { paid: tr("مدفوع", "Paid"), credit: tr("على الحساب", "On account"), free: tr("مجاني", "Free"), salary: tr("من الراتب", "From salary") }[s];
+  return { paid: tr("مدفوع", "Paid"), partial: tr("مدفوع جزئياً", "Part paid"), credit: tr("على الحساب", "On account"), free: tr("مجاني", "Free"), salary: tr("من الراتب", "From salary") }[s];
 }
 export function statusLabel(s: OrderRow["status"], tr: Tr) {
   return { confirmed: tr("مؤكد", "Confirmed"), delivered: tr("تم التسليم", "Delivered"), cancelled: tr("ملغى", "Cancelled") }[s];
 }
 export function typeLabel(t: OrderRow["type"], tr: Tr) {
-  return { normal: "", trial: tr("تجربة مجانية", "Free trial"), staff: tr("موظف", "Staff") }[t];
+  return { normal: "", trial: tr("تجربة مجانية", "Free trial"), staff: tr("موظف", "Staff"), internal: tr("تذوّق / داخلي", "Tasting / internal") }[t];
 }
 export const timeOf = (iso: string | undefined, lang: "ar" | "en") =>
   iso ? new Date(iso).toLocaleTimeString(lang === "ar" ? "ar-SY-u-nu-latn" : "en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
