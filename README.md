@@ -18,6 +18,8 @@ npm run build
 npm start            # open http://127.0.0.1:4310
 ```
 
+On Windows without typing anything: double-click **`run-windows.bat`** (first time it installs and builds, then opens the app in the browser).
+
 Desktop app (its own window, data kept in the Windows app-data folder):
 
 ```bash
@@ -110,7 +112,7 @@ The laptop is always the source of truth; the cloud copy is one-way.
 | `cloud/` | Supabase schema and the phone dashboard |
 | `data/` | Created on first run: `jjs.db` and `backups/` (dev and `npm start`) |
 | `tests/` | API suites and browser tours |
-| `docs/` | Screenshots and API shape notes |
+| `docs/` | `GUIDE-AR.md` (Arabic guide for the shop), `screens/` screenshots, API shape notes |
 
 ## Environment variables
 
@@ -124,9 +126,11 @@ The laptop is always the source of truth; the cloud copy is one-way.
 ```bash
 npm run build
 npm test                         # 4 API suites, each on a throwaway database
-# browser tour of every screen (needs Python + Playwright):
+# browser tests (need Python + Playwright), each on a fresh data folder:
 JJS_DATA_DIR=/tmp/jjs-tour PORT=4396 npm start &
-python3 tests/ui-tour.py http://127.0.0.1:4396 docs/screens
+python3 tests/ui-tour.py http://127.0.0.1:4396 /tmp/tour      # opens every screen as admin (AR+EN), manager, member, phone
+JJS_DATA_DIR=/tmp/jjs-flows PORT=4394 npm start &
+python3 tests/ui-flows.py http://127.0.0.1:4394 /tmp/flows    # clicks through: part-paid invoice, production, return, sale, day close
 ```
 
 `tests/api-wholesale.mjs` covers the wholesale pack (price lists, partial payment, consignment, returns, production runs, tracing, suppliers, due/recurring expenses, withdrawals, the new reports, restore). `tests/api-full.mjs` walks one full business day: production, fridge-first sales, add-ons, tier discount, credit and the credit-limit block, free trial and conversion, subscriptions, loyalty, taxes, staff purchase, payments and statement, cancel, purchase and average cost, expenses, waste, counts, prep list, advances and payroll, delivery cash handover, manager/member permissions, daily close and lock, reports, depreciation, and sync. `tests/api-sync.mjs` checks the cloud copy against a fake Supabase.

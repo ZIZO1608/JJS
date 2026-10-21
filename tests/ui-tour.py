@@ -63,14 +63,14 @@ ADMIN_ROUTES = [
     "/", "/dashboard", "/orders", "/orders/new", "/close", "/clients", f"/clients/{focus}",
     "/menu/products", "/menu/categories", "/menu/addons",
     "/warehouse/fridge", "/warehouse/produce", "/warehouse/items", "/warehouse/moves", "/warehouse/places",
-    "/production/new", "/production/runs", "/production/trace", "/distribution/route", "/distribution/consignments", "/distribution/returns", "/purchasing/list", "/purchasing/new", "/purchasing/suppliers",
-    "/costing/products", "/costing/ingredients", "/costing/overheads", "/costing/prep",
+    "/production/new", "/production/runs", "/production/trace", "/distribution/route", "/distribution/consignments", "/distribution/returns", "/purchasing/list", "/purchasing/new", "/purchasing/suppliers", "/purchasing/debts", "/purchasing/prices",
+    "/costing/products", "/costing/ingredients", "/costing/impact", "/costing/overheads", "/costing/prep",
     "/expenses", "/assets", "/people/employees", "/people/advances", "/people/payroll", "/people/calls",
     "/reports", "/users", "/roles", "/audit",
-    "/settings/business", "/settings/lists", "/settings/currency", "/settings/taxes", "/settings/money", "/settings/sales", "/settings/printing", "/settings/network", "/settings/backups",
+    "/settings/business", "/settings/lists", "/settings/currency", "/settings/taxes", "/settings/money", "/settings/sales", "/settings/prices", "/settings/printing", "/settings/network", "/settings/backups",
 ]
-PRINT_ROUTES = [f"/print/receipt/{order_id}", f"/print/labels?batches={batch_id}&copies=2", f"/print/statement/{focus}?from=2026-01-01&to=2030-12-31", "/print/report"]
-SIMPLE_ROUTES = ["/", "/orders/new", "/orders", "/warehouse", "/clients", f"/clients/{focus}", "/close", "/expenses", "/reports"]
+PRINT_ROUTES = [f"/print/receipt/{order_id}", f"/print/receipt/{order_id}?size=a4", "/print/route", f"/print/labels?batches={batch_id}&copies=2", f"/print/statement/{focus}?from=2026-01-01&to=2030-12-31", "/print/report"]
+SIMPLE_ROUTES = ["/", "/orders/new", "/orders", "/production/new", "/distribution/route", "/warehouse", "/clients", f"/clients/{focus}", "/close", "/expenses", "/reports"]
 
 
 def slug(path):
