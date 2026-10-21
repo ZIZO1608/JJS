@@ -155,6 +155,10 @@ export const products = sqliteTable(
     photo: text("photo").notNull().default(""),
     sort: integer("sort").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
+    /** Sandwich weight in grams (information only). */
+    weightG: real("weight_g").notNull().default(0),
+    /** Any other direct cost per piece (gas, labour share…), in USD. */
+    extraCostUsd: real("extra_cost_usd").notNull().default(0),
   },
   (t) => [uniqueIndex("products_code_uq").on(t.code), index("products_category_idx").on(t.categoryId)],
 );
@@ -227,7 +231,11 @@ export const items = sqliteTable(
     nameAr: text("name_ar").notNull(),
     nameEn: text("name_en").notNull(),
     unitId: text("unit_id").references(() => lookups.id),
-    unitCode: text("unit_code", { enum: ["kg", "g", "l", "ml", "pc"] }).notNull().default("pc"),
+    unitCode: text("unit_code", { enum: ["kg", "g", "l", "ml", "pc", "pack", "carton"] }).notNull().default("pc"),
+    /** Bought in packs/cartons: the pack's name and how many base units are inside one. */
+    packUnit: text("pack_unit").notNull().default(""),
+    packSize: real("pack_size").notNull().default(0),
+    supplierId: text("supplier_id"),
     minLevel: real("min_level").notNull().default(0),
     /** Weighted average cost of ONE unit, in USD. */
     avgCostUsd: real("avg_cost_usd").notNull().default(0),
@@ -248,6 +256,7 @@ export const batches = sqliteTable(
     qtyIn: real("qty_in").notNull(),
     qtyLeft: real("qty_left").notNull(),
     unitCostUsd: real("unit_cost_usd").notNull().default(0),
+    runId: text("run_id"),
   },
   (t) => [uniqueIndex("batches_code_uq").on(t.batchCode), index("batches_item_idx").on(t.itemId, t.qtyLeft), index("batches_exp_idx").on(t.expiresAt)],
 );
@@ -258,7 +267,7 @@ export const stockMoves = sqliteTable(
     ...base,
     itemId: text("item_id").notNull().references(() => items.id),
     batchId: text("batch_id").references(() => batches.id),
-    type: text("type", { enum: ["purchase", "production", "use", "sale", "transfer", "waste", "count", "adjust"] }).notNull(),
+    type: text("type", { enum: ["purchase", "production", "use", "sale", "transfer", "waste", "count", "adjust", "return", "consign"] }).notNull(),
     /** Signed: + into stock, − out of stock. Transfers write one row out and one in. */
     qty: real("qty").notNull(),
     locationId: text("location_id").references(() => locations.id),
@@ -279,6 +288,12 @@ export const suppliers = sqliteTable("suppliers", {
   name: text("name").notNull(),
   phone: text("phone").notNull().default(""),
   note: text("note").notNull().default(""),
+  /** What we already owed this supplier when we started using the system. */
+  openingBalance: real("opening_balance").notNull().default(0),
+  openingCurrency: text("opening_currency", { enum: ["USD", "SYP"] }).notNull().default("SYP"),
+  openingUsd: real("opening_usd").notNull().default(0),
+  openingPaidUsd: real("opening_paid_usd").notNull().default(0),
+  paymentTermsDays: integer("payment_terms_days").notNull().default(0),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
@@ -295,6 +310,12 @@ export const purchases = sqliteTable(
     totalUsd: real("total_usd").notNull(),
     paid: real("paid").notNull().default(0),
     paidFromBoxId: text("paid_from_box_id"),
+    /** The supplier's own invoice number. */
+    supplierRef: text("supplier_ref").notNull().default(""),
+    discount: real("discount").notNull().default(0),
+    transport: real("transport").notNull().default(0),
+    dueDate: text("due_date"),
+    photo: text("photo").notNull().default(""),
     note: text("note").notNull().default(""),
     userId: text("user_id").references(() => users.id),
   },
@@ -325,6 +346,8 @@ export const recipes = sqliteTable(
     optionId: text("option_id").references(() => options.id),
     itemId: text("item_id").notNull().references(() => items.id),
     qty: real("qty").notNull(),
+    /** Trim / loss: 10 means 10% more is used than the clean quantity. */
+    wastePct: real("waste_pct").notNull().default(0),
   },
   (t) => [index("recipes_product_idx").on(t.productId), index("recipes_option_idx").on(t.optionId)],
 );
@@ -357,6 +380,13 @@ export const clients = sqliteTable(
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     /** Set when a client who received a free trial places their first paid order. */
     convertedAt: text("converted_at"),
+    areaId: text("area_id"),
+    /** Days the client has to pay an invoice; 0 = cash only / no terms. */
+    paymentTermsDays: integer("payment_terms_days").notNull().default(0),
+    priceListId: text("price_list_id"),
+    /** Goods left on consignment: the shop pays only for what it sold. */
+    consignment: integer("consignment", { mode: "boolean" }).notNull().default(false),
+    repId: text("rep_id"),
   },
   (t) => [index("clients_name_idx").on(t.name)],
 );
@@ -367,7 +397,7 @@ export const clientMoves = sqliteTable(
   {
     ...base,
     clientId: text("client_id").notNull().references(() => clients.id),
-    type: text("type", { enum: ["charge", "payment", "topup", "refund", "adjust", "subscription"] }).notNull(),
+    type: text("type", { enum: ["charge", "payment", "topup", "refund", "adjust", "subscription", "return", "opening"] }).notNull(),
     amount: real("amount").notNull(),
     currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
     fxRate: real("fx_rate"),
@@ -448,7 +478,7 @@ export const boxMoves = sqliteTable(
   {
     ...base,
     boxId: text("box_id").notNull().references(() => cashBoxes.id),
-    type: text("type", { enum: ["sale", "client_payment", "topup", "expense", "purchase", "transfer", "handover", "count_adjust", "salary", "advance", "opening"] }).notNull(),
+    type: text("type", { enum: ["sale", "client_payment", "topup", "expense", "purchase", "transfer", "handover", "count_adjust", "salary", "advance", "opening", "withdrawal", "refund"] }).notNull(),
     amount: real("amount").notNull(),
     currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
     fxRate: real("fx_rate"),
@@ -483,12 +513,12 @@ export const orders = sqliteTable(
     number: integer("number").notNull(),
     businessDate: text("business_date").notNull(),
     clientId: text("client_id").references(() => clients.id),
-    type: text("type", { enum: ["normal", "trial", "staff"] }).notNull().default("normal"),
+    type: text("type", { enum: ["normal", "trial", "staff", "internal"] }).notNull().default("normal"),
     employeeId: text("employee_id"),
     fulfilment: text("fulfilment", { enum: ["pickup", "delivery"] }).notNull().default("pickup"),
     assignedTo: text("assigned_to"),
     status: text("status", { enum: ["confirmed", "delivered", "cancelled"] }).notNull().default("confirmed"),
-    paymentStatus: text("payment_status", { enum: ["paid", "credit", "free", "salary"] }).notNull(),
+    paymentStatus: text("payment_status", { enum: ["paid", "partial", "credit", "free", "salary"] }).notNull(),
     methodId: text("method_id").references(() => paymentMethods.id),
     currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
     fxRate: real("fx_rate"),
@@ -509,6 +539,10 @@ export const orders = sqliteTable(
     note: text("note").notNull().default(""),
     userId: text("user_id").references(() => users.id),
     cancelledAt: text("cancelled_at"),
+    cancelReason: text("cancel_reason").notNull().default(""),
+    /** Paid at the time of the order, in the order currency (the rest goes on the client's account). */
+    paidAmount: real("paid_amount").notNull().default(0),
+    consignmentId: text("consignment_id"),
   },
   (t) => [uniqueIndex("orders_number_uq").on(t.number), index("orders_date_idx").on(t.businessDate), index("orders_client_idx").on(t.clientId, t.businessDate)],
 );
@@ -582,6 +616,16 @@ export const expenses = sqliteTable(
     assetId: text("asset_id"),
     note: text("note").notNull().default(""),
     userId: text("user_id").references(() => users.id),
+    /** paid: money already left a box · due: owed, not paid yet */
+    status: text("status", { enum: ["paid", "due"] }).notNull().default("paid"),
+    dueDate: text("due_date"),
+    paidDate: text("paid_date"),
+    paidBy: text("paid_by").notNull().default(""),
+    beneficiary: text("beneficiary").notNull().default(""),
+    photo: text("photo").notNull().default(""),
+    /** The rep / route this cost belongs to (fuel, delivery). */
+    employeeId: text("employee_id"),
+    recurringId: text("recurring_id"),
   },
   (t) => [index("expenses_date_idx").on(t.date)],
 );
@@ -674,4 +718,154 @@ export const salesCalls = sqliteTable(
     note: text("note").notNull().default(""),
   },
   (t) => [index("sales_calls_date_idx").on(t.date)],
+);
+
+/* ======================================================================
+   Wholesale & distribution pack
+   ====================================================================== */
+
+/** Named price lists (distributor, big shop, small shop…) assigned to clients. */
+export const priceLists = sqliteTable("price_lists", {
+  ...base,
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const priceListItems = sqliteTable(
+  "price_list_items",
+  {
+    ...base,
+    listId: text("list_id").notNull().references(() => priceLists.id),
+    productId: text("product_id").notNull().references(() => products.id),
+    price: real("price").notNull(),
+    currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
+  },
+  (t) => [index("pli_list_idx").on(t.listId, t.productId)],
+);
+
+/** A morning production run: several products made together, one batch per product. */
+export const productionRuns = sqliteTable(
+  "production_runs",
+  {
+    ...base,
+    number: integer("number").notNull(),
+    businessDate: text("business_date").notNull(),
+    employeeId: text("employee_id"),
+    itemsCount: integer("items_count").notNull().default(0),
+    costUsd: real("cost_usd").notNull().default(0),
+    note: text("note").notNull().default(""),
+    userId: text("user_id").references(() => users.id),
+  },
+  (t) => [uniqueIndex("runs_number_uq").on(t.number), index("runs_date_idx").on(t.businessDate)],
+);
+
+/** Goods left with a shop that pays only for what it sells. */
+export const consignments = sqliteTable(
+  "consignments",
+  {
+    ...base,
+    number: integer("number").notNull(),
+    businessDate: text("business_date").notNull(),
+    clientId: text("client_id").notNull().references(() => clients.id),
+    repId: text("rep_id"),
+    status: text("status", { enum: ["open", "settled", "cancelled"] }).notNull().default("open"),
+    currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
+    fxRate: real("fx_rate"),
+    note: text("note").notNull().default(""),
+    userId: text("user_id").references(() => users.id),
+    settledAt: text("settled_at"),
+    orderId: text("order_id"),
+    returnId: text("return_id"),
+  },
+  (t) => [uniqueIndex("consign_number_uq").on(t.number), index("consign_client_idx").on(t.clientId, t.status)],
+);
+
+export const consignmentLines = sqliteTable(
+  "consignment_lines",
+  {
+    ...base,
+    consignmentId: text("consignment_id").notNull().references(() => consignments.id),
+    productId: text("product_id").notNull().references(() => products.id),
+    nameAr: text("name_ar").notNull(),
+    nameEn: text("name_en").notNull(),
+    qty: integer("qty").notNull(),
+    /** Agreed net price per piece, in the consignment currency. */
+    unitPrice: real("unit_price").notNull(),
+    unitCostUsd: real("unit_cost_usd").notNull().default(0),
+    returnedQty: integer("returned_qty").notNull().default(0),
+  },
+  (t) => [index("consign_lines_idx").on(t.consignmentId)],
+);
+
+/** Goods a client gives back. Each line goes back to the fridge or is written off. */
+export const returns = sqliteTable(
+  "returns",
+  {
+    ...base,
+    number: integer("number").notNull(),
+    businessDate: text("business_date").notNull(),
+    clientId: text("client_id").references(() => clients.id),
+    orderId: text("order_id"),
+    consignmentId: text("consignment_id"),
+    currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
+    fxRate: real("fx_rate"),
+    total: real("total").notNull(),
+    totalUsd: real("total_usd").notNull(),
+    costUsd: real("cost_usd").notNull().default(0),
+    /** credit: added to the client's account · refund: cash back from a box · none: nothing to pay back */
+    settlement: text("settlement", { enum: ["credit", "refund", "none"] }).notNull(),
+    boxId: text("box_id"),
+    repId: text("rep_id"),
+    note: text("note").notNull().default(""),
+    userId: text("user_id").references(() => users.id),
+  },
+  (t) => [uniqueIndex("returns_number_uq").on(t.number), index("returns_date_idx").on(t.businessDate)],
+);
+
+export const returnLines = sqliteTable(
+  "return_lines",
+  {
+    ...base,
+    returnId: text("return_id").notNull().references(() => returns.id),
+    productId: text("product_id").notNull().references(() => products.id),
+    nameAr: text("name_ar").notNull(),
+    nameEn: text("name_en").notNull(),
+    qty: integer("qty").notNull(),
+    unitPrice: real("unit_price").notNull(),
+    lineTotal: real("line_total").notNull(),
+    unitCostUsd: real("unit_cost_usd").notNull().default(0),
+    action: text("action", { enum: ["restock", "waste"] }).notNull(),
+    batchId: text("batch_id"),
+  },
+  (t) => [index("return_lines_idx").on(t.returnId)],
+);
+
+/** Rent, salaries… that come back every month: a "due" expense is created on the day. */
+export const recurringExpenses = sqliteTable("recurring_expenses", {
+  ...base,
+  categoryId: text("category_id"),
+  itemId: text("item_id"),
+  amount: real("amount").notNull(),
+  currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
+  dayOfMonth: integer("day_of_month").notNull().default(1),
+  beneficiary: text("beneficiary").notNull().default(""),
+  note: text("note").notNull().default(""),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  lastMonth: text("last_month"),
+});
+
+/** Every time a purchase changes what an ingredient costs. */
+export const priceChanges = sqliteTable(
+  "price_changes",
+  {
+    ...base,
+    itemId: text("item_id").notNull().references(() => items.id),
+    oldCostUsd: real("old_cost_usd").notNull(),
+    newCostUsd: real("new_cost_usd").notNull(),
+    changePct: real("change_pct").notNull(),
+    purchaseId: text("purchase_id"),
+    businessDate: text("business_date").notNull(),
+  },
+  (t) => [index("price_changes_date_idx").on(t.businessDate)],
 );

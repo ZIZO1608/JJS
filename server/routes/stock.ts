@@ -8,7 +8,7 @@ import { requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, round4 } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
-import { addStock, defaultFridgeLocation, ensureProductItem, itemQty, recipeOf, takeFromBatch, takeStock } from "../services/stock.js";
+import { addStock, itemQty, produceBatch, takeFromBatch, takeStock } from "../services/stock.js";
 
 export const stockRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(80), nameEn: z.string().trim().min(1).max(80) };
@@ -45,8 +45,11 @@ stockRouter.use(
 const itemSchema = z.object({
   kind: z.enum(["ingredient", "packaging"]),
   ...names,
-  unitCode: z.enum(["kg", "g", "l", "ml", "pc"]),
+  unitCode: z.enum(["kg", "g", "l", "ml", "pc", "pack", "carton"]),
   minLevel: z.number().min(0).default(0),
+  packUnit: z.string().trim().max(30).default(""),
+  packSize: z.number().min(0).default(0),
+  supplierId: z.string().nullable().optional(),
   avgCostUsd: z.number().min(0).default(0),
   active: z.boolean().default(true),
 });
@@ -225,20 +228,9 @@ stockRouter.post(
     const out = db.transaction((tx) => {
       const date = localDate();
       assertDayOpen(tx, date);
-      const itemId = ensureProductItem(tx, p.id);
-      const locationId = body.locationId ?? defaultFridgeLocation(tx);
-      if (!locationId) throw new HttpError(409, "no_fridge", "Add a fridge location first (Warehouse → Locations).");
-      const ctx = { userId: req.user!.id, date, refType: "production", refId: itemId };
-      let cost = 0;
-      for (const line of recipeOf(tx, { productId: p.id })) cost += takeStock(tx, { itemId: line.itemId, qty: round4(line.qty * body.qty), type: "use" }, ctx);
-      const now = new Date();
-      const r = addStock(
-        tx,
-        { itemId, locationId, qty: body.qty, unitCostUsd: body.qty ? cost / body.qty : 0, type: "production", producedAt: now.toISOString(), expiresAt: new Date(now.getTime() + p.shelfLifeHours * 3600e3).toISOString(), codePrefix: "B" },
-        ctx,
-      );
-      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.production", entityId: r.batchId, after: { product: p.nameEn, qty: body.qty, costUsd: round4(cost) } });
-      return { ...r, costUsd: round4(cost) };
+      const r = produceBatch(tx, { productId: p.id, qty: body.qty, locationId: body.locationId }, { userId: req.user!.id, date });
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.production", entityId: r.batchId, after: { product: p.nameEn, qty: body.qty, costUsd: r.costUsd } });
+      return { batchId: r.batchId, batchCode: r.batchCode, costUsd: r.costUsd };
     });
     res.status(201).json(out);
   }),
@@ -257,6 +249,24 @@ stockRouter.post(
       const r = takeFromBatch(tx, { batchId: b.id, qty: body.qty ?? b.qtyLeft, type: "waste", reasonId: body.reasonId ?? null }, ctxOf(req, "waste", body.note));
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.waste", entityId: b.id, after: { batch: b.batchCode, qty: body.qty ?? b.qtyLeft, costUsd: r.costUsd } });
       return { costUsd: r.costUsd };
+    });
+    res.json(out);
+  }),
+);
+
+/** Material used outside production (cleaning, staff meal, a test recipe…). */
+stockRouter.post(
+  "/use",
+  requirePerm("warehouse", "create"),
+  h((req, res) => {
+    const body = parse(z.object({ itemId: z.string(), qty: z.number().positive(), reasonId: z.string().nullable().optional(), note: z.string().max(200).default("") }), req.body);
+    const item = db.select().from(items).where(and(eq(items.id, body.itemId), isNull(items.deletedAt))).get();
+    if (!item) throw notFound("item");
+    const out = db.transaction((tx) => {
+      assertDayOpen(tx, localDate());
+      const cost = takeStock(tx, { itemId: item.id, qty: body.qty, type: "use", reasonId: body.reasonId ?? null }, ctxOf(req, "internal", body.note || "internal use"));
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.internal_use", entityId: item.id, after: { ...body, costUsd: cost } });
+      return { costUsd: cost };
     });
     res.json(out);
   }),

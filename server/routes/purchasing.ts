@@ -1,8 +1,8 @@
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { items, locations, purchaseLines, purchases, suppliers } from "../db/schema.js";
+import { boxMoves, items, locations, priceChanges, purchaseLines, purchases, suppliers } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, nextNumber, rateFor, roundMoney, round4, toUsd } from "../lib/biz.js";
@@ -10,6 +10,8 @@ import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { addBoxMove } from "../services/money.js";
 import { addStock } from "../services/stock.js";
+import { paySupplier, supplierDue } from "../services/wholesale.js";
+import { getSetting } from "../lib/settings.js";
 
 export const purchasingRouter = Router();
 
@@ -19,13 +21,111 @@ purchasingRouter.use(
     table: suppliers,
     module: "purchasing",
     entity: "supplier",
-    schema: z.object({ name: z.string().trim().min(1).max(80), phone: z.string().trim().max(40).default(""), note: z.string().max(300).default(""), active: z.boolean().default(true) }),
+    schema: z.object({
+      name: z.string().trim().min(1).max(80),
+      phone: z.string().trim().max(40).default(""),
+      note: z.string().max(300).default(""),
+      active: z.boolean().default(true),
+      openingBalance: z.number().min(0).default(0),
+      openingCurrency: z.enum(["USD", "SYP"]).default("SYP"),
+      paymentTermsDays: z.number().int().min(0).max(365).default(0),
+    }),
+    beforeSave: (_tx, body) => ({ openingUsd: round4(toUsd(body.openingBalance, body.openingCurrency, body.openingBalance ? rateFor(body.openingCurrency) : null)) }),
+    map: (r) => {
+      const d = supplierDue(db, r.id);
+      return { ...r, dueUsd: d.totalDueUsd, overdueUsd: d.overdueUsd, openInvoices: d.open.length };
+    },
+  }),
+);
+
+/** Everything we bought from and paid to one supplier, with a running balance (what we owe). */
+purchasingRouter.get(
+  "/suppliers/:id/statement",
+  requirePerm("purchasing", "view"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const s = db.select().from(suppliers).where(eq(suppliers.id, id)).get();
+    if (!s) throw notFound("supplier");
+    const q = parse(z.object({ from: z.string().default("2000-01-01"), to: z.string().default(localDate()) }), req.query);
+    const buys = db.select().from(purchases).where(and(eq(purchases.supplierId, id), isNull(purchases.deletedAt))).orderBy(asc(purchases.date)).all();
+    const ids = buys.map((b) => b.id);
+    const pays = db
+      .select()
+      .from(boxMoves)
+      .where(and(isNull(boxMoves.deletedAt), or(and(eq(boxMoves.refType, "supplier"), eq(boxMoves.refId, id)), ids.length ? and(eq(boxMoves.refType, "purchase"), inArray(boxMoves.refId, ids)) : undefined)))
+      .all();
+    const events = [
+      ...buys.map((b) => ({ date: b.date, at: b.createdAt, kind: "purchase" as const, ref: `#${b.number}${b.supplierRef ? ` (${b.supplierRef})` : ""}`, owedUsd: b.totalUsd, paidUsd: 0, amount: b.total, currency: b.currency })),
+      ...pays.map((p) => ({ date: p.businessDate, at: p.createdAt, kind: "payment" as const, ref: p.note, owedUsd: 0, paidUsd: -p.amountUsd, amount: -p.amount, currency: p.currency })),
+    ].sort((a, b) => a.at.localeCompare(b.at));
+    let run = s.openingUsd;
+    let opening = s.openingUsd;
+    const lines: (typeof events[number] & { balanceUsd: number })[] = [];
+    for (const e of events) {
+      run = round4(run + e.owedUsd - e.paidUsd);
+      if (e.date < q.from) opening = run;
+      else if (e.date <= q.to) lines.push({ ...e, balanceUsd: run });
+    }
+    res.json({ supplier: s, from: q.from, to: q.to, openingUsd: round4(opening), closingUsd: round4(run), lines, due: supplierDue(db, id) });
+  }),
+);
+
+purchasingRouter.post(
+  "/suppliers/:id/pay",
+  requirePerm("purchasing", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const body = parse(z.object({ amount: z.number().positive(), currency: z.enum(["USD", "SYP"]), boxId: z.string().min(1), note: z.string().max(200).optional() }), req.body);
+    const due = db.transaction((tx) => {
+      const d = paySupplier(tx, id, body, req.user!.id);
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "supplier.payment", entityId: id, after: body });
+      return d;
+    });
+    res.json({ due });
+  }),
+);
+
+/** Suppliers we owe, biggest first. */
+purchasingRouter.get(
+  "/debts",
+  requirePerm("purchasing", "view"),
+  h((_req, res) => {
+    const rows = db
+      .select()
+      .from(suppliers)
+      .where(isNull(suppliers.deletedAt))
+      .all()
+      .map((s) => ({ id: s.id, name: s.name, phone: s.phone, ...supplierDue(db, s.id) }))
+      .filter((s) => s.totalDueUsd > 0.009)
+      .sort((a, b) => b.totalDueUsd - a.totalDueUsd);
+    res.json({ rows, totalUsd: round4(rows.reduce((t, r) => t + r.totalDueUsd, 0)), overdueUsd: round4(rows.reduce((t, r) => t + r.overdueUsd, 0)) });
+  }),
+);
+
+/** Ingredient price changes recorded from purchases. */
+purchasingRouter.get(
+  "/price-changes",
+  requirePerm("purchasing", "view"),
+  h((req, res) => {
+    const q = parse(z.object({ from: z.string().optional() }), req.query);
+    const rows = db
+      .select({ c: priceChanges, nameAr: items.nameAr, nameEn: items.nameEn, unitCode: items.unitCode })
+      .from(priceChanges)
+      .innerJoin(items, eq(priceChanges.itemId, items.id))
+      .where(and(isNull(priceChanges.deletedAt), q.from ? gte(priceChanges.businessDate, q.from) : undefined))
+      .orderBy(desc(priceChanges.createdAt))
+      .limit(300)
+      .all()
+      .map((x) => ({ ...x.c, nameAr: x.nameAr, nameEn: x.nameEn, unitCode: x.unitCode }));
+    res.json({ rows });
   }),
 );
 
 const lineSchema = z.object({
   itemId: z.string().min(1),
   qty: z.number().positive().max(1_000_000),
+  /** qty and unitPrice are per pack/carton (the item's pack size converts them to base units). */
+  inPacks: z.boolean().default(false),
   unitPrice: z.number().min(0).max(100_000_000),
   locationId: z.string().min(1),
   expiresAt: z.string().nullable().optional(),
@@ -37,6 +137,12 @@ const purchaseSchema = z.object({
   paid: z.number().min(0).default(0),
   boxId: z.string().nullable().optional(),
   note: z.string().max(300).default(""),
+  supplierRef: z.string().trim().max(60).default(""),
+  /** Discount on the whole invoice and transport paid for it, in the invoice currency. Both are spread over the lines' cost. */
+  discount: z.number().min(0).default(0),
+  transport: z.number().min(0).default(0),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  photo: z.string().max(1_500_000).default(""),
 });
 
 const outOf = (id: string) => {
@@ -65,7 +171,8 @@ purchasingRouter.get(
       .orderBy(desc(purchases.number))
       .limit(500)
       .all();
-    res.json({ rows: rows.map((r) => ({ ...r.p, supplierName: r.supplierName, due: round4(r.p.total - r.p.paid) })) });
+    const today = localDate();
+    res.json({ rows: rows.map((r) => ({ ...r.p, photo: r.p.photo ? "yes" : "", supplierName: r.supplierName, due: round4(r.p.total - r.p.paid), late: r.p.total - r.p.paid > 0.001 && !!r.p.dueDate && r.p.dueDate < today })) });
   }),
 );
 
@@ -76,6 +183,16 @@ purchasingRouter.get(
     const p = outOf(String(req.params.id));
     if (!p) throw notFound("purchase");
     res.json({ purchase: p });
+  }),
+);
+
+purchasingRouter.get(
+  "/:id/photo",
+  requirePerm("purchasing", "view"),
+  h((req, res) => {
+    const p = db.select({ photo: purchases.photo }).from(purchases).where(eq(purchases.id, String(req.params.id))).get();
+    if (!p?.photo) throw notFound("photo");
+    res.json({ photo: p.photo });
   }),
 );
 
@@ -90,19 +207,36 @@ purchasingRouter.post(
       const date = localDate();
       assertDayOpen(tx, date);
       const rate = rateFor(body.currency);
-      const total = roundMoney(body.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0), body.currency);
+      const linesValue = body.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+      if (body.discount > linesValue + 0.001) throw new HttpError(400, "discount_too_big", "The discount is more than the invoice.");
+      const total = roundMoney(linesValue - body.discount + body.transport, body.currency);
       if (body.paid > total + 0.001) throw new HttpError(400, "overpaid", "The paid amount is more than the total.");
       if (body.paid > 0 && !body.boxId) throw new HttpError(400, "box_required", "Choose which box the payment comes out of.");
+      const supplier = body.supplierId ? tx.select().from(suppliers).where(eq(suppliers.id, body.supplierId)).get() : null;
+      const dueDate = body.dueDate ?? (supplier?.paymentTermsDays ? (() => { const d = new Date(`${date}T12:00:00`); d.setDate(d.getDate() + supplier.paymentTermsDays); return localDate(d); })() : null);
       const number = nextNumber(tx, purchases, purchases.number);
       tx.insert(purchases)
-        .values({ id, number, supplierId: body.supplierId ?? null, date, currency: body.currency, fxRate: rate, total, totalUsd: round4(toUsd(total, body.currency, rate)), paid: body.paid, paidFromBoxId: body.boxId ?? null, note: body.note, userId: req.user!.id })
+        .values({ id, number, supplierId: body.supplierId ?? null, date, currency: body.currency, fxRate: rate, total, totalUsd: round4(toUsd(total, body.currency, rate)), paid: body.paid, paidFromBoxId: body.boxId ?? null, note: body.note, userId: req.user!.id, supplierRef: body.supplierRef, discount: body.discount, transport: body.transport, dueDate, photo: body.photo })
         .run();
       const ctx = { userId: req.user!.id, date, refType: "purchase", refId: id };
+      // Real cost of each line: its share of the discount and of the transport.
+      const factor = linesValue > 0 ? (linesValue - body.discount + body.transport) / linesValue : 1;
+      const alertPct = getSetting("costing").priceAlertPct;
       for (const l of body.lines) {
         const item = tx.select().from(items).where(and(eq(items.id, l.itemId), isNull(items.deletedAt))).get();
         if (!item) throw new HttpError(400, "item_not_found", "A line uses an item that does not exist.");
-        const b = addStock(tx, { itemId: l.itemId, locationId: l.locationId, qty: l.qty, unitCostUsd: toUsd(l.unitPrice, body.currency, rate), type: "purchase", expiresAt: l.expiresAt ?? null }, ctx);
-        tx.insert(purchaseLines).values({ id: newId(), purchaseId: id, itemId: l.itemId, qty: l.qty, unitPrice: l.unitPrice, locationId: l.locationId, expiresAt: l.expiresAt ?? null, batchId: b.batchId }).run();
+        const perPack = l.inPacks ? item.packSize : 1;
+        if (l.inPacks && !(perPack > 0)) throw new HttpError(400, "no_pack_size", `${item.nameEn} has no pack size. Set it in Warehouse → Items.`);
+        const qty = round4(l.qty * perPack);
+        const unitCostUsd = toUsd((l.unitPrice / perPack) * factor, body.currency, rate);
+        if (item.avgCostUsd > 0) {
+          const change = ((unitCostUsd - item.avgCostUsd) / item.avgCostUsd) * 100;
+          if (Math.abs(change) >= alertPct)
+            tx.insert(priceChanges).values({ id: newId(), itemId: item.id, oldCostUsd: item.avgCostUsd, newCostUsd: round4(unitCostUsd), changePct: round4(change), purchaseId: id, businessDate: date }).run();
+        }
+        const b = addStock(tx, { itemId: l.itemId, locationId: l.locationId, qty, unitCostUsd, type: "purchase", expiresAt: l.expiresAt ?? null }, ctx);
+        tx.insert(purchaseLines).values({ id: newId(), purchaseId: id, itemId: l.itemId, qty, unitPrice: round4(l.unitPrice / perPack), locationId: l.locationId, expiresAt: l.expiresAt ?? null, batchId: b.batchId }).run();
+        if (body.supplierId && !item.supplierId) tx.update(items).set({ supplierId: body.supplierId }).where(eq(items.id, item.id)).run();
       }
       if (body.paid > 0 && body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "purchase", amount: -body.paid, currency: body.currency, rate, refType: "purchase", refId: id, note: `Purchase #${number}`, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "purchase", entityId: id, after: { number, total, currency: body.currency, lines: body.lines.length, paid: body.paid } });

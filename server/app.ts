@@ -26,11 +26,12 @@ import { purchasingRouter } from "./routes/purchasing.js";
 import { reportsRouter } from "./routes/reports.js";
 import { stockRouter } from "./routes/stock.js";
 import { systemRouter } from "./routes/system.js";
+import { wholesaleRouter } from "./routes/wholesale.js";
 
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "6mb" }));
   app.use(cookieParser());
   app.use(sessionMiddleware);
 
@@ -58,6 +59,7 @@ export function createApp() {
   api.use("/people", peopleRouter);
   api.use("/reports", reportsRouter);
   api.use("/system", systemRouter);
+  api.use(wholesaleRouter);
   api.use((_req, _res, next) => next(new HttpError(404, "not_found", "No such API route.")));
   app.use("/api", api);
 

@@ -13,6 +13,7 @@ import {
   orders,
   paymentMethods,
   payments,
+  priceListItems,
   products,
   taxes,
 } from "../db/schema.js";
@@ -21,11 +22,12 @@ import { assertDayOpen, convert, localDate, nextNumber, rateFor, roundMoney, rou
 import { HttpError, newId, nowIso } from "../lib/util.js";
 import { loyaltyStatus, subscriptionStatus } from "./clients.js";
 import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "./money.js";
-import { ensureProductItem, recipeOf, reverseStock, takeStock } from "./stock.js";
+import { reverseStock, takeProductStock } from "./stock.js";
 
 export interface OrderInput {
   clientId?: string | null;
-  type: "normal" | "trial" | "staff";
+  /** internal = tasting / kitchen use: no money, the cost is recorded. */
+  type: "normal" | "trial" | "staff" | "internal";
   employeeId?: string | null;
   fulfilment: "pickup" | "delivery";
   deliveryFee?: number | null;
@@ -34,7 +36,19 @@ export interface OrderInput {
   manualDiscountPct?: number;
   useLoyalty?: boolean;
   note?: string;
+  /** Paid now, in the order currency. Less than the total → the rest goes on the client's account. */
+  paidAmount?: number | null;
   lines: { productId: string; qty: number; optionIds: string[] }[];
+}
+
+/** Used by consignment settlement: prices already agreed (net) and stock already taken. */
+export interface OrderOptions {
+  presetPrices?: number[];
+  presetCosts?: number[];
+  presetCurrency?: Currency;
+  presetRate?: number | null;
+  consignmentId?: string;
+  fulfilmentNote?: string;
 }
 
 export interface PricedLine {
@@ -45,14 +59,15 @@ export interface PricedLine {
   freeQty: number;
   basePrice: number;
   specialPrice: boolean;
+  priceFrom: "menu" | "list" | "client" | "agreed";
   options: { id: string; nameAr: string; nameEn: string; priceDelta: number }[];
   unitPrice: number;
   lineTotal: number;
 }
 
 /** Price an order without writing anything (used for the live preview and inside createOrder). */
-export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
-  const currency = getSetting("currency.default");
+export function priceOrder(tx: Q, input: OrderInput, date = localDate(), opts: OrderOptions = {}) {
+  const currency = opts.presetCurrency ?? getSetting("currency.default");
   const used = new Set<Currency>([currency]);
   const lineProducts = input.lines.map((l) => {
     const p = tx.select().from(products).where(and(eq(products.id, l.productId), isNull(products.deletedAt))).get();
@@ -63,17 +78,24 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
   const client = input.clientId ? tx.select().from(clients).where(and(eq(clients.id, input.clientId), isNull(clients.deletedAt))).get() : null;
   if (input.clientId && (!client || !client.active)) throw new HttpError(400, "client_unavailable", "Choose an active client.");
 
-  const special = new Map<string, { price: number; currency: Currency }>();
+  // Price for this client: their own special price, else their price list, else the menu price.
+  const special = new Map<string, { price: number; currency: Currency; from: "client" | "list" }>();
+  if (client?.priceListId) {
+    for (const li of tx.select().from(priceListItems).where(and(eq(priceListItems.listId, client.priceListId), isNull(priceListItems.deletedAt))).all()) {
+      special.set(li.productId, { price: li.price, currency: li.currency, from: "list" });
+      used.add(li.currency);
+    }
+  }
   if (client) {
     for (const cp of tx.select().from(clientPrices).where(and(eq(clientPrices.clientId, client.id), isNull(clientPrices.deletedAt))).all()) {
-      special.set(cp.productId, { price: cp.price, currency: cp.currency });
+      special.set(cp.productId, { price: cp.price, currency: cp.currency, from: "client" });
       used.add(cp.currency);
     }
   }
   const allOptionIds = input.lines.flatMap((l) => l.optionIds);
   const optRows = allOptionIds.length ? tx.select().from(options).where(and(isNull(options.deletedAt), eq(options.active, true), inArray(options.id, allOptionIds))).all() : [];
   optRows.forEach((o) => used.add(o.currency));
-  const rate = rateFor(...used);
+  const rate = opts.presetRate !== undefined && opts.presetRate !== null ? opts.presetRate : rateFor(...used);
 
   const lines: PricedLine[] = input.lines.map((l, i) => {
     const p = lineProducts[i]!;
@@ -93,10 +115,11 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
       if (n < g.minSelect || n > g.maxSelect) throw new HttpError(400, "option_count", `${p.nameEn}: choose between ${g.minSelect} and ${g.maxSelect} from “${g.nameEn}”.`);
     }
     const sp = special.get(p.id);
-    const base = roundMoney(sp ? convert(sp.price, sp.currency, currency, rate) : convert(p.price, p.currency, currency, rate), currency);
-    const opts = chosen.map((o) => ({ id: o.id, nameAr: o.nameAr, nameEn: o.nameEn, priceDelta: roundMoney(convert(o.priceDelta, o.currency, currency, rate), currency) }));
-    const unit = roundMoney(base + opts.reduce((s, o) => s + o.priceDelta, 0), currency);
-    return { productId: p.id, nameAr: p.nameAr, nameEn: p.nameEn, qty: l.qty, freeQty: 0, basePrice: base, specialPrice: !!sp, options: opts, unitPrice: unit, lineTotal: roundMoney(unit * l.qty, currency) };
+    const preset = opts.presetPrices?.[i];
+    const base = roundMoney(preset !== undefined ? preset : sp ? convert(sp.price, sp.currency, currency, rate) : convert(p.price, p.currency, currency, rate), currency);
+    const chosenOpts = chosen.map((o) => ({ id: o.id, nameAr: o.nameAr, nameEn: o.nameEn, priceDelta: roundMoney(convert(o.priceDelta, o.currency, currency, rate), currency) }));
+    const unit = roundMoney(base + chosenOpts.reduce((s, o) => s + o.priceDelta, 0), currency);
+    return { productId: p.id, nameAr: p.nameAr, nameEn: p.nameEn, qty: l.qty, freeQty: 0, basePrice: base, specialPrice: !!sp, priceFrom: preset !== undefined ? "agreed" : (sp?.from ?? "menu"), options: chosenOpts, unitPrice: unit, lineTotal: roundMoney(unit * l.qty, currency) };
   });
 
   const subtotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0), currency);
@@ -106,9 +129,10 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
   // Free items: subscription allowance first, then loyalty rewards, on the cheapest units.
   let subFree = 0;
   let loyaltyFree = 0;
-  const sub = client && input.type === "normal" ? subscriptionStatus(tx, client.id, date) : null;
-  const loyalty = client && input.type === "normal" ? loyaltyStatus(tx, client.id, date) : null;
-  if (input.type === "normal") {
+  const agreed = !!opts.presetPrices;
+  const sub = client && input.type === "normal" && !agreed ? subscriptionStatus(tx, client.id, date) : null;
+  const loyalty = client && input.type === "normal" && !agreed ? loyaltyStatus(tx, client.id, date) : null;
+  if (input.type === "normal" && !agreed) {
     let subLeft = sub?.availableIncluded ?? 0;
     let loyLeft = input.useLoyalty === false ? 0 : (loyalty?.available ?? 0);
     const units = lines.flatMap((l, idx) => Array.from({ length: l.qty }, () => ({ idx, price: l.unitPrice }))).sort((a, b) => a.price - b.price);
@@ -130,7 +154,8 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
   // Percentage discounts: best one wins unless stacking is allowed.
   const cands: { key: string; pct: number }[] = [];
   if (input.type === "trial") cands.push({ key: "trial", pct: 100 });
-  if (client?.tierId && input.type === "normal") {
+  if (input.type === "internal") cands.push({ key: "internal", pct: 100 });
+  if (client?.tierId && input.type === "normal" && !agreed) {
     const tier = tx.select().from(clientTiers).where(eq(clientTiers.id, client.tierId)).get();
     if (tier && tier.discountPct > 0) cands.push({ key: "tier", pct: tier.discountPct });
   }
@@ -151,7 +176,7 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
 
   // Taxes (not on free trials).
   const appliedTaxes: { id: string; nameAr: string; nameEn: string; kind: string; value: number; amount: number }[] = [];
-  if (input.type !== "trial") {
+  if (input.type !== "trial" && input.type !== "internal") {
     const base = subtotal - discount;
     for (const t of tx.select().from(taxes).where(and(isNull(taxes.deletedAt), eq(taxes.active, true))).all()) {
       const amount = t.kind === "percent" ? roundMoney(base * (t.value / 100), currency) : roundMoney(convert(t.value, "USD", currency, rate), currency);
@@ -159,7 +184,7 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
     }
   }
   const taxTotal = roundMoney(appliedTaxes.reduce((s, t) => s + t.amount, 0), currency);
-  const deliveryFee = input.fulfilment === "delivery" && input.type !== "trial" ? roundMoney(Math.max(0, input.deliveryFee ?? getSetting("orders").defaultDeliveryFee), currency) : 0;
+  const deliveryFee = input.fulfilment === "delivery" && input.type !== "trial" && input.type !== "internal" && !agreed ? roundMoney(Math.max(0, input.deliveryFee ?? getSetting("orders").defaultDeliveryFee), currency) : 0;
   const total = roundMoney(Math.max(0, subtotal - discount + taxTotal + deliveryFee), currency);
 
   const balanceUsd = client ? clientBalanceUsd(tx, client.id) : null;
@@ -190,29 +215,40 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate()) {
 export type PricedOrder = ReturnType<typeof priceOrder>;
 
 /** Confirm an order: number it, take stock, take payment, and update the client box. */
-export function createOrder(tx: Q, input: OrderInput, userId: string) {
+export function createOrder(tx: Q, input: OrderInput, userId: string, opts: OrderOptions = {}) {
   const date = localDate();
   assertDayOpen(tx, date);
   if (input.type === "trial" && !input.clientId) throw new HttpError(400, "client_required", "A free trial needs a client (add them as a new client first).");
   if (!input.lines.length) throw new HttpError(400, "empty_order", "Add at least one item.");
-  const priced = priceOrder(tx, input, date);
+  const priced = priceOrder(tx, input, date, opts);
 
-  // Decide how it is paid.
+  // Decide how it is paid: fully now, partly now (rest on account), on account, salary, or free.
   let method: typeof paymentMethods.$inferSelect | null = null;
-  let paymentStatus: "paid" | "credit" | "free" | "salary" = "paid";
-  if (input.type === "trial" || priced.total === 0) paymentStatus = "free";
+  let paymentStatus: "paid" | "partial" | "credit" | "free" | "salary" = "paid";
+  let paidNow = 0;
+  const checkCredit = (onAccount: number) => {
+    if (!priced.client) throw new HttpError(400, "client_required", "Only account clients can pay later. Choose the client.");
+    const onAccountUsd = round4(toUsd(onAccount, priced.currency, priced.rate));
+    const after = (priced.client.balanceUsd ?? 0) - onAccountUsd;
+    if (priced.client.creditLimitUsd > 0 && -after > priced.client.creditLimitUsd + 0.001 && priced.client.creditBlock)
+      throw new HttpError(409, "credit_limit", `This order passes ${priced.client.name}'s credit limit.`, { limitUsd: priced.client.creditLimitUsd, balanceAfterUsd: round4(after) });
+  };
+  if (input.type === "trial" || input.type === "internal" || priced.total === 0) paymentStatus = "free";
   else {
     if (!input.methodId) throw new HttpError(400, "method_required", "Choose how the client paid.");
     method = getMethod(tx, input.methodId);
     if (method.kind === "credit") {
-      if (!priced.client) throw new HttpError(400, "client_required", "Credit is only for account clients. Choose the client.");
-      const after = (priced.client.balanceUsd ?? 0) - priced.totalUsd;
-      if (priced.client.creditLimitUsd > 0 && -after > priced.client.creditLimitUsd + 0.001 && priced.client.creditBlock)
-        throw new HttpError(409, "credit_limit", `This order passes ${priced.client.name}'s credit limit.`, { limitUsd: priced.client.creditLimitUsd, balanceAfterUsd: round4(after) });
+      checkCredit(priced.total);
       paymentStatus = "credit";
     } else if (method.kind === "salary") {
       if (input.type !== "staff") throw new HttpError(400, "salary_staff_only", "Deduct from salary is only for staff purchases.");
       paymentStatus = "salary";
+    } else {
+      paidNow = roundMoney(Math.min(priced.total, Math.max(0, input.paidAmount ?? priced.total)), priced.currency);
+      if (paidNow < priced.total) {
+        checkCredit(priced.total - paidNow);
+        paymentStatus = paidNow > 0 ? "partial" : "credit";
+      }
     }
   }
 
@@ -223,18 +259,12 @@ export function createOrder(tx: Q, input: OrderInput, userId: string) {
   // Stock: finished sandwiches from the fridge first (FIFO, never expired), the rest is made fresh from the recipe.
   let costUsd = 0;
   const lineCosts: number[] = [];
-  for (const l of priced.lines) {
-    const itemId = ensureProductItem(tx, l.productId);
-    const fridge =
-      tx.get<{ q: number }>(sql`select coalesce(sum(qty_left),0) as q from batches where item_id = ${itemId} and qty_left > 0 and deleted_at is null and (expires_at is null or expires_at > ${nowIso()})`)?.q ?? 0;
-    const fromFridge = Math.min(l.qty, Math.floor(fridge + 1e-9));
-    let c = fromFridge ? takeStock(tx, { itemId, qty: fromFridge, type: "sale" }, ctx) : 0;
-    const fresh = l.qty - fromFridge;
-    if (fresh > 0) for (const r of recipeOf(tx, { productId: l.productId })) c += takeStock(tx, { itemId: r.itemId, qty: round4(r.qty * fresh), type: "use" }, ctx);
-    for (const o of l.options) for (const r of recipeOf(tx, { optionId: o.id })) c += takeStock(tx, { itemId: r.itemId, qty: round4(r.qty * l.qty), type: "use" }, ctx);
+  priced.lines.forEach((l, i) => {
+    const preset = opts.presetCosts?.[i];
+    const c = preset !== undefined ? preset * l.qty : takeProductStock(tx, { productId: l.productId, qty: l.qty, optionIds: l.options.map((o) => o.id) }, ctx).costUsd;
     lineCosts.push(round4(c / l.qty));
     costUsd += c;
-  }
+  });
 
   tx.insert(orders)
     .values({
@@ -266,6 +296,8 @@ export function createOrder(tx: Q, input: OrderInput, userId: string) {
       subFree: priced.subFree,
       note: input.note ?? "",
       userId,
+      paidAmount: paidNow,
+      consignmentId: opts.consignmentId ?? null,
     })
     .run();
   priced.lines.forEach((l, i) =>
@@ -275,7 +307,7 @@ export function createOrder(tx: Q, input: OrderInput, userId: string) {
   );
 
   // Money.
-  if (paymentStatus === "paid" && method) {
+  if ((paymentStatus === "paid" || paymentStatus === "partial") && method && paidNow > 0) {
     let boxId = method.boxId;
     // Cash collected on delivery stays with the delivery person until they hand it over.
     if (input.fulfilment === "delivery" && input.assignedTo && method.systemKey === "cash") {
@@ -284,11 +316,12 @@ export function createOrder(tx: Q, input: OrderInput, userId: string) {
     }
     if (!boxId) throw new HttpError(400, "method_has_no_box", "This payment method has no cash box. Fix it in Settings → Cash boxes.");
     const pid = newId();
-    tx.insert(payments).values({ id: pid, kind: "order", orderId: id, clientId: input.clientId ?? null, methodId: method.id, boxId, amount: priced.total, currency: priced.currency, fxRate: priced.rate, amountUsd: priced.totalUsd, userId, businessDate: date }).run();
-    addBoxMove(tx, { boxId, type: "sale", amount: priced.total, currency: priced.currency, rate: priced.rate, refType: "order", refId: id, note: `#${number}`, userId, date });
+    tx.insert(payments).values({ id: pid, kind: "order", orderId: id, clientId: input.clientId ?? null, methodId: method.id, boxId, amount: paidNow, currency: priced.currency, fxRate: priced.rate, amountUsd: round4(toUsd(paidNow, priced.currency, priced.rate)), userId, businessDate: date }).run();
+    addBoxMove(tx, { boxId, type: "sale", amount: paidNow, currency: priced.currency, rate: priced.rate, refType: "order", refId: id, note: `#${number}`, userId, date });
   }
-  if (paymentStatus === "credit" && input.clientId) {
-    addClientMove(tx, { clientId: input.clientId, type: "charge", amount: -priced.total, currency: priced.currency, rate: priced.rate, orderId: id, note: `#${number}`, userId, date });
+  const onAccount = roundMoney(priced.total - paidNow, priced.currency);
+  if ((paymentStatus === "credit" || paymentStatus === "partial") && input.clientId && onAccount > 0) {
+    addClientMove(tx, { clientId: input.clientId, type: "charge", amount: -onAccount, currency: priced.currency, rate: priced.rate, orderId: id, note: `#${number}`, userId, date });
   }
 
   // A client who had a free trial becomes "converted" on their first paid order.
@@ -297,11 +330,11 @@ export function createOrder(tx: Q, input: OrderInput, userId: string) {
     const hadTrial = tx.get<{ n: number }>(sql`select count(*) as n from orders where client_id = ${input.clientId} and type = 'trial' and status != 'cancelled'`)?.n ?? 0;
     if (c && !c.convertedAt && hadTrial > 0) tx.update(clients).set({ convertedAt: date, updatedAt: nowIso(), syncedAt: null }).where(eq(clients.id, c.id)).run();
   }
-  return { id, number, priced };
+  return { id, number, priced, paidNow, onAccount, paymentStatus };
 }
 
 /** Cancel: stock goes back, money is reversed, and the client box is credited back. */
-export function cancelOrder(tx: Q, orderId: string, userId: string) {
+export function cancelOrder(tx: Q, orderId: string, userId: string, reason = "") {
   const o = tx.select().from(orders).where(and(eq(orders.id, orderId), isNull(orders.deletedAt))).get();
   if (!o) throw new HttpError(404, "not_found", "Order not found");
   if (o.status === "cancelled") throw new HttpError(409, "already_cancelled", "This order is already cancelled.");
@@ -312,7 +345,9 @@ export function cancelOrder(tx: Q, orderId: string, userId: string) {
     if (p.boxId) addBoxMove(tx, { boxId: p.boxId, type: "sale", amount: -p.amount, currency: p.currency, rate: p.fxRate, refType: "order_cancel", refId: o.id, note: `Cancel #${o.number}`, userId, date });
     tx.update(payments).set({ deletedAt: nowIso(), syncedAt: null }).where(eq(payments.id, p.id)).run();
   }
-  if (o.paymentStatus === "credit" && o.clientId) addClientMove(tx, { clientId: o.clientId, type: "refund", amount: o.total, currency: o.currency, rate: o.fxRate, orderId: o.id, note: `Cancel #${o.number}`, userId, date });
-  tx.update(orders).set({ status: "cancelled", cancelledAt: nowIso(), updatedAt: nowIso(), syncedAt: null }).where(eq(orders.id, o.id)).run();
+  if (o.consignmentId) throw new HttpError(409, "consignment_order", "This invoice came from a consignment. Record a return instead.");
+  const onAccount = o.paymentStatus === "credit" ? o.total : o.paymentStatus === "partial" ? roundMoney(o.total - o.paidAmount, o.currency) : 0;
+  if (onAccount > 0 && o.clientId) addClientMove(tx, { clientId: o.clientId, type: "refund", amount: onAccount, currency: o.currency, rate: o.fxRate, orderId: o.id, note: `Cancel #${o.number}`, userId, date });
+  tx.update(orders).set({ status: "cancelled", cancelledAt: nowIso(), cancelReason: reason, updatedAt: nowIso(), syncedAt: null }).where(eq(orders.id, o.id)).run();
   return o;
 }

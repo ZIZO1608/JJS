@@ -32,6 +32,16 @@ export interface OrderSettings {
   defaultDeliveryFee: number;
   /** When false, only the single best automatic discount applies. */
   allowStacking: boolean;
+  /** Days new clients get to pay (0 = pay on the spot). */
+  defaultPaymentTermsDays: number;
+  /** Returned goods: what the screen suggests (staff can still change each line). */
+  defaultReturnAction: "restock" | "waste";
+}
+export interface CostingSettings {
+  /** Margin the owner aims for; products under it are flagged and a price is suggested. */
+  targetMarginPct: number;
+  /** Ingredient cost moves bigger than this (%) are recorded as price changes and shown. */
+  priceAlertPct: number;
 }
 export interface PrintSettings {
   receiptWidthMm: 58 | 80;
@@ -39,6 +49,8 @@ export interface PrintSettings {
   labelHeightMm: number;
   receiptFooterAr: string;
   receiptFooterEn: string;
+  /** Default size for sales invoices; the print screen lets you switch. */
+  invoiceSize: "thermal" | "a4";
 }
 export interface NetworkSettings {
   /** Let phones on the same Wi-Fi open the system (needs a restart). */
@@ -66,7 +78,10 @@ export interface SettingsShape {
   "fx.lastError": string | null;
   loyalty: LoyaltySettings;
   orders: OrderSettings;
+  costing: CostingSettings;
   printing: PrintSettings;
+  /** Bumped when new default lists are added for existing installs. */
+  "seed.version": number;
   network: NetworkSettings;
   sync: SyncSettings;
   "sync.status": SyncStatus;
@@ -80,8 +95,10 @@ export const SETTING_DEFAULTS: SettingsShape = {
   "fx.lastCheckedAt": null,
   "fx.lastError": null,
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
-  orders: { defaultDeliveryFee: 0, allowStacking: false },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you" },
+  orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
+  costing: { targetMarginPct: 40, priceAlertPct: 5 },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal" },
+  "seed.version": 1,
   network: { lanAccess: false },
   sync: { enabled: false, supabaseUrl: "", serviceKey: "" },
   "sync.status": { lastRunAt: null, lastOkAt: null, lastError: null, pushed: 0 },
@@ -91,7 +108,11 @@ export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape
   const row = db.select().from(settings).where(eq(settings.key, key)).get();
   if (!row) return SETTING_DEFAULTS[key];
   try {
-    return JSON.parse(row.value) as SettingsShape[K];
+    const v = JSON.parse(row.value) as SettingsShape[K];
+    const d = SETTING_DEFAULTS[key];
+    // older installs: fill in fields added later
+    if (d && typeof d === "object" && !Array.isArray(d) && v && typeof v === "object") return { ...d, ...v };
+    return v;
   } catch {
     return SETTING_DEFAULTS[key];
   }

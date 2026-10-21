@@ -147,6 +147,42 @@ moneyRouter.post(
   }),
 );
 
+/** The owner takes money out of a box for personal use (kept apart from expenses). */
+moneyRouter.post(
+  "/withdraw",
+  requirePerm("daily_close", "edit"),
+  h((req, res) => {
+    const body = parse(z.object({ boxId: z.string(), amount: z.number().positive(), person: z.string().trim().max(80).default(""), note: z.string().max(200).default("") }), req.body);
+    const out = db.transaction((tx) => {
+      const box = getBox(tx, body.boxId);
+      const date = localDate();
+      assertDayOpen(tx, date);
+      const m = addBoxMove(tx, { boxId: box.id, type: "withdrawal", amount: -body.amount, currency: box.currency, rate: currentRate(), refType: "withdrawal", note: [body.person, body.note].filter(Boolean).join(" · "), userId: req.user!.id, date });
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.withdrawal", entityId: m.id, after: body });
+      return m;
+    });
+    res.status(201).json({ id: out.id });
+  }),
+);
+
+/** Personal withdrawals in a period. */
+moneyRouter.get(
+  "/withdrawals",
+  requirePerm("daily_close", "edit"),
+  h((req, res) => {
+    const q = parse(z.object({ from: z.string().optional(), to: z.string().optional() }), req.query);
+    const rows = db
+      .select({ m: boxMoves, boxAr: cashBoxes.nameAr, boxEn: cashBoxes.nameEn })
+      .from(boxMoves)
+      .innerJoin(cashBoxes, eq(boxMoves.boxId, cashBoxes.id))
+      .where(and(eq(boxMoves.type, "withdrawal"), isNull(boxMoves.deletedAt), q.from ? gte(boxMoves.businessDate, q.from) : undefined, q.to ? lte(boxMoves.businessDate, q.to) : undefined))
+      .orderBy(desc(boxMoves.createdAt))
+      .all()
+      .map((x) => ({ ...x.m, box: { nameAr: x.boxAr, nameEn: x.boxEn } }));
+    res.json({ rows, totalUsd: rows.reduce((s, r) => s - r.amountUsd, 0) });
+  }),
+);
+
 /** Delivery people and their boxes (for assigning orders). */
 moneyRouter.get(
   "/reps",

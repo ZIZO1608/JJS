@@ -31,3 +31,18 @@ export const FX_REFRESH_MS = 30 * 60 * 1000;
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
+
+/**
+ * Restore: Settings → Backups puts the chosen backup here; on the next start (before the
+ * database opens) it replaces the live database. The replaced one is kept as a backup.
+ */
+export const RESTORE_PENDING = path.join(DATA_DIR, "restore.pending.db");
+if (fs.existsSync(RESTORE_PENDING)) {
+  const d = new Date();
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+  if (fs.existsSync(DB_PATH)) fs.renameSync(DB_PATH, path.join(BACKUP_DIR, `jjs-${stamp}-before-restore.db`));
+  for (const ext of ["-wal", "-shm"]) fs.rmSync(DB_PATH + ext, { force: true });
+  fs.renameSync(RESTORE_PENDING, DB_PATH);
+  console.log("[jjs] backup restored");
+}

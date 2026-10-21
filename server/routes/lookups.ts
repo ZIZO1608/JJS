@@ -20,6 +20,8 @@ const OWNER_MODULE: Record<LookupType, Module> = {
   unit: "warehouse",
   client_tag: "clients",
   waste_reason: "warehouse",
+  area: "clients",
+  cancel_reason: "orders",
 };
 const canAdd = (u: AuthUser | undefined, t: LookupType) => can(u, "settings", "edit") || can(u, OWNER_MODULE[t], "create");
 

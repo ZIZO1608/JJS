@@ -1,4 +1,6 @@
 import { sql } from "drizzle-orm";
+import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
+import * as schema from "../db/schema.js";
 import { db, sqlite } from "../db/client.js";
 import { getSetting, setSetting } from "../lib/settings.js";
 import { localDate } from "../lib/biz.js";
@@ -19,11 +21,27 @@ export const SYNC_TABLES = [
   "client_tiers", "clients", "client_moves", "client_prices", "subscription_plans", "subscriptions",
   "cash_boxes", "payment_methods", "box_moves", "business_days", "orders", "order_lines", "payments", "recurring_orders",
   "expenses", "assets", "employees", "advances", "payroll_runs", "payslips", "sales_calls",
+  "price_lists", "price_list_items", "production_runs", "consignments", "consignment_lines", "returns", "return_lines", "recurring_expenses", "price_changes",
 ] as const;
 
 /** Columns never sent to the cloud. */
 const PRIVATE_COLUMNS: Record<string, string[]> = { users: ["password_hash"], settings: [] };
 const BATCH = 200;
+
+/** SQLite keeps true/false as 1/0; Postgres wants real booleans. */
+const BOOL_COLUMNS: Record<string, string[]> = {};
+for (const v of Object.values(schema)) {
+  try {
+    const cfg = getTableConfig(v as SQLiteTable);
+    BOOL_COLUMNS[cfg.name] = cfg.columns.filter((c) => c.columnType === "SQLiteBoolean").map((c) => c.name);
+  } catch {
+    /* not a table */
+  }
+}
+const toCloud = (table: string, r: Record<string, unknown>) => {
+  for (const c of BOOL_COLUMNS[table] ?? []) if (r[c] !== null && r[c] !== undefined) r[c] = r[c] === 1 || r[c] === true;
+  return r;
+};
 
 const keyOf = (table: string) => (table === "settings" ? "key" : "id");
 
@@ -55,7 +73,7 @@ export async function syncNow(): Promise<{ pushed: number; skipped?: string }> {
         // secrets (sync key, rate-API key) never leave the laptop
         const clean = rows
           .filter((r) => !(table === "settings" && /^(sync|fx\.config)/.test(String(r.key))))
-          .map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !hidden.includes(k))));
+          .map((r) => toCloud(table, Object.fromEntries(Object.entries(r).filter(([k]) => !hidden.includes(k)))));
         const stamp = nowIso();
         if (clean.length) await upsert(cfg.supabaseUrl, cfg.serviceKey, table, clean.map((r) => ({ ...r, synced_at: stamp })));
         const k = keyOf(table);
@@ -80,8 +98,12 @@ export async function syncNow(): Promise<{ pushed: number; skipped?: string }> {
   }
 }
 
+/** Rows still to send (local-only settings such as the sync key itself are never sent, so not counted). */
 export const pendingCount = () =>
-  SYNC_TABLES.reduce((s, t) => s + (db.get<{ n: number }>(sql.raw(`select count(*) as n from "${t}" where synced_at is null`))?.n ?? 0), 0);
+  SYNC_TABLES.reduce((s, t) => {
+    const extra = t === "settings" ? ` and key not like 'sync%' and key not like 'fx.config%'` : "";
+    return s + (db.get<{ n: number }>(sql.raw(`select count(*) as n from "${t}" where synced_at is null${extra}`))?.n ?? 0);
+  }, 0);
 
 export function startSyncScheduler() {
   return setInterval(() => void syncNow(), 2 * 60 * 1000);

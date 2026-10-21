@@ -15,11 +15,17 @@ import {
   payrollRuns,
   payslips,
   products,
+  purchases,
+  returnLines,
+  returns,
   stockMoves,
+  suppliers,
 } from "../db/schema.js";
-import { addDays, localDate, monthOf, round4, type Q } from "../lib/biz.js";
+import { addDays, addMonths, currentRate, localDate, monthEnd, monthOf, round4, type Q } from "../lib/biz.js";
+import { getSetting } from "../lib/settings.js";
 import { boxBalance, clientBalanceUsd } from "./money.js";
-import { itemQty } from "./stock.js";
+import { itemQty, recipeOf } from "./stock.js";
+import { clientAging, consignmentOpenValueUsd, supplierDue } from "./wholesale.js";
 
 const liveOrders = (from: string, to: string) => and(gte(orders.businessDate, from), lte(orders.businessDate, to), ne(orders.status, "cancelled"), isNull(orders.deletedAt));
 
@@ -99,24 +105,49 @@ export function periodReport(tx: Q, from: string, to: string) {
     .map((r) => ({ ...r, revenueUsd: round4(r.revenueUsd), costUsd: round4(r.costUsd), marginPct: r.revenueUsd > 0 ? round4(((r.revenueUsd - r.costUsd) / r.revenueUsd) * 100) : 0 }));
 
   const byCategory = tx
-    .select({ categoryId: categories.id, nameAr: categories.nameAr, nameEn: categories.nameEn, qty: sql<number>`sum(${orderLines.qty})` })
+    .select({
+      categoryId: categories.id,
+      nameAr: categories.nameAr,
+      nameEn: categories.nameEn,
+      qty: sql<number>`sum(${orderLines.qty})`,
+      revenueUsd: sql<number>`sum(case when ${orders.currency}='USD' then ${orderLines.lineTotal} else ${orderLines.lineTotal} / ${orders.fxRate} end)`,
+      costUsd: sql<number>`sum(${orderLines.unitCostUsd} * ${orderLines.qty})`,
+    })
     .from(orderLines)
     .innerJoin(orders, eq(orderLines.orderId, orders.id))
     .innerJoin(products, eq(orderLines.productId, products.id))
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .where(w)
     .groupBy(categories.id)
-    .all();
+    .all()
+    .map((r) => ({ ...r, revenueUsd: round4(r.revenueUsd), costUsd: round4(r.costUsd), marginPct: r.revenueUsd > 0 ? round4(((r.revenueUsd - r.costUsd) / r.revenueUsd) * 100) : 0 }));
 
   const byClient = tx
-    .select({ clientId: orders.clientId, name: clients.name, orders: count(), items: sql<number>`sum(${orders.itemsCount})`, salesUsd: sql<number>`sum(${orders.totalUsd})` })
+    .select({ clientId: orders.clientId, name: clients.name, orders: count(), items: sql<number>`sum(${orders.itemsCount})`, salesUsd: sql<number>`sum(${orders.totalUsd})`, costUsd: sql<number>`sum(${orders.costUsd})` })
     .from(orders)
     .leftJoin(clients, eq(orders.clientId, clients.id))
     .where(w)
     .groupBy(orders.clientId)
     .orderBy(desc(sql`sum(${orders.totalUsd})`))
     .all()
-    .map((r) => ({ ...r, salesUsd: round4(r.salesUsd), balanceUsd: r.clientId ? clientBalanceUsd(tx, r.clientId) : null }));
+    .map((r) => {
+      const ret = r.clientId
+        ? tx.get<{ v: number; c: number }>(sql`select coalesce(sum(total_usd),0) as v, coalesce(sum(cost_usd),0) as c from returns where client_id = ${r.clientId} and consignment_id is null and deleted_at is null and business_date between ${from} and ${to}`)
+        : null;
+      // delivery cost charged to this client's area/rep is not split per client; profit here is sales − returns − goods cost
+      const netSales = r.salesUsd - (ret?.v ?? 0);
+      const profit = netSales - (r.costUsd - (ret?.c ?? 0));
+      return {
+        ...r,
+        salesUsd: round4(r.salesUsd),
+        returnsUsd: round4(ret?.v ?? 0),
+        costUsd: round4(r.costUsd),
+        profitUsd: round4(profit),
+        marginPct: netSales > 0 ? round4((profit / netSales) * 100) : 0,
+        balanceUsd: r.clientId ? clientBalanceUsd(tx, r.clientId) : null,
+        overdueDays: r.clientId ? clientAging(tx, r.clientId, to).overdueDays : 0,
+      };
+    });
 
   const exp = tx
     .select({ categoryId: expenses.categoryId, nameAr: lookups.nameAr, nameEn: lookups.nameEn, usd: sql<number>`sum(${expenses.amountUsd})`, n: count() })
@@ -144,13 +175,38 @@ export function periodReport(tx: Q, from: string, to: string) {
     .where(and(eq(payrollRuns.status, "paid"), gte(payrollRuns.month, monthOf(from)), lte(payrollRuns.month, monthOf(to))))
     .get()!.usd;
 
+  // Returns of invoiced goods reduce sales and goods cost (unsold consignment goods were never sold).
+  const ret = tx
+    .select({ n: count(), usd: sql<number>`coalesce(sum(${returns.totalUsd}),0)`, cost: sql<number>`coalesce(sum(${returns.costUsd}),0)` })
+    .from(returns)
+    .where(and(isNull(returns.deletedAt), sql`${returns.consignmentId} is null`, gte(returns.businessDate, from), lte(returns.businessDate, to)))
+    .get()!;
+  const returnsByAction = tx
+    .select({ action: returnLines.action, qty: sql<number>`coalesce(sum(${returnLines.qty}),0)` })
+    .from(returnLines)
+    .innerJoin(returns, eq(returnLines.returnId, returns.id))
+    .where(and(isNull(returns.deletedAt), gte(returns.businessDate, from), lte(returns.businessDate, to)))
+    .groupBy(returnLines.action)
+    .all();
+  const internal = tx.select({ n: count(), items: sql<number>`coalesce(sum(${orders.itemsCount}),0)`, cost: sql<number>`coalesce(sum(${orders.costUsd}),0)` }).from(orders).where(and(liveOrders(from, to), eq(orders.type, "internal"))).get()!;
+  const internalUse = tx.get<{ c: number }>(sql`select coalesce(-sum(qty * unit_cost_usd),0) as c from stock_moves where ref_type = 'internal' and deleted_at is null and business_date between ${from} and ${to}`)?.c ?? 0;
+  const purch = tx.select({ n: count(), usd: sql<number>`coalesce(sum(${purchases.totalUsd}),0)` }).from(purchases).where(and(isNull(purchases.deletedAt), gte(purchases.date, from), lte(purchases.date, to))).get()!;
+  const moneyIn = tx.get<{ v: number }>(sql`select coalesce(sum(amount_usd),0) as v from box_moves where deleted_at is null and type in ('sale','client_payment','topup') and business_date between ${from} and ${to}`)?.v ?? 0;
+  const withdrawals = tx.get<{ v: number }>(sql`select coalesce(-sum(amount_usd),0) as v from box_moves where deleted_at is null and type = 'withdrawal' and business_date between ${from} and ${to}`)?.v ?? 0;
+  const dueExpenses = tx.get<{ v: number }>(sql`select coalesce(sum(amount_usd),0) as v from expenses where deleted_at is null and status = 'due' and date between ${from} and ${to}`)?.v ?? 0;
+  // average rate of the period's sales (for showing the numbers in SYP)
+  const rateRow = tx.get<{ r: number | null }>(sql`select sum(total_usd * fx_rate) / nullif(sum(total_usd),0) as r from orders where status != 'cancelled' and deleted_at is null and fx_rate is not null and business_date between ${from} and ${to}`);
+  const avgRate = rateRow?.r ? round4(rateRow.r) : currentRate();
+
   const trialsGiven = tx.select({ n: count() }).from(orders).where(and(liveOrders(from, to), eq(orders.type, "trial"))).get()?.n ?? 0;
   const converted = tx.select({ n: count() }).from(clients).where(and(gte(clients.convertedAt, from), lte(clients.convertedAt, `${to}~`))).get()?.n ?? 0;
 
   const salesUsd = round4(o.salesUsd);
-  const costUsd = round4(o.costUsd);
+  const returnsUsd = round4(ret.usd);
+  const netSalesUsd = round4(salesUsd - returnsUsd);
+  const costUsd = round4(o.costUsd - ret.cost);
   // Taxes collected belong to the government, not to the shop.
-  const grossProfitUsd = round4(salesUsd - round4(extra.taxUsd) - costUsd);
+  const grossProfitUsd = round4(netSalesUsd - round4(extra.taxUsd) - costUsd);
   const netUsd = round4(grossProfitUsd - expensesUsd - wasteUsd - dep.totalUsd - salaries);
   return {
     from,
@@ -159,13 +215,25 @@ export function periodReport(tx: Q, from: string, to: string) {
     items: o.items,
     freeItems: o.freeItems,
     salesUsd,
+    returnsUsd,
+    returnsCount: ret.n,
+    returnedQty: { restock: returnsByAction.find((x) => x.action === "restock")?.qty ?? 0, waste: returnsByAction.find((x) => x.action === "waste")?.qty ?? 0 },
+    netSalesUsd,
+    collectedUsd: round4(moneyIn),
+    purchasesUsd: round4(purch.usd),
+    purchasesCount: purch.n,
+    internalUse: { orders: internal.n, items: internal.items, costUsd: round4(internal.cost + internalUse) },
+    withdrawalsUsd: round4(withdrawals),
+    dueExpensesUsd: round4(dueExpenses),
+    avgRate,
     grossUsd: round4(extra.grossUsd),
     discountUsd: round4(extra.discountUsd),
     taxUsd: round4(extra.taxUsd),
     deliveryUsd: round4(extra.deliveryUsd),
     costUsd,
     grossProfitUsd,
-    marginPct: salesUsd > 0 ? round4((grossProfitUsd / salesUsd) * 100) : 0,
+    marginPct: netSalesUsd > 0 ? round4((grossProfitUsd / netSalesUsd) * 100) : 0,
+    operatingProfitUsd: round4(grossProfitUsd - expensesUsd - wasteUsd - salaries),
     expensesUsd,
     wasteUsd,
     depreciationUsd: dep.totalUsd,
@@ -230,13 +298,166 @@ export function alerts(tx: Q) {
     .all()
     .map((b) => ({ id: b.id, nameAr: b.nameAr, nameEn: b.nameEn, currency: b.currency, balance: boxBalance(tx, b.id) }))
     .filter((b) => b.balance > 0.009);
+  const overdue = tx
+    .select()
+    .from(clients)
+    .where(and(isNull(clients.deletedAt), eq(clients.active, true)))
+    .all()
+    .map((c) => ({ id: c.id, name: c.name, ...clientAging(tx, c.id) }))
+    .filter((c) => c.overdueDays > 0)
+    .sort((a, b) => b.overdueDays - a.overdueDays);
+  const dueExpenses = tx.all<{ id: string; date: string; amount: number; currency: string; note: string }>(sql`select id, date, amount, currency, note from expenses where deleted_at is null and status = 'due' and coalesce(due_date, date) <= ${localDate()} order by date`);
+  const pay = payables(tx);
   return {
+    overdueClients: overdue,
+    dueExpenses,
+    suppliersOverdueUsd: pay.overdueUsd,
     expired: batchRows.filter((r) => r.b.expiresAt! <= nowIsoStr).map((r) => ({ ...r.b, nameAr: r.nameAr, nameEn: r.nameEn, unitCode: r.unitCode })),
     expiresToday: batchRows.filter((r) => r.b.expiresAt! > nowIsoStr).map((r) => ({ ...r.b, nameAr: r.nameAr, nameEn: r.nameEn, unitCode: r.unitCode })),
     lowStock: low,
     nearCreditLimit: nearLimit,
     repCash: reps,
   };
+}
+
+/** What we owe suppliers, in total. */
+export function payables(tx: Q) {
+  const rows = tx.select({ id: suppliers.id }).from(suppliers).where(isNull(suppliers.deletedAt)).all().map((s) => supplierDue(tx, s.id));
+  return { totalUsd: round4(rows.reduce((a, r) => a + r.totalDueUsd, 0)), overdueUsd: round4(rows.reduce((a, r) => a + r.overdueUsd, 0)) };
+}
+
+/** Money in all boxes, in USD (SYP boxes at today's rate). */
+export function cashOnHandUsd(tx: Q) {
+  const rate = currentRate();
+  return round4(
+    tx
+      .select()
+      .from(cashBoxes)
+      .where(and(isNull(cashBoxes.deletedAt), eq(cashBoxes.active, true)))
+      .all()
+      .reduce((s, b) => {
+        const bal = boxBalance(tx, b.id);
+        return s + (b.currency === "USD" ? bal : rate ? bal / rate : 0);
+      }, 0),
+  );
+}
+
+/**
+ * "Your day in five answers" (JJ's final question list):
+ * how much was sold, what it cost, profit after all expenses, cash and debts, and are prices still profitable.
+ */
+export function fiveAnswers(tx: Q, date = localDate()) {
+  const r = periodReport(tx, date, date);
+  const receivables = unpaidBalances(tx);
+  const target = getSetting("costing").targetMarginPct;
+  const rate = currentRate();
+  const lowMargin = tx
+    .select()
+    .from(products)
+    .where(and(isNull(products.deletedAt), eq(products.active, true)))
+    .all()
+    .map((p) => {
+      const cost = recipeOf(tx, { productId: p.id }).reduce((s, x) => s + x.qty * x.avgCostUsd, 0) + p.extraCostUsd;
+      const price = p.currency === "USD" ? p.price : rate ? p.price / rate : null;
+      const margin = price && cost > 0 ? ((price - cost) / price) * 100 : null;
+      return { productId: p.id, nameAr: p.nameAr, nameEn: p.nameEn, marginPct: margin === null ? null : round4(margin) };
+    })
+    .filter((x) => x.marginPct !== null && x.marginPct < target);
+  return {
+    date,
+    rate,
+    sold: { items: r.items, orders: r.orders, salesUsd: r.netSalesUsd },
+    cost: { goodsUsd: r.costUsd, wasteUsd: r.wasteUsd },
+    profit: { grossUsd: r.grossProfitUsd, afterExpensesUsd: r.netUsd ?? 0, expensesUsd: r.expensesUsd },
+    money: { cashUsd: cashOnHandUsd(tx), collectedTodayUsd: r.collectedUsd, clientsOweUsd: round4(-receivables.reduce((s, c) => s + c.balanceUsd, 0)), weOweUsd: payables(tx).totalUsd, goodsAtShopsUsd: consignmentOpenValueUsd(tx) },
+    prices: { ok: lowMargin.length === 0, targetMarginPct: target, below: lowMargin },
+  };
+}
+
+/**
+ * Production vs sales for each product: what was there in the morning, made, sold from the fridge,
+ * left on consignment, returned, wasted, counted, and what is left — straight from the stock ledger.
+ * "Made fresh" is what orders took straight from ingredients.
+ */
+export function productionVsSales(tx: Q, from: string, to: string) {
+  const rows = tx.all<{ item_id: string; product_id: string; name_ar: string; name_en: string; type: string; ref_type: string | null; q: number }>(
+    sql`select m.item_id, i.product_id, i.name_ar, i.name_en, m.type, m.ref_type, sum(m.qty) as q from stock_moves m join items i on i.id = m.item_id
+        where i.kind = 'product' and m.deleted_at is null and m.business_date between ${from} and ${to} group by m.item_id, m.type, m.ref_type`,
+  );
+  const sold = tx.all<{ product_id: string; q: number }>(sql`select ol.product_id, sum(ol.qty) as q from order_lines ol join orders o on o.id = ol.order_id where o.status != 'cancelled' and o.deleted_at is null and o.consignment_id is null and o.business_date between ${from} and ${to} group by ol.product_id`);
+  const consSold = tx.all<{ product_id: string; q: number }>(sql`select cl.product_id, sum(cl.qty - cl.returned_qty) as q from consignment_lines cl join consignments c on c.id = cl.consignment_id where c.status = 'settled' and c.business_date between ${from} and ${to} group by cl.product_id`);
+  const byItem = new Map<string, { productId: string; nameAr: string; nameEn: string; opening: number; made: number; fromFridge: number; consigned: number; returnedIn: number; wasted: number; counted: number; other: number; closing: number; soldTotal: number; madeFresh: number; consignSold: number }>();
+  for (const r of rows) {
+    let x = byItem.get(r.item_id);
+    if (!x) {
+      const opening = tx.get<{ q: number }>(sql`select coalesce(sum(qty),0) as q from stock_moves where item_id = ${r.item_id} and deleted_at is null and business_date < ${from}`)?.q ?? 0;
+      x = { productId: r.product_id, nameAr: r.name_ar, nameEn: r.name_en, opening: round4(opening), made: 0, fromFridge: 0, consigned: 0, returnedIn: 0, wasted: 0, counted: 0, other: 0, closing: 0, soldTotal: 0, madeFresh: 0, consignSold: 0 };
+      byItem.set(r.item_id, x);
+    }
+    if (r.type === "production") x.made += r.q;
+    else if (r.type === "sale") x.fromFridge += -r.q;
+    else if (r.type === "consign") x.consigned += -r.q;
+    else if (r.type === "return") x.returnedIn += r.q;
+    else if (r.type === "waste") x.wasted += -r.q;
+    else if (r.type === "count") x.counted += r.q;
+    else if (r.type !== "transfer") x.other += r.q;
+  }
+  for (const s of sold) {
+    const x = [...byItem.values()].find((v) => v.productId === s.product_id);
+    if (x) x.soldTotal = s.q;
+  }
+  for (const s of consSold) {
+    const x = [...byItem.values()].find((v) => v.productId === s.product_id);
+    if (x) x.consignSold = s.q;
+  }
+  return [...byItem.entries()].map(([itemId, x]) => {
+    const closing = round4(x.opening + x.made - x.fromFridge - x.consigned + x.returnedIn - x.wasted + x.counted + x.other);
+    return { itemId, ...x, madeFresh: Math.max(0, x.soldTotal - x.fromFridge), closing, leftNow: round4(itemQty(tx, itemId)), difference: round4(x.counted) };
+  });
+}
+
+/** Where the money went: money in and out of every box by kind of movement. */
+export function cashFlow(tx: Q, from: string, to: string) {
+  const rows = tx.all<{ box_id: string; type: string; usd: number; amount: number; n: number }>(
+    sql`select box_id, type, sum(amount_usd) as usd, sum(amount) as amount, count(*) as n from box_moves where deleted_at is null and business_date between ${from} and ${to} group by box_id, type`,
+  );
+  const boxes = tx.select().from(cashBoxes).where(isNull(cashBoxes.deletedAt)).all();
+  const opening = (boxId: string) => tx.get<{ s: number }>(sql`select coalesce(sum(amount),0) as s from box_moves where box_id = ${boxId} and deleted_at is null and business_date < ${from}`)?.s ?? 0;
+  const perBox = boxes.map((b) => {
+    const mine = rows.filter((r) => r.box_id === b.id);
+    const open = opening(b.id);
+    const net = mine.reduce((s, r) => s + r.amount, 0);
+    return { id: b.id, nameAr: b.nameAr, nameEn: b.nameEn, currency: b.currency, opening: round4(open), moves: mine.map((r) => ({ type: r.type, amount: round4(r.amount), usd: round4(r.usd), n: r.n })), closing: round4(open + net) };
+  });
+  const byType = new Map<string, number>();
+  for (const r of rows) byType.set(r.type, (byType.get(r.type) ?? 0) + r.usd);
+  const inUsd = round4(rows.filter((r) => r.usd > 0).reduce((s, r) => s + r.usd, 0));
+  const outUsd = round4(-rows.filter((r) => r.usd < 0).reduce((s, r) => s + r.usd, 0));
+  return { from, to, boxes: perBox, byType: [...byType.entries()].map(([type, usd]) => ({ type, usd: round4(usd) })), inUsd, outUsd, netUsd: round4(inUsd - outUsd) };
+}
+
+/** Month by month: sales, costs, profit (last n months, oldest first). */
+export function monthsCompare(tx: Q, n = 6) {
+  const today = localDate();
+  return Array.from({ length: n }, (_, i) => addMonths(`${monthOf(today)}-01`, i - (n - 1))).map((start) => {
+    const end = start.slice(0, 7) === monthOf(today) ? today : monthEnd(start);
+    const r = periodReport(tx, start, end);
+    return { month: start.slice(0, 7), orders: r.orders, items: r.items, salesUsd: r.netSalesUsd, costUsd: r.costUsd, grossProfitUsd: r.grossProfitUsd, expensesUsd: r.expensesUsd, wasteUsd: r.wasteUsd, salariesUsd: r.salariesUsd, depreciationUsd: r.depreciationUsd, netUsd: r.netUsd, marginPct: r.marginPct, avgRate: r.avgRate };
+  });
+}
+
+/** Delivery & distribution cost: expenses linked to a rep, plus transport/fuel categories. */
+export function deliveryCost(tx: Q, from: string, to: string) {
+  const rows = tx.all<{ employee_id: string | null; name: string | null; cat: string | null; usd: number; n: number }>(
+    sql`select e.employee_id, emp.name as name, l.name_en as cat, sum(e.amount_usd) as usd, count(*) as n from expenses e
+        left join employees emp on emp.id = e.employee_id left join lookups l on l.id = e.category_id
+        where e.deleted_at is null and e.date between ${from} and ${to}
+          and (e.employee_id is not null or l.name_en in ('Transport & distribution','Fuel','Delivery & scooter'))
+        group by e.employee_id, l.name_en`,
+  );
+  const deliveries = tx.get<{ n: number; fees: number }>(sql`select count(*) as n, coalesce(sum(case when currency='USD' then delivery_fee else delivery_fee / fx_rate end),0) as fees from orders where status != 'cancelled' and fulfilment = 'delivery' and business_date between ${from} and ${to}`);
+  const totalUsd = round4(rows.reduce((s, r) => s + r.usd, 0));
+  return { rows: rows.map((r) => ({ employeeId: r.employee_id, name: r.name, category: r.cat, usd: round4(r.usd), n: r.n })), totalUsd, deliveries: deliveries?.n ?? 0, perDeliveryUsd: deliveries?.n ? round4(totalUsd / deliveries.n) : null, feesCollectedUsd: round4(deliveries?.fees ?? 0) };
 }
 
 export function dashboard(tx: Q) {
@@ -266,5 +487,15 @@ export function dashboard(tx: Q) {
     .where(and(eq(boxMoves.businessDate, today), isNull(boxMoves.deletedAt)))
     .groupBy(boxMoves.boxId)
     .all();
-  return { date: today, today: periodReport(tx, today, today), week, recent, alerts: alerts(tx), boxes: boxes.map((b) => ({ ...b, todayIn: todayMoves.find((m) => m.boxId === b.id)?.sum ?? 0 })), unpaid: unpaidBalances(tx).slice(0, 8) };
+  return {
+    date: today,
+    today: periodReport(tx, today, today),
+    week,
+    recent,
+    alerts: alerts(tx),
+    boxes: boxes.map((b) => ({ ...b, todayIn: todayMoves.find((m) => m.boxId === b.id)?.sum ?? 0 })),
+    unpaid: unpaidBalances(tx).slice(0, 8),
+    five: fiveAnswers(tx, today),
+    stockValueUsd: round4(tx.all<{ v: number }>(sql`select coalesce(sum(case when q > 0 then q * avg_cost_usd else 0 end),0) as v from (select i.avg_cost_usd, (select coalesce(sum(qty),0) from stock_moves m where m.item_id = i.id and m.deleted_at is null) as q from items i where i.deleted_at is null)`)[0]?.v ?? 0),
+  };
 }

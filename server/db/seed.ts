@@ -2,7 +2,7 @@ import { count, eq } from "drizzle-orm";
 import { DEFAULT_ROLE_PERMISSIONS, type SystemRoleKey } from "../../shared/permissions.js";
 import { newId } from "../lib/util.js";
 import { db } from "./client.js";
-import { getSetting } from "../lib/settings.js";
+import { getSetting, setSetting } from "../lib/settings.js";
 import { cashBoxes, clientTiers, locations, lookups, paymentMethods, permissions, roles, warehouses } from "./schema.js";
 
 const SYSTEM_ROLES: { key: SystemRoleKey; nameAr: string; nameEn: string }[] = [
@@ -17,6 +17,18 @@ const LOOKUP_SEED: Record<string, [string, string][]> = {
   expense_item: [["بندورة", "Tomatoes"], ["خس", "Lettuce"], ["وقود السكوتر", "Scooter fuel"], ["ورق تغليف", "Wrap paper"]],
   client_tag: [["Study zone", "Study zone"], ["مقهى", "Café"], ["محل", "Shop"], ["مستقل", "Freelancer"]],
   waste_reason: [["منتهي الصلاحية", "Expired"], ["تالف", "Damaged"], ["خطأ في التحضير", "Prep mistake"]],
+};
+
+const LOOKUP_SEED_V2: Record<string, [string, string][]> = {
+  expense_category: [
+    ["إيجار", "Rent"], ["رواتب", "Salaries"], ["نقل وتوزيع", "Transport & distribution"], ["وقود", "Fuel"], ["كهرباء", "Electricity"],
+    ["صيانة", "Maintenance"], ["تنظيف", "Cleaning"], ["اتصالات", "Telecom"], ["ضيافة", "Hospitality"], ["رسوم وتراخيص", "Fees & licenses"],
+    ["مصاريف إدارية", "Admin"], ["مصاريف أخرى", "Other"],
+  ],
+  unit: [["مليلتر", "Milliliter"], ["عبوة", "Pack"], ["كرتونة", "Carton"]],
+  waste_reason: [["مرتجع من زبون", "Returned by client"], ["تذوّق", "Tasting"]],
+  area: [["المنطقة 1", "Area 1"]],
+  cancel_reason: [["خطأ بالإدخال", "Entry mistake"], ["الزبون ألغى الطلب", "Client cancelled"], ["تكرار", "Duplicate"]],
 };
 
 /** Idempotent: safe to run on every start. */
@@ -78,6 +90,16 @@ export function seed() {
       for (const [listType, items] of Object.entries(LOOKUP_SEED)) {
         items.forEach(([nameAr, nameEn], i) => tx.insert(lookups).values({ id: newId(), listType, nameAr, nameEn, sort: i }).run());
       }
+    }
+
+    // v2 (wholesale pack): the expense categories from JJ's requirements, areas, cancel reasons.
+    if (getSetting("seed.version") < 2) {
+      for (const [listType, items] of Object.entries(LOOKUP_SEED_V2)) {
+        const have = new Set(tx.select().from(lookups).where(eq(lookups.listType, listType)).all().map((l) => l.nameEn.toLowerCase()));
+        let sort = have.size;
+        for (const [nameAr, nameEn] of items) if (!have.has(nameEn.toLowerCase())) tx.insert(lookups).values({ id: newId(), listType, nameAr, nameEn, sort: sort++ }).run();
+      }
+      setSetting("seed.version", 2, tx);
     }
   });
 }

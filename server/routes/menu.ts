@@ -8,6 +8,7 @@ import { can, requireAuth, requirePerm } from "../lib/auth.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { ensureProductItem, recipeCostUsd } from "../services/stock.js";
+import { currentRate, rateFor, round4, toUsd } from "../lib/biz.js";
 
 export const menuRouter = Router();
 
@@ -61,7 +62,7 @@ menuRouter.use(
   }),
 );
 
-const recipeLines = z.array(z.object({ itemId: z.string().min(1), qty: z.number().positive().max(100_000) })).max(60);
+const recipeLines = z.array(z.object({ itemId: z.string().min(1), qty: z.number().positive().max(100_000), wastePct: z.number().min(0).max(200).default(0) })).max(60);
 
 function saveRecipe(tx: Tx, key: { productId?: string; optionId?: string }, lines: z.infer<typeof recipeLines>) {
   const where = key.productId ? eq(recipes.productId, key.productId) : eq(recipes.optionId, key.optionId!);
@@ -70,13 +71,13 @@ function saveRecipe(tx: Tx, key: { productId?: string; optionId?: string }, line
     const it = tx.select().from(items).where(and(eq(items.id, l.itemId), isNull(items.deletedAt))).get();
     if (!it) throw new HttpError(400, "item_not_found", "A recipe line uses an item that does not exist.");
     if (it.kind === "product") throw new HttpError(400, "bad_recipe", "A recipe can only use ingredients and packaging.");
-    tx.insert(recipes).values({ id: newId(), productId: key.productId ?? null, optionId: key.optionId ?? null, itemId: l.itemId, qty: l.qty }).run();
+    tx.insert(recipes).values({ id: newId(), productId: key.productId ?? null, optionId: key.optionId ?? null, itemId: l.itemId, qty: l.qty, wastePct: l.wastePct }).run();
   }
 }
 
 const recipeRows = (key: { productId?: string; optionId?: string }) =>
   db
-    .select({ itemId: recipes.itemId, qty: recipes.qty, nameAr: items.nameAr, nameEn: items.nameEn, kind: items.kind, unitCode: items.unitCode, avgCostUsd: items.avgCostUsd })
+    .select({ itemId: recipes.itemId, qty: recipes.qty, wastePct: recipes.wastePct, nameAr: items.nameAr, nameEn: items.nameEn, kind: items.kind, unitCode: items.unitCode, avgCostUsd: items.avgCostUsd })
     .from(recipes)
     .innerJoin(items, eq(recipes.itemId, items.id))
     .where(and(key.productId ? eq(recipes.productId, key.productId) : eq(recipes.optionId, key.optionId!), isNull(recipes.deletedAt)))
@@ -131,6 +132,9 @@ const productSchema = z.object({
   active: z.boolean().default(true),
   optionGroupIds: z.array(z.string()).max(30).default([]),
   recipe: recipeLines.default([]),
+  weightG: z.number().min(0).max(100_000).default(0),
+  /** Other direct cost per piece, entered in the product's currency. */
+  extraCost: z.number().min(0).default(0),
 });
 
 const linkedGroupIds = (productId: string, categoryId: string) =>
@@ -151,6 +155,7 @@ function productOut(p: typeof products.$inferSelect) {
     groupIds: [...new Set(links.map((l) => l.groupId))],
     recipe: recipeRows({ productId: p.id }),
     costUsd: recipeCostUsd(db, { productId: p.id }),
+    extraCost: p.currency === "USD" ? p.extraCostUsd : Math.round(p.extraCostUsd * (currentRate() ?? 0)),
   };
 }
 
@@ -183,6 +188,8 @@ function saveProduct(tx: Tx, id: string, body: z.infer<typeof productSchema>, is
     photo: body.photo,
     sort: body.sort,
     active: body.active,
+    weightG: body.weightG,
+    extraCostUsd: round4(toUsd(body.extraCost, body.currency, body.extraCost ? rateFor(body.currency) : null)),
   };
   if (isNew) tx.insert(products).values({ id, ...row }).run();
   else tx.update(products).set({ ...row, updatedAt: nowIso(), syncedAt: null }).where(eq(products.id, id)).run();

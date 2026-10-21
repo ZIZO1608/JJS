@@ -1,11 +1,11 @@
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { clients, employees, orderLines, orders, paymentMethods, payments, recurringOrders, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
-import { localDate } from "../lib/biz.js";
+import { localDate, round4 } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
@@ -16,7 +16,7 @@ export const ordersRouter = Router();
 
 const inputSchema = z.object({
   clientId: z.string().nullable().optional(),
-  type: z.enum(["normal", "trial", "staff"]).default("normal"),
+  type: z.enum(["normal", "trial", "staff", "internal"]).default("normal"),
   employeeId: z.string().nullable().optional(),
   fulfilment: z.enum(["pickup", "delivery"]).default("pickup"),
   deliveryFee: z.number().min(0).nullable().optional(),
@@ -24,6 +24,7 @@ const inputSchema = z.object({
   methodId: z.string().nullable().optional(),
   manualDiscountPct: z.number().min(0).max(100).optional(),
   useLoyalty: z.boolean().optional(),
+  paidAmount: z.number().min(0).nullable().optional(),
   note: z.string().max(300).optional(),
   lines: z.array(z.object({ productId: z.string(), qty: z.number().int().min(1).max(1000), optionIds: z.array(z.string()).max(20).default([]) })).max(80),
 });
@@ -108,9 +109,10 @@ ordersRouter.post(
   requirePerm("orders", "delete"),
   h((req, res) => {
     const id = String(req.params.id);
+    const body = parse(z.object({ reason: z.string().trim().max(200).default("") }), req.body ?? {});
     db.transaction((tx) => {
-      const o = cancelOrder(tx, id, req.user!.id);
-      writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "order", entityId: id, before: { number: o.number, total: o.total } });
+      const o = cancelOrder(tx, id, req.user!.id, body.reason);
+      writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "order", entityId: id, before: { number: o.number, total: o.total }, after: { reason: body.reason } });
     });
     res.json({ ok: true });
   }),
@@ -167,12 +169,22 @@ export function receiptOf(orderId: string) {
   const o = r.o;
   const lines = db.select().from(orderLines).where(eq(orderLines.orderId, o.id)).all();
   const client = o.clientId ? db.select().from(clients).where(eq(clients.id, o.clientId)).get() : null;
+  // Account before and after this invoice (moves written before it, then its own moves).
+  let account: { beforeUsd: number; afterUsd: number; nowUsd: number } | null = null;
+  if (client) {
+    const before = db.get<{ s: number }>(sql`select coalesce(sum(amount_usd),0) as s from client_moves where client_id = ${client.id} and deleted_at is null and created_at < ${o.createdAt} and (order_id is null or order_id != ${o.id})`)?.s ?? 0;
+    const own = db.get<{ s: number }>(sql`select coalesce(sum(amount_usd),0) as s from client_moves where order_id = ${o.id} and deleted_at is null`)?.s ?? 0;
+    account = { beforeUsd: round4(before), afterUsd: round4(before + own), nowUsd: clientBalanceUsd(db, client.id) };
+  }
+  const remaining = o.paymentStatus === "credit" ? o.total : o.paymentStatus === "partial" ? round4(o.total - o.paidAmount) : 0;
   return {
+    payment: { paid: o.paymentStatus === "paid" ? o.total : o.paidAmount, remaining },
+    account,
     business: getSetting("business"),
     printing: getSetting("printing"),
     order: { ...listOut(r), taxes: JSON.parse(o.taxesJson) },
     lines: lines.map((l) => ({ ...l, options: JSON.parse(l.optionsJson) })),
-    client: client ? { name: client.name, language: client.receiptLanguage, balanceUsd: clientBalanceUsd(db, client.id) } : null,
+    client: client ? { name: client.name, phone: client.phone, address: client.address, contactPerson: client.contactPerson, language: client.receiptLanguage, balanceUsd: clientBalanceUsd(db, client.id) } : null,
     loyalty: client && o.type === "normal" ? loyaltyStatus(db, client.id, o.businessDate) : null,
   };
 }

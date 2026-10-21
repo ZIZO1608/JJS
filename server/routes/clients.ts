@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, gte, isNull, lt, lte, max, ne, sql } from "d
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { categories, clientMoves, clientPrices, clientTiers, clients, employees, orderLines, orders, payments, products, recurringOrders, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
+import { categories, clientMoves, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
 import { addMonths, assertDayOpen, localDate, monthStart, rateFor, round4, toUsd } from "../lib/biz.js";
@@ -10,9 +10,58 @@ import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus, startSubscription, subscriptionStatus } from "../services/clients.js";
 import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "../services/money.js";
+import { clientAging } from "../services/wholesale.js";
+import { getSetting } from "../lib/settings.js";
 
 export const clientsRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(60), nameEn: z.string().trim().min(1).max(60) };
+
+/* ---------- price lists (distributor, big shop, small shop…) ---------- */
+clientsRouter.use(
+  "/price-lists",
+  crudRouter({
+    table: priceLists,
+    module: "clients",
+    entity: "price_list",
+    schema: z.object({ ...names, active: z.boolean().default(true) }),
+    map: (r) => ({ ...r, clients: db.select({ n: count() }).from(clients).where(and(eq(clients.priceListId, r.id), isNull(clients.deletedAt))).get()?.n ?? 0, items: db.select({ n: count() }).from(priceListItems).where(and(eq(priceListItems.listId, r.id), isNull(priceListItems.deletedAt))).get()?.n ?? 0 }),
+    beforeDelete: (tx, row) => {
+      const n = tx.select({ n: count() }).from(clients).where(and(eq(clients.priceListId, row.id), isNull(clients.deletedAt))).get()?.n ?? 0;
+      if (n) throw new HttpError(409, "in_use", `${n} client(s) use this price list.`);
+    },
+  }),
+);
+clientsRouter.get(
+  "/price-lists/:id/items",
+  requirePerm("clients", "view"),
+  h((req, res) => {
+    const rows = db
+      .select({ i: priceListItems, nameAr: products.nameAr, nameEn: products.nameEn, menuPrice: products.price, menuCurrency: products.currency })
+      .from(priceListItems)
+      .innerJoin(products, eq(priceListItems.productId, products.id))
+      .where(and(eq(priceListItems.listId, String(req.params.id)), isNull(priceListItems.deletedAt)))
+      .all()
+      .map((x) => ({ ...x.i, nameAr: x.nameAr, nameEn: x.nameEn, menuPrice: x.menuPrice, menuCurrency: x.menuCurrency }));
+    res.json({ rows });
+  }),
+);
+clientsRouter.put(
+  "/price-lists/:id/items",
+  requirePerm("clients", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    if (!db.select().from(priceLists).where(and(eq(priceLists.id, id), isNull(priceLists.deletedAt))).get()) throw notFound("price list");
+    const list = parse(z.array(z.object({ productId: z.string(), price: z.number().min(0), currency: z.enum(["USD", "SYP"]) })).max(500), req.body.items ?? []);
+    db.transaction((tx) => {
+      const before = tx.select().from(priceListItems).where(and(eq(priceListItems.listId, id), isNull(priceListItems.deletedAt))).all();
+      tx.update(priceListItems).set({ deletedAt: nowIso(), syncedAt: null }).where(and(eq(priceListItems.listId, id), isNull(priceListItems.deletedAt))).run();
+      for (const p of list) tx.insert(priceListItems).values({ id: newId(), listId: id, ...p }).run();
+      // every price change is kept in the audit log (who, when, old → new)
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "price_list.items", entityId: id, before: before.map((b) => ({ productId: b.productId, price: b.price, currency: b.currency })), after: list });
+    });
+    res.json({ ok: true });
+  }),
+);
 
 clientsRouter.use(
   "/tiers",
@@ -77,6 +126,21 @@ const clientSchema = z.object({
   creditBlock: z.boolean().default(false),
   note: z.string().max(400).default(""),
   active: z.boolean().default(true),
+  areaId: z.string().nullable().optional(),
+  paymentTermsDays: z.number().int().min(0).max(365).optional(),
+  priceListId: z.string().nullable().optional(),
+  consignment: z.boolean().default(false),
+  repId: z.string().nullable().optional(),
+});
+/** On a new client only: what they already owed (+) or had prepaid (−) before the system. */
+const openingSchema = z.object({ openingBalance: z.number().default(0), openingCurrency: z.enum(["USD", "SYP"]).optional() });
+const nullables = (b: z.infer<typeof clientSchema>) => ({
+  tierId: b.tierId ?? null,
+  tagId: b.tagId ?? null,
+  areaId: b.areaId ?? null,
+  priceListId: b.priceListId ?? null,
+  repId: b.repId ?? null,
+  paymentTermsDays: b.paymentTermsDays ?? getSetting("orders").defaultPaymentTermsDays,
 });
 
 const lastOrderDate = (clientId: string) => db.select({ d: max(orders.businessDate) }).from(orders).where(and(eq(orders.clientId, clientId), ne(orders.status, "cancelled"))).get()?.d ?? null;
@@ -91,6 +155,7 @@ function summary(c: typeof clients.$inferSelect) {
     loyalty: { count: loy.count, progress: loy.progress, buyQty: loy.buyQty, available: loy.available, enabled: loy.enabled },
     subscription: sub ? { planNameAr: sub.plan.nameAr, planNameEn: sub.plan.nameEn, endDate: sub.endDate, availableIncluded: sub.availableIncluded } : null,
     lastOrderDate: lastOrderDate(c.id),
+    aging: clientAging(db, c.id, today),
   };
 }
 
@@ -108,10 +173,15 @@ clientsRouter.post(
   requirePerm("clients", "create"),
   h((req, res) => {
     const body = parse(clientSchema, req.body);
+    const opening = parse(openingSchema, req.body);
     const id = newId();
     db.transaction((tx) => {
-      tx.insert(clients).values({ id, ...body, tierId: body.tierId ?? null, tagId: body.tagId ?? null }).run();
-      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "client", entityId: id, after: body });
+      tx.insert(clients).values({ id, ...body, ...nullables(body) }).run();
+      if (opening.openingBalance) {
+        const cur = opening.openingCurrency ?? getSetting("currency.default");
+        addClientMove(tx, { clientId: id, type: "opening", amount: -opening.openingBalance, currency: cur, rate: rateFor(cur), note: "Opening balance", userId: req.user!.id, date: localDate() });
+      }
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "client", entityId: id, after: { ...body, ...opening } });
     });
     res.status(201).json({ row: summary(db.select().from(clients).where(eq(clients.id, id)).get()!) });
   }),
@@ -126,7 +196,7 @@ clientsRouter.put(
     if (!before) throw notFound("client");
     const body = parse(clientSchema, req.body);
     db.transaction((tx) => {
-      tx.update(clients).set({ ...body, tierId: body.tierId ?? null, tagId: body.tagId ?? null, updatedAt: nowIso(), syncedAt: null }).where(eq(clients.id, id)).run();
+      tx.update(clients).set({ ...body, ...nullables(body), paymentTermsDays: body.paymentTermsDays ?? before.paymentTermsDays, updatedAt: nowIso(), syncedAt: null }).where(eq(clients.id, id)).run();
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client", entityId: id, before, after: body });
     });
     res.json({ row: summary(db.select().from(clients).where(eq(clients.id, id)).get()!) });
@@ -187,7 +257,15 @@ clientsRouter.get(
       .limit(12)
       .all();
     const trials = db.select({ n: count() }).from(orders).where(and(eq(orders.clientId, id), eq(orders.type, "trial"), ne(orders.status, "cancelled"))).get()?.n ?? 0;
+    const paidUsd = db.select({ s: sql<number>`coalesce(sum(${payments.amountUsd}),0)` }).from(payments).where(and(eq(payments.clientId, id), isNull(payments.deletedAt))).get()?.s ?? 0;
+    const returnsUsd = db.select({ s: sql<number>`coalesce(sum(${returns.totalUsd}),0)` }).from(returns).where(and(eq(returns.clientId, id), isNull(returns.deletedAt))).get()?.s ?? 0;
     res.json({
+      totals: { salesUsd: round4(totals.sum), paidUsd: round4(paidUsd), returnsUsd: round4(returnsUsd) },
+      area: c.areaId ? (db.select().from(lookups).where(eq(lookups.id, c.areaId)).get() ?? null) : null,
+      priceList: c.priceListId ? (db.select().from(priceLists).where(eq(priceLists.id, c.priceListId)).get() ?? null) : null,
+      rep: c.repId ? (db.select({ id: employees.id, name: employees.name }).from(employees).where(eq(employees.id, c.repId)).get() ?? null) : null,
+      returns: db.select().from(returns).where(and(eq(returns.clientId, id), isNull(returns.deletedAt))).orderBy(desc(returns.number)).limit(30).all(),
+      consignments: db.select().from(consignments).where(and(eq(consignments.clientId, id), isNull(consignments.deletedAt))).orderBy(desc(consignments.number)).limit(30).all(),
       client: summary(c),
       loyalty: loyaltyStatus(db, id, today),
       analytics: { byCategory, topProducts, monthly, ordersCount: totals.n, avgOrderUsd: totals.n ? round4(totals.sum / totals.n) : 0, lastOrderDate: lastOrderDate(id), trials, converted: !!c.convertedAt },
@@ -254,6 +332,51 @@ clientsRouter.post(
   }),
 );
 
+/**
+ * The card shown the moment a shop is picked on a new invoice: last order, debt, late or not,
+ * the prices agreed with them, and what they bought this month.
+ */
+clientsRouter.get(
+  "/:id/snapshot",
+  requirePerm("orders", "create"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const c = db.select().from(clients).where(and(eq(clients.id, id), isNull(clients.deletedAt))).get();
+    if (!c) throw notFound("client");
+    const today = localDate();
+    const last = db.select().from(orders).where(and(eq(orders.clientId, id), ne(orders.status, "cancelled"), isNull(orders.deletedAt))).orderBy(desc(orders.number)).get();
+    const month = db
+      .select({ n: count(), usd: sql<number>`coalesce(sum(${orders.totalUsd}),0)`, items: sql<number>`coalesce(sum(${orders.itemsCount}),0)` })
+      .from(orders)
+      .where(and(eq(orders.clientId, id), ne(orders.status, "cancelled"), gte(orders.businessDate, monthStart(today))))
+      .get()!;
+    const listPrices = c.priceListId ? db.select().from(priceListItems).where(and(eq(priceListItems.listId, c.priceListId), isNull(priceListItems.deletedAt))).all() : [];
+    const own = db.select().from(clientPrices).where(and(eq(clientPrices.clientId, id), isNull(clientPrices.deletedAt))).all();
+    const agreed = db
+      .select({ id: products.id, nameAr: products.nameAr, nameEn: products.nameEn, price: products.price, currency: products.currency })
+      .from(products)
+      .where(and(isNull(products.deletedAt), eq(products.active, true)))
+      .all()
+      .map((p) => {
+        const o = own.find((x) => x.productId === p.id);
+        const l = listPrices.find((x) => x.productId === p.id);
+        const src = o ? "client" : l ? "list" : "menu";
+        return { productId: p.id, nameAr: p.nameAr, nameEn: p.nameEn, price: o?.price ?? l?.price ?? p.price, currency: o?.currency ?? l?.currency ?? p.currency, from: src };
+      })
+      .filter((p) => p.from !== "menu");
+    const tier = c.tierId ? db.select().from(clientTiers).where(eq(clientTiers.id, c.tierId)).get() : null;
+    res.json({
+      client: { id: c.id, name: c.name, phone: c.phone, creditLimitUsd: c.creditLimitUsd, creditBlock: c.creditBlock, consignment: c.consignment, paymentTermsDays: c.paymentTermsDays },
+      lastOrder: last ? { id: last.id, number: last.number, date: last.businessDate, total: last.total, currency: last.currency, items: last.itemsCount } : null,
+      aging: clientAging(db, id, today),
+      month: { orders: month.n, salesUsd: round4(month.usd), items: month.items },
+      tier: tier ? { nameAr: tier.nameAr, nameEn: tier.nameEn, discountPct: tier.discountPct } : null,
+      agreedPrices: agreed,
+      openConsignments: db.select({ n: count() }).from(consignments).where(and(eq(consignments.clientId, id), eq(consignments.status, "open"))).get()?.n ?? 0,
+    });
+  }),
+);
+
 clientsRouter.get(
   "/:id/statement",
   requirePerm("clients", "view"),
@@ -280,7 +403,8 @@ clientsRouter.get(
       .where(and(eq(orders.clientId, id), ne(orders.status, "cancelled"), gte(orders.businessDate, q.from), lte(orders.businessDate, q.to)))
       .orderBy(asc(orders.number))
       .all();
-    res.json({ client: c, from: q.from, to: q.to, openingUsd: round4(opening), closingUsd: round4(run), lines, orders: ordersInRange });
+    const returnsInRange = db.select().from(returns).where(and(eq(returns.clientId, id), isNull(returns.deletedAt), gte(returns.businessDate, q.from), lte(returns.businessDate, q.to))).orderBy(asc(returns.number)).all();
+    res.json({ client: c, from: q.from, to: q.to, openingUsd: round4(opening), closingUsd: round4(run), lines, orders: ordersInRange, returns: returnsInRange, aging: clientAging(db, id) });
   }),
 );
 

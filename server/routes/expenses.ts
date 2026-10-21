@@ -2,7 +2,7 @@ import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { assets, boxMoves, cashBoxes, expenses, lookups, users } from "../db/schema.js";
+import { assets, boxMoves, cashBoxes, employees, expenses, lookups, recurringExpenses, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, monthOf, rateFor, round4, toUsd } from "../lib/biz.js";
@@ -22,7 +22,58 @@ const expenseSchema = z.object({
   boxId: z.string().nullable().optional(),
   assetId: z.string().nullable().optional(),
   note: z.string().max(300).default(""),
+  /** paid: money left a box now · due: owed, to be paid later */
+  status: z.enum(["paid", "due"]).default("paid"),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  paidBy: z.string().trim().max(80).default(""),
+  beneficiary: z.string().trim().max(80).default(""),
+  photo: z.string().max(1_500_000).default(""),
+  employeeId: z.string().nullable().optional(),
 });
+
+/* ---------- recurring (monthly) expenses ---------- */
+expensesRouter.use(
+  "/recurring",
+  crudRouter({
+    table: recurringExpenses,
+    module: "expenses",
+    entity: "recurring_expense",
+    schema: z.object({
+      categoryId: z.string().nullable().optional(),
+      itemId: z.string().nullable().optional(),
+      amount: z.number().positive(),
+      currency: z.enum(["USD", "SYP"]),
+      dayOfMonth: z.number().int().min(1).max(28),
+      beneficiary: z.string().trim().max(80).default(""),
+      note: z.string().max(300).default(""),
+      active: z.boolean().default(true),
+    }),
+  }),
+);
+
+/**
+ * On or after its day each month, a recurring expense becomes a "due" expense (once per month).
+ * Run at start and every hour.
+ */
+export function generateRecurringExpenses(today = localDate()) {
+  const month = monthOf(today);
+  const day = Number(today.slice(8, 10));
+  let made = 0;
+  db.transaction((tx) => {
+    for (const r of tx.select().from(recurringExpenses).where(and(isNull(recurringExpenses.deletedAt), eq(recurringExpenses.active, true))).all()) {
+      if (r.lastMonth === month || day < r.dayOfMonth) continue;
+      const rate = r.currency === "SYP" ? (() => { try { return rateFor("SYP"); } catch { return null; } })() : null;
+      if (r.currency === "SYP" && !rate) continue; // wait until a rate exists
+      const date = `${month}-${String(r.dayOfMonth).padStart(2, "0")}`;
+      tx.insert(expenses)
+        .values({ id: newId(), date, categoryId: r.categoryId, itemId: r.itemId, amount: r.amount, currency: r.currency, fxRate: rate, amountUsd: round4(toUsd(r.amount, r.currency, rate)), note: r.note, status: "due", dueDate: date, beneficiary: r.beneficiary, recurringId: r.id, userId: null })
+        .run();
+      tx.update(recurringExpenses).set({ lastMonth: month, updatedAt: nowIso(), syncedAt: null }).where(eq(recurringExpenses.id, r.id)).run();
+      made++;
+    }
+  });
+  return made;
+}
 
 const listSelect = () =>
   db
@@ -39,15 +90,16 @@ expensesRouter.get(
   requirePerm("expenses", "view"),
   h((req, res) => {
     const today = localDate();
-    const q = parse(z.object({ from: z.string().optional(), to: z.string().optional() }), req.query);
+    const q = parse(z.object({ from: z.string().optional(), to: z.string().optional(), status: z.enum(["paid", "due"]).optional() }), req.query);
     const rows = listSelect()
-      .where(and(isNull(expenses.deletedAt), gte(expenses.date, q.from ?? `${monthOf(today)}-01`), lte(expenses.date, q.to ?? today)))
+      .where(and(isNull(expenses.deletedAt), q.status === "due" ? undefined : gte(expenses.date, q.from ?? `${monthOf(today)}-01`), q.status === "due" ? undefined : lte(expenses.date, q.to ?? today), q.status ? eq(expenses.status, q.status) : undefined))
       .orderBy(desc(expenses.date), desc(expenses.createdAt))
       .all();
     res.json({
       rows: rows.map((r) => {
         const it = itemName(r.e.itemId);
-        return { ...r.e, category: r.catAr ? { nameAr: r.catAr, nameEn: r.catEn } : null, item: it ? { nameAr: it.ar, nameEn: it.en } : null, box: r.boxAr ? { nameAr: r.boxAr, nameEn: r.boxEn } : null, userName: r.userName };
+        const emp = r.e.employeeId ? (db.select({ n: employees.name }).from(employees).where(eq(employees.id, r.e.employeeId)).get()?.n ?? null) : null;
+        return { ...r.e, photo: r.e.photo ? "yes" : "", category: r.catAr ? { nameAr: r.catAr, nameEn: r.catEn } : null, item: it ? { nameAr: it.ar, nameEn: it.en } : null, box: r.boxAr ? { nameAr: r.boxAr, nameEn: r.boxEn } : null, userName: r.userName, employeeName: emp };
       }),
     });
   }),
@@ -63,13 +115,57 @@ expensesRouter.post(
       const date = body.date ?? localDate();
       assertDayOpen(tx, date);
       const rate = rateFor(body.currency);
+      const paid = body.status === "paid";
       tx.insert(expenses)
-        .values({ id, date, categoryId: body.categoryId ?? null, itemId: body.itemId ?? null, amount: body.amount, currency: body.currency, fxRate: rate, amountUsd: round4(toUsd(body.amount, body.currency, rate)), boxId: body.boxId ?? null, assetId: body.assetId ?? null, note: body.note, userId: req.user!.id })
+        .values({
+          id, date, categoryId: body.categoryId ?? null, itemId: body.itemId ?? null, amount: body.amount, currency: body.currency, fxRate: rate, amountUsd: round4(toUsd(body.amount, body.currency, rate)),
+          boxId: paid ? (body.boxId ?? null) : null, assetId: body.assetId ?? null, note: body.note, userId: req.user!.id,
+          status: body.status, dueDate: paid ? null : (body.dueDate ?? date), paidDate: paid ? date : null, paidBy: body.paidBy, beneficiary: body.beneficiary, photo: body.photo, employeeId: body.employeeId ?? null,
+        })
         .run();
-      if (body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "expense", amount: -body.amount, currency: body.currency, rate, refType: "expense", refId: id, note: body.note, userId: req.user!.id, date });
+      if (paid && body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "expense", amount: -body.amount, currency: body.currency, rate, refType: "expense", refId: id, note: body.note, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "expense", entityId: id, after: body });
     });
     res.status(201).json({ id });
+  }),
+);
+
+/** Create this month's due expenses now (also runs by itself every hour). */
+expensesRouter.post(
+  "/recurring/run",
+  requirePerm("expenses", "create"),
+  h((_req, res) => res.json({ created: generateRecurringExpenses() })),
+);
+
+/** Pay an expense that was recorded as due. */
+expensesRouter.post(
+  "/:id/pay",
+  requirePerm("expenses", "create"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const body = parse(z.object({ boxId: z.string().nullable().optional(), paidBy: z.string().trim().max(80).default("") }), req.body);
+    db.transaction((tx) => {
+      const e = tx.select().from(expenses).where(and(eq(expenses.id, id), isNull(expenses.deletedAt))).get();
+      if (!e) throw notFound("expense");
+      if (e.status === "paid") throw new HttpError(409, "already_paid", "This expense is already paid.");
+      const date = localDate();
+      assertDayOpen(tx, date);
+      tx.update(expenses).set({ status: "paid", paidDate: date, boxId: body.boxId ?? null, paidBy: body.paidBy || e.paidBy, updatedAt: nowIso(), syncedAt: null }).where(eq(expenses.id, id)).run();
+      if (body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "expense", amount: -e.amount, currency: e.currency, rate: rateFor(e.currency), refType: "expense", refId: id, note: e.note, userId: req.user!.id, date });
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "expense.payment", entityId: id, after: body });
+    });
+    res.json({ ok: true });
+  }),
+);
+
+/** The receipt photo of an expense. */
+expensesRouter.get(
+  "/:id/photo",
+  requirePerm("expenses", "view"),
+  h((req, res) => {
+    const e = db.select({ photo: expenses.photo }).from(expenses).where(eq(expenses.id, String(req.params.id))).get();
+    if (!e?.photo) throw notFound("photo");
+    res.json({ photo: e.photo });
   }),
 );
 

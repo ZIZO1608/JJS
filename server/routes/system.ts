@@ -18,23 +18,31 @@ export const systemRouter = Router();
 systemRouter.get(
   "/app-settings",
   requireAuth,
-  h((_req, res) => res.json({ defaultCurrency: getSetting("currency.default"), loyalty: getSetting("loyalty"), orders: getSetting("orders"), printing: getSetting("printing"), business: getSetting("business") })),
+  h((_req, res) => res.json({ defaultCurrency: getSetting("currency.default"), loyalty: getSetting("loyalty"), orders: getSetting("orders"), costing: getSetting("costing"), printing: getSetting("printing"), business: getSetting("business") })),
 );
 
 const loyaltySchema = z.object({ enabled: z.boolean(), buyQty: z.number().int().min(1).max(10_000), freeQty: z.number().int().min(1).max(1000) });
-const ordersSchema = z.object({ defaultDeliveryFee: z.number().min(0), allowStacking: z.boolean() });
+const ordersSchema = z.object({
+  defaultDeliveryFee: z.number().min(0),
+  allowStacking: z.boolean(),
+  defaultPaymentTermsDays: z.number().int().min(0).max(365).default(7),
+  defaultReturnAction: z.enum(["restock", "waste"]).default("waste"),
+});
+const costingSchema = z.object({ targetMarginPct: z.number().min(0).max(99), priceAlertPct: z.number().min(0).max(100).default(5) });
 const printingSchema = z.object({
   receiptWidthMm: z.union([z.literal(58), z.literal(80)]),
   labelWidthMm: z.number().min(20).max(120),
   labelHeightMm: z.number().min(15).max(120),
   receiptFooterAr: z.string().max(120),
   receiptFooterEn: z.string().max(120),
+  invoiceSize: z.enum(["thermal", "a4"]).default("thermal"),
 });
 
 for (const [key, schema] of [
   ["loyalty", loyaltySchema],
   ["orders", ordersSchema],
   ["printing", printingSchema],
+  ["costing", costingSchema],
 ] as const) {
   systemRouter.put(
     `/settings/${key}`,

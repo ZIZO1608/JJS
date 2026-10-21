@@ -111,7 +111,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleKey, Permission[]> = {
 /** "Simple mode" (big buttons, no charts/costs) is for anyone who cannot see costs. */
 export const usesSimpleMode = (perms: Iterable<string>) => !new Set(perms).has(perm("costing", "see_cost"));
 
-export const LOOKUP_TYPES = ["expense_item", "expense_category", "unit", "client_tag", "waste_reason"] as const;
+export const LOOKUP_TYPES = ["expense_item", "expense_category", "unit", "client_tag", "waste_reason", "area", "cancel_reason"] as const;
 export type LookupType = (typeof LOOKUP_TYPES)[number];
 
 export const LOOKUP_LABEL: Record<LookupType, { ar: string; en: string }> = {
@@ -120,4 +120,6 @@ export const LOOKUP_LABEL: Record<LookupType, { ar: string; en: string }> = {
   unit: { ar: "وحدات القياس", en: "Units" },
   client_tag: { ar: "تصنيفات الزبائن", en: "Client tags" },
   waste_reason: { ar: "أسباب الهدر", en: "Waste reasons" },
+  area: { ar: "المناطق", en: "Areas" },
+  cancel_reason: { ar: "أسباب إلغاء الفواتير", en: "Invoice cancel reasons" },
 };

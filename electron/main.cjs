@@ -27,7 +27,10 @@ async function boot() {
       autoHideMenuBar: true,
       webPreferences: { contextIsolation: true, nodeIntegration: false },
     });
+    // Receipts, labels and statements open in a small window of the app itself;
+    // anything else (help links) opens in the normal browser.
     win.webContents.setWindowOpenHandler(({ url: target }) => {
+      if (target.startsWith(url)) return { action: "allow", overrideBrowserWindowOptions: { width: 480, height: 760, autoHideMenuBar: true, title: "JJ's ERP" } };
       void shell.openExternal(target);
       return { action: "deny" };
     });

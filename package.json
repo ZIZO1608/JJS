@@ -1,6 +1,6 @@
 {
   "name": "jjs-erp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "JJ's deli shop ERP — offline-first, bilingual (AR/EN)",
   "main": "electron/main.cjs",
@@ -16,7 +16,9 @@
     "desktop": "npm run build && electron .",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win",
+    "test": "node tests/run.mjs",
+    "cloud:schema": "tsx scripts/gen-cloud-schema.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -3,7 +3,7 @@ import { localDate } from "../lib/biz.js";
 import { newId } from "../lib/util.js";
 import { addStock, ensureProductItem } from "../services/stock.js";
 import type { Tx } from "./client.js";
-import { categories, clientTiers, clients, employees, items, locations, lookups, optionGroupLinks, optionGroups, options, products, recipes, subscriptionPlans, suppliers, warehouses } from "./schema.js";
+import { categories, clientTiers, clients, employees, items, locations, lookups, optionGroupLinks, optionGroups, options, priceListItems, priceLists, products, recipes, recurringExpenses, subscriptionPlans, suppliers, warehouses } from "./schema.js";
 
 /**
  * Sample menu, stock and clients so the shop can try everything on day one.
@@ -46,7 +46,8 @@ export function loadDemoData(tx: Tx, userId: string) {
   for (const [key, ar, en, unit, cost, min, qty, place, days] of ing) {
     const id = newId();
     itemId[key] = id;
-    tx.insert(items).values({ id, kind: packaging.has(key) ? "packaging" : "ingredient", nameAr: ar, nameEn: en, unitCode: unit, minLevel: min, avgCostUsd: 0 }).run();
+    const pack = key === "bread" ? { packUnit: "Bag", packSize: 10 } : key === "cup" ? { packUnit: "Carton", packSize: 50 } : key === "patty" ? { packUnit: "Box", packSize: 20 } : {};
+    tx.insert(items).values({ id, kind: packaging.has(key) ? "packaging" : "ingredient", nameAr: ar, nameEn: en, unitCode: unit, minLevel: min, avgCostUsd: 0, ...pack }).run();
     addStock(tx, { itemId: id, locationId: place, qty, unitCostUsd: cost, type: "adjust", expiresAt: days ? new Date(Date.now() + days * 864e5).toISOString() : null }, ctx);
   }
 
@@ -82,9 +83,11 @@ export function loadDemoData(tx: Tx, userId: string) {
   opt(drinkOpts, "ثلج إضافي", "Extra ice", 0);
   tx.insert(optionGroupLinks).values({ id: newId(), groupId: drinkOpts, categoryId: drink }).run();
 
+  const productIds: Record<string, string> = {};
   const prod = (category: string, code: string, ar: string, en: string, price: number, hours: number, allergens: string, recipe: [string, number][], sort: number) => {
     const id = newId();
-    tx.insert(products).values({ id, categoryId: category, code, nameAr: ar, nameEn: en, price, currency: "USD", shelfLifeHours: hours, allergens, sort }).run();
+    productIds[code] = id;
+    tx.insert(products).values({ id, categoryId: category, code, nameAr: ar, nameEn: en, price, currency: "USD", shelfLifeHours: hours, allergens, sort, weightG: code === "LEMON" ? 0 : 220 }).run();
     ensureProductItem(tx, id);
     for (const [k, q] of recipe) tx.insert(recipes).values({ id: newId(), productId: id, itemId: itemId[k]!, qty: q }).run();
     return id;
@@ -102,16 +105,42 @@ export function loadDemoData(tx: Tx, userId: string) {
   const favourite = tx.select().from(clientTiers).where(eq(clientTiers.nameEn, "Favourite")).get()?.id ?? null;
   tx.insert(subscriptionPlans).values({ id: newId(), nameAr: "اشتراك شهري 20", nameEn: "Monthly 20", monthlyFee: 45, currency: "USD", discountPct: 0, includedItems: 20 }).run();
   const tag = (en: string) => tx.select({ id: lookups.id }).from(lookups).where(eq(lookups.nameEn, en)).get()?.id ?? null;
+  // Wholesale price lists (prices per piece)
+  const plDist = newId();
+  const plSmall = newId();
+  tx.insert(priceLists).values([
+    { id: plDist, nameAr: "سعر الموزّع", nameEn: "Distributor price" },
+    { id: plSmall, nameAr: "سعر المحلات الصغيرة", nameEn: "Small shop price" },
+  ]).run();
+  for (const [code, d, sm] of [["TC", 1.9, 2.2], ["CLUB", 2.3, 2.7], ["PESTO", 2.1, 2.45], ["HAL", 1.7, 2.0], ["BEEF", 2.5, 2.9]] as const) {
+    tx.insert(priceListItems).values({ id: newId(), listId: plDist, productId: productIds[code]!, price: d, currency: "USD" }).run();
+    tx.insert(priceListItems).values({ id: newId(), listId: plSmall, productId: productIds[code]!, price: sm, currency: "USD" }).run();
+  }
+  const area = (ar: string, en: string, sort: number) => {
+    const existing = tx.select({ id: lookups.id }).from(lookups).where(eq(lookups.nameEn, en)).get();
+    if (existing) return existing.id;
+    const id = newId();
+    tx.insert(lookups).values({ id, listType: "area", nameAr: ar, nameEn: en, sort }).run();
+    return id;
+  };
+  const downtown = area("وسط المدينة", "Downtown", 10);
+  const uni = area("منطقة الجامعة", "University district", 11);
+  const repId = newId();
+  tx.insert(employees).values({ id: repId, name: "Ahmad (sales & delivery)", jobTitle: "Sales & delivery", payModel: "both", baseSalary: 150, currency: "USD", commissionPct: 3, commissionPerClientUsd: 5, isDeliveryRep: true }).run();
+
   tx.insert(clients).values([
-    { id: newId(), type: "business", name: "Focus Study Zone", contactPerson: "Rami", phone: "+963 944 000 111", tierId: favourite, tagId: tag("Study zone"), creditLimitUsd: 150 },
-    { id: newId(), type: "business", name: "Bean & Book Café", contactPerson: "Sara", phone: "+963 944 000 222", tagId: tag("Café"), creditLimitUsd: 100, creditBlock: true },
-    { id: newId(), type: "business", name: "Corner Market", contactPerson: "Abu Khaled", tagId: tag("Shop"), creditLimitUsd: 60 },
+    { id: newId(), type: "business", name: "Al-Noor Market", contactPerson: "Abu Fadi", phone: "+963 944 000 444", tagId: tag("Shop"), creditLimitUsd: 120, priceListId: plSmall, consignment: true, paymentTermsDays: 7, areaId: downtown, repId },
+    { id: newId(), type: "business", name: "City Distributor", contactPerson: "Omar", phone: "+963 944 000 555", tagId: tag("Shop"), creditLimitUsd: 400, priceListId: plDist, paymentTermsDays: 14, areaId: downtown, repId },
+    { id: newId(), type: "business", name: "Focus Study Zone", contactPerson: "Rami", phone: "+963 944 000 111", tierId: favourite, tagId: tag("Study zone"), creditLimitUsd: 150, areaId: uni, repId, paymentTermsDays: 7 },
+    { id: newId(), type: "business", name: "Bean & Book Café", contactPerson: "Sara", phone: "+963 944 000 222", tagId: tag("Café"), creditLimitUsd: 100, creditBlock: true, areaId: uni, paymentTermsDays: 7 },
+    { id: newId(), type: "business", name: "Corner Market", contactPerson: "Abu Khaled", tagId: tag("Shop"), creditLimitUsd: 60, areaId: downtown, repId },
     { id: newId(), type: "individual", name: "Lina K.", phone: "+963 955 000 333", tagId: tag("Freelancer"), receiptLanguage: "en" },
   ]).run();
   tx.insert(suppliers).values([
     { id: newId(), name: "Al-Hal market (vegetables)", phone: "" },
-    { id: newId(), name: "Cold cuts supplier", phone: "" },
+    { id: newId(), name: "Cold cuts supplier", phone: "", openingBalance: 40, openingCurrency: "USD", openingUsd: 40, paymentTermsDays: 7 },
   ]).run();
-  tx.insert(employees).values({ id: newId(), name: "Ahmad (sales & delivery)", jobTitle: "Sales & delivery", payModel: "both", baseSalary: 150, currency: "USD", commissionPct: 3, commissionPerClientUsd: 5, isDeliveryRep: true }).run();
+  const rentCat = tx.select({ id: lookups.id }).from(lookups).where(eq(lookups.nameEn, "Rent")).get()?.id ?? null;
+  tx.insert(recurringExpenses).values({ id: newId(), categoryId: rentCat, amount: 200, currency: "USD", dayOfMonth: 1, beneficiary: "Landlord", note: "Kitchen rent" }).run();
   return { loaded: true };
 }

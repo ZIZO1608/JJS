@@ -10,6 +10,7 @@ import { currentRate, localDate } from "./lib/biz.js";
 import { getSetting } from "./lib/settings.js";
 import { renewSubscriptions } from "./services/clients.js";
 import { startSyncScheduler } from "./services/sync.js";
+import { generateRecurringExpenses } from "./routes/expenses.js";
 
 /** Start the local server. Used by `npm run dev`, `npm start` and the Electron wrapper. */
 export async function start(port = PORT, host?: string) {
@@ -23,6 +24,11 @@ export async function start(port = PORT, host?: string) {
       db.transaction((tx) => renewSubscriptions(tx, localDate(), currentRate()));
     } catch (e) {
       console.error("[subscriptions] renew failed", e);
+    }
+    try {
+      generateRecurringExpenses();
+    } catch (e) {
+      console.error("[expenses] monthly expenses failed", e);
     }
   };
   renew();
