@@ -106,24 +106,34 @@ export function seed() {
 }
 
 /**
- * Online server: the first Admin comes from JJS_ADMIN_USERNAME / JJS_ADMIN_PASSWORD, so nobody
- * who opens the public site first can claim the setup page. Does nothing once any user exists.
+ * Online server: one login per system role from JJS_<ROLE>_USERNAME / _PASSWORD / _NAME
+ * (ADMIN, MANAGER, MEMBER), so nobody who opens the public site first can claim the setup page.
+ * A user is created only if that username doesn't exist yet; existing passwords are never touched.
  */
-export function seedAdminFromEnv() {
-  const username = process.env.JJS_ADMIN_USERNAME?.trim().toLowerCase();
-  const password = process.env.JJS_ADMIN_PASSWORD;
-  if (!username || !password) return;
-  if ((db.select({ n: count() }).from(users).get()?.n ?? 0) > 0) return;
-  if (password.length < 6) throw new Error("JJS_ADMIN_PASSWORD must be at least 6 characters");
-  const admin = db.select().from(roles).where(eq(roles.systemKey, "admin")).get();
-  if (!admin) throw new Error("The Admin role is missing");
+export function seedUsersFromEnv() {
+  const firstStart = (db.select({ n: count() }).from(users).get()?.n ?? 0) === 0;
+  const wanted = (["admin", "manager", "member"] as const).flatMap((key) => {
+    const env = (field: string) => process.env[`JJS_${key.toUpperCase()}_${field}`]?.trim();
+    const username = env("USERNAME")?.toLowerCase();
+    const password = env("PASSWORD");
+    if (!username && !password) return [];
+    const prefix = `JJS_${key.toUpperCase()}`;
+    if (!username || !/^[a-z0-9._-]{2,30}$/.test(username)) throw new Error(`${prefix}_USERNAME: 2–30 English letters, numbers, dot, dash or underscore`);
+    if (!password || password.length < 6) throw new Error(`${prefix}_PASSWORD must be at least 6 characters`);
+    return [{ key, username, password, name: env("NAME") || username }];
+  });
+  if (new Set(wanted.map((w) => w.username)).size !== wanted.length) throw new Error("JJS_*_USERNAME: each role needs a different username");
+
   db.transaction((tx) => {
-    tx.insert(users)
-      .values({ id: newId(), name: process.env.JJS_ADMIN_NAME?.trim() || username, username, passwordHash: hashPassword(password), roleId: admin.id, language: "ar" })
-      .run();
+    for (const w of wanted) {
+      if (tx.select().from(users).where(eq(users.username, w.username)).get()) continue;
+      const role = tx.select().from(roles).where(eq(roles.systemKey, w.key)).get();
+      if (!role) throw new Error(`The ${w.key} role is missing`);
+      tx.insert(users).values({ id: newId(), name: w.name, username: w.username, passwordHash: hashPassword(w.password), roleId: role.id, language: "ar" }).run();
+      console.log(`[jjs] ${w.key} "${w.username}" created from environment`);
+    }
     const nameEn = process.env.JJS_BUSINESS_NAME_EN?.trim();
     const nameAr = process.env.JJS_BUSINESS_NAME_AR?.trim();
-    if (nameEn || nameAr) setSetting("business", { ...getSetting("business"), ...(nameAr && { nameAr }), ...(nameEn && { nameEn }) }, tx);
+    if (firstStart && (nameEn || nameAr)) setSetting("business", { ...getSetting("business"), ...(nameAr && { nameAr }), ...(nameEn && { nameEn }) }, tx);
   });
-  console.log(`[jjs] admin "${username}" created from environment`);
 }

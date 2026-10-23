@@ -15,18 +15,37 @@ Check it with `nslookup jjs.ahmad-zaven.io` before going on.
 3. **Domains:** `https://jjs.ahmad-zaven.io`. Coolify gets the free SSL certificate by itself.
 4. **Persistent Storage → + Add → Volume:** name `jjs-data`, destination path `/data`.
    **Do not skip this.** Without it, every redeploy wipes the database.
-5. **Environment Variables** (tick "Is Secret" for the password):
+5. **Environment Variables**: one login for each role. Tick "Is Secret" for the passwords.
 
-   | Name | Example | What it does |
-   |---|---|---|
-   | `JJS_ADMIN_USERNAME` | `zaven` | First Admin's username (English letters/numbers) |
-   | `JJS_ADMIN_PASSWORD` | a strong password, 6+ characters | First Admin's password |
-   | `JJS_ADMIN_NAME` | `Zaven` | Name shown in the app |
-   | `JJS_BUSINESS_NAME_AR` | `جي جيز ديلي شوب` | Business name in Arabic |
-   | `JJS_BUSINESS_NAME_EN` | `JJ's deli shop` | Business name in English |
+   ```
+   JJS_ADMIN_USERNAME=zaven
+   JJS_ADMIN_PASSWORD=<strong password>
+   JJS_ADMIN_NAME=Zaven
 
-   These are used **only on the first start**, when the database has no users. Changing them later does nothing; change passwords inside the app.
-   Because the Admin is created from these values, a stranger who opens the site first cannot claim the setup page.
+   JJS_MANAGER_USERNAME=rami
+   JJS_MANAGER_PASSWORD=<strong password>
+   JJS_MANAGER_NAME=رامي
+
+   JJS_MEMBER_USERNAME=sami
+   JJS_MEMBER_PASSWORD=<strong password>
+   JJS_MEMBER_NAME=سامي
+
+   JJS_BUSINESS_NAME_AR=جي جيز ديلي شوب
+   JJS_BUSINESS_NAME_EN=JJ's deli shop
+   ```
+
+   | Role | Can do |
+   |---|---|
+   | **Admin** | Everything, including users, roles, audit and settings |
+   | **Manager** | Daily work and reports, but not users, roles or audit |
+   | **Member** | Daily work only (orders, production, stock…) |
+
+   Rules:
+   - Usernames: 2–30 English letters, numbers, `.` `-` `_`, all different. Capital and small letters are the same.
+   - Passwords: 6+ characters. Bad values stop the server with a clear message in the Coolify logs.
+   - A user is created only if that username doesn't exist yet. **Changing a password here later does nothing.** Change it inside the app (Users page, or the user menu → Change password) or with the reset command below.
+   - Leave a role's variables out to skip that role.
+   - The Admin is created from these values, so a stranger who opens the site first cannot claim the setup page.
 6. **Deploy.** When the status turns green (healthy), open https://jjs.ahmad-zaven.io and log in.
 
 Every `git push` to `main` redeploys automatically when the GitHub App is connected. If it doesn't, turn on **Auto Deploy** in the app settings.
