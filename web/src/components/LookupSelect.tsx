@@ -3,7 +3,7 @@ import { LOOKUP_LABEL, type LookupType } from "@shared/permissions";
 import { ApiError, get, post } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
-import { Field, Modal, TextInput } from "./ui";
+import { Field, Modal, Select, TextInput } from "./ui";
 
 export interface LookupItem {
   id: string;
@@ -74,9 +74,8 @@ export function LookupSelect({
 
   return (
     <>
-      <select
+      <Select
         id={id}
-        className="input"
         value={value}
         onChange={(e) => (e.target.value === ADD ? setAdding(true) : onChange(e.target.value))}
       >
@@ -87,7 +86,7 @@ export function LookupSelect({
           </option>
         ))}
         {canAdd && <option value={ADD}>{t("lists.addNew")}</option>}
-      </select>
+      </Select>
       {adding && (
         <Modal
           title={t("lists.addTitle", { list: pick(LOOKUP_LABEL[listType]) })}

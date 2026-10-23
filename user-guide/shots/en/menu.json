@@ -1,0 +1,36 @@
+{
+  "image": "menu.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/menu/products",
+  "display_url": "JJ's ERP/menu/products",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "tabs": [
+      28,
+      101.2,
+      704,
+      41.2
+    ],
+    "new": [
+      617.6,
+      175.5,
+      101.4,
+      41.2
+    ],
+    "row": [
+      29,
+      416.2,
+      702,
+      93
+    ],
+    "margin": [
+      479.9,
+      229.8,
+      71.3,
+      32.5
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

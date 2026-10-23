@@ -1,0 +1,30 @@
+{
+  "image": "calendar.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/expenses",
+  "display_url": "JJ's ERP/expenses",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "month": [
+      135.1,
+      -0.2,
+      119.8,
+      35.2
+    ],
+    "today": [
+      273.5,
+      317.8,
+      58.5,
+      28
+    ],
+    "sel": [
+      215.7,
+      184.4,
+      37.4,
+      37.4
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

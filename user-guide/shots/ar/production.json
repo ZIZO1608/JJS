@@ -1,0 +1,42 @@
+{
+  "image": "production.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/production/new",
+  "display_url": "JJ's ERP/production/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "qty": [
+      438,
+      281.8,
+      56,
+      40
+    ],
+    "materials": [
+      45,
+      514.8,
+      670,
+      23.2
+    ],
+    "by": [
+      45,
+      952,
+      670,
+      41.2
+    ],
+    "place": [
+      45,
+      1029.2,
+      670,
+      41.2
+    ],
+    "confirm": [
+      45,
+      1159.8,
+      670,
+      54
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

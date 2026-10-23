@@ -1,0 +1,42 @@
+{
+  "image": "client-payment.png",
+  "width": 464,
+  "height": 495,
+  "url": "http://127.0.0.1:4396/clients/01a15e69-f2f0-7494-b270-acd46f753ee7",
+  "display_url": "JJ's ERP/clients/01a15e69-f2f0-7494-b270-acd46f753ee7",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "amount": [
+      28,
+      128.0,
+      308.5,
+      46
+    ],
+    "cur": [
+      344.5,
+      128.0,
+      91.5,
+      41.2
+    ],
+    "method": [
+      28,
+      210.0,
+      408,
+      41.2
+    ],
+    "kind": [
+      28,
+      287.2,
+      408,
+      41.2
+    ],
+    "save": [
+      28,
+      210.0,
+      68.3,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

@@ -450,7 +450,7 @@ function SpecialPrices({ d, onSaved }: { d: Detail; onSaved: () => void }) {
                           onChange={(e) => setVals({ ...vals, [p.id]: { ...v, price: e.target.value } })}
                           aria-label={tr(`سعر خاص ${p.nameAr}`, `Special price ${p.nameEn}`)}
                         />
-                        <select
+                        <Select
                           className="input w-20 py-1"
                           disabled={!editable}
                           value={v.currency}
@@ -459,7 +459,7 @@ function SpecialPrices({ d, onSaved }: { d: Detail; onSaved: () => void }) {
                         >
                           <option value="USD">USD</option>
                           <option value="SYP">SYP</option>
-                        </select>
+                        </Select>
                       </div>
                     </td>
                   </tr>
@@ -685,7 +685,7 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
           <div className="grid gap-2">
             {lines.map((l, i) => (
               <div key={i} className="flex gap-2">
-                <select
+                <Select
                   className="input flex-1"
                   value={l.productId}
                   onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, productId: e.target.value, optionIds: [] } : x)))}
@@ -696,7 +696,7 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
                       {pick(p)}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <input
                   className="input w-24 num"
                   dir="ltr"

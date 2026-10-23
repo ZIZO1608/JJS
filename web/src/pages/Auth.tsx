@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from "react";
+import { InstallButton } from "../components/InstallButton";
 import { Field, TextInput } from "../components/ui";
 import { ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -27,6 +28,7 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="card p-6">{children}</div>
+        <InstallButton className="mt-4 w-full py-3" />
       </div>
     </div>
   );

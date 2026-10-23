@@ -36,7 +36,8 @@ export function createSession(res: Response, userId: string) {
   const token = crypto.randomBytes(32).toString("base64url");
   const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
   db.insert(sessions).values({ tokenHash: hashToken(token), userId, expiresAt: expires.toISOString() }).run();
-  res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", expires, path: "/" });
+  // Behind HTTPS (the online server) the cookie is never sent over plain http.
+  res.cookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: "lax", secure: res.req.secure, expires, path: "/" });
 }
 
 export function destroySession(req: Request, res: Response) {

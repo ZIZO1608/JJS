@@ -31,6 +31,8 @@ import { wholesaleRouter } from "./routes/wholesale.js";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  // Online, Coolify's proxy ends HTTPS in front of us; trust its X-Forwarded-* headers.
+  if (process.env.JJS_TRUST_PROXY === "1") app.set("trust proxy", 1);
   app.use(express.json({ limit: "6mb" }));
   app.use(cookieParser());
   app.use(sessionMiddleware);

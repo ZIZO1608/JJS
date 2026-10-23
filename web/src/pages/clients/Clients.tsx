@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { DataTable, type Column } from "../../components/DataTable";
 import { Stat } from "../../components/Tabs";
-import { Empty, PageHeader, Spinner } from "../../components/ui";
+import { Empty, PageHeader, Select, Spinner } from "../../components/ui";
 import { useAuth } from "../../lib/auth";
 import { money } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -240,14 +240,14 @@ export function ClientsPage() {
             toolbar={
               <div className="flex flex-wrap items-center gap-1">
                 {(areas.data?.items.length ?? 0) > 0 && (
-                  <select className="input w-auto py-1 text-sm" value={area} onChange={(e) => setArea(e.target.value)} aria-label={tr("المنطقة", "Area")}>
+                  <Select className="input w-auto py-1 text-sm" value={area} onChange={(e) => setArea(e.target.value)} aria-label={tr("المنطقة", "Area")}>
                     <option value="">{tr("كل المناطق", "All areas")}</option>
                     {areas.data!.items.map((a) => (
                       <option key={a.id} value={a.id}>
                         {pick(a)}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 )}
                 {FILTERS.map((x) => (
                   <button

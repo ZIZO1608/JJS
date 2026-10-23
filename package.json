@@ -17,12 +17,15 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p web/tsconfig.json --noEmit",
     "dist:win": "npm run build && electron-builder --win",
+    "dist:win:server": "electron-builder --win --config electron-builder.server.json",
+    "dist:win:client": "electron-builder --win --config electron-builder.client.json",
+    "dist:win:two": "npm run build && npm run dist:win:server && npm run dist:win:client",
     "test": "node tests/run.mjs",
     "cloud:schema": "tsx scripts/gen-cloud-schema.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.11.1",
     "cookie-parser": "^1.4.7",
     "drizzle-orm": "^0.38.3",
     "express": "^4.21.2",

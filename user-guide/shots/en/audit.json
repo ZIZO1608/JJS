@@ -1,0 +1,24 @@
+{
+  "image": "audit.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/audit",
+  "display_url": "JJ's ERP/audit",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "filter": [
+      45,
+      142.2,
+      329,
+      41.2
+    ],
+    "row": [
+      29,
+      404.5,
+      702,
+      51
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

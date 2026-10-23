@@ -25,8 +25,11 @@ for (const files of suites) {
     const code = await new Promise((r) => spawn(process.execPath, [path.join("tests", f)], { env: { ...process.env, BASE: base }, stdio: "inherit" }).on("exit", r));
     if (code) failed++;
   }
+  // Wait for the server to exit before deleting: on Windows the open database file blocks removal.
+  const exited = new Promise((r) => server.once("exit", r));
   server.kill();
-  fs.rmSync(dir, { recursive: true, force: true });
+  await exited;
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 }
 console.log(failed ? `\n${failed} suite(s) failed` : "\nAll API suites passed");
 process.exit(failed ? 1 : 0);

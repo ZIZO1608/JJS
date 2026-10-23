@@ -813,7 +813,7 @@ function SalesCalls() {
         searchText={(c) => `${c.clientName ?? ""} ${c.prospectName} ${c.phone} ${c.note}`}
         toolbar={
           <>
-            <select className="input w-auto" value={result} onChange={(e) => setResult(e.target.value as CallResult | "" | "due")} aria-label={tr("فلتر", "Filter")}>
+            <Select className="input w-auto" value={result} onChange={(e) => setResult(e.target.value as CallResult | "" | "due")} aria-label={tr("فلتر", "Filter")}>
               <option value="">{tr("كل النتائج", "All results")}</option>
               <option value="due">{tr("متابعات مستحقة", "Follow-ups due")}</option>
               {RESULTS.map((r) => (
@@ -821,7 +821,7 @@ function SalesCalls() {
                   {label(r)}
                 </option>
               ))}
-            </select>
+            </Select>
             {can("clients", "create") && (
               <button className="btn btn-primary" onClick={() => setEditing("new")}>
                 {tr("+ مكالمة", "+ Call")}

@@ -1,0 +1,42 @@
+{
+  "image": "purchase.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/purchasing/new",
+  "display_url": "JJ's ERP/purchasing/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "supplier": [
+      45,
+      203.5,
+      215.3,
+      41.2
+    ],
+    "inv": [
+      272.3,
+      203.5,
+      215.3,
+      41.2
+    ],
+    "disc": [
+      45,
+      568.5,
+      329,
+      41.2
+    ],
+    "transport": [
+      386,
+      568.5,
+      329,
+      41.2
+    ],
+    "due": [
+      45,
+      665.8,
+      329,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

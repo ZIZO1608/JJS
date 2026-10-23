@@ -1,0 +1,77 @@
+{
+ "base_url": "http://127.0.0.1:4396",
+ "display_base_url": "JJ's ERP",
+ "viewport": {
+  "width": 1000,
+  "height": 760
+ },
+ "device_scale_factor": 2,
+ "delay_ms": 400,
+ "hide": [
+  "[role=status]",
+  ".toast"
+ ],
+ "login": {
+  "url": "/",
+  "actions": [
+   {
+    "fill": {
+     "selector": "#login-user",
+     "value": "member1"
+    }
+   },
+   {
+    "fill": {
+     "selector": "#login-pass",
+     "value": "member123"
+    }
+   },
+   {
+    "press": "Enter"
+   },
+   {
+    "wait_for": "header"
+   }
+  ]
+ },
+ "languages": {
+  "ar": {
+   "setup": [
+    {
+     "click": "header button:text-is('عربي')"
+    },
+    {
+     "wait_for": "html[dir=rtl]"
+    }
+   ],
+   "locale": "ar-SY"
+  },
+  "en": {
+   "setup": [
+    {
+     "click": "header button:text-is('EN')"
+    },
+    {
+     "wait_for": "html[dir=ltr]"
+    }
+   ],
+   "locale": "en-GB"
+  }
+ },
+ "screens": [
+  {
+   "id": "member-home",
+   "url": "/",
+   "callouts": [
+    {
+     "key": "invoice",
+     "selector": "main a:has-text('New invoice'), main a:has-text('فاتورة جديدة'), main button:has-text('New invoice') >> nth=0"
+    },
+    {
+     "key": "tabs",
+     "selector": "nav[aria-label=Sections]"
+    }
+   ]
+  }
+ ]
+}

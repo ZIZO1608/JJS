@@ -1,0 +1,30 @@
+{
+  "image": "order-account.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "search": [
+      161.3,
+      242.2,
+      553.7,
+      41.2
+    ],
+    "client": [
+      45,
+      295.5,
+      331,
+      65.2
+    ],
+    "newc": [
+      45,
+      242.2,
+      108.3,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

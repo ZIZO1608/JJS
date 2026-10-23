@@ -1,0 +1,18 @@
+{
+  "image": "five.png",
+  "width": 720,
+  "height": 394,
+  "url": "http://127.0.0.1:4396/",
+  "display_url": "JJ's ERP/",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "wa": [
+      545.5,
+      25.0,
+      149.5,
+      30
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

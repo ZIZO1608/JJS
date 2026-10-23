@@ -1,0 +1,36 @@
+{
+  "image": "orders-list.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/orders",
+  "display_url": "JJ's ERP/orders",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "date": [
+      67.0,
+      85.2,
+      165.3,
+      41.2
+    ],
+    "search": [
+      279.2,
+      85.2,
+      320,
+      41.2
+    ],
+    "row": [
+      29,
+      200,
+      702,
+      41
+    ],
+    "new": [
+      613.0,
+      24,
+      119.0,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

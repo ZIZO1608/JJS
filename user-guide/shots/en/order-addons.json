@@ -1,0 +1,30 @@
+{
+  "image": "order-addons.png",
+  "width": 688,
+  "height": 325,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "extras": [
+      28,
+      103.2,
+      171.9,
+      41.2
+    ],
+    "qty": [
+      128,
+      253.0,
+      44,
+      44
+    ],
+    "add": [
+      523.3,
+      253.0,
+      136.7,
+      44
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

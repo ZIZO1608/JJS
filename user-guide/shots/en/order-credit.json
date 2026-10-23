@@ -1,0 +1,30 @@
+{
+  "image": "order-credit.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "paid": [
+      45,
+      401.2,
+      192,
+      41.2
+    ],
+    "balance": [
+      45,
+      1096.8,
+      670,
+      20
+    ],
+    "credit": [
+      224.9,
+      324,
+      89.7,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

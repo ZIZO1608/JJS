@@ -1,0 +1,48 @@
+{
+  "image": "order-pay.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "pickup": [
+      45,
+      201.5,
+      73.6,
+      41.2
+    ],
+    "method": [
+      45,
+      324,
+      60.3,
+      41.2
+    ],
+    "paid": [
+      45,
+      425.2,
+      192,
+      41.2
+    ],
+    "disc": [
+      45,
+      560.5,
+      128,
+      41.2
+    ],
+    "print": [
+      28,
+      1019.8,
+      704,
+      20
+    ],
+    "confirm": [
+      28,
+      1051.8,
+      704,
+      54
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

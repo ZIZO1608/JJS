@@ -1,0 +1,30 @@
+{
+  "image": "product.png",
+  "width": 688,
+  "height": 916,
+  "url": "http://127.0.0.1:4396/menu/products",
+  "display_url": "JJ's ERP/menu/products",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "cat": [
+      140,
+      18,
+      254,
+      41.2
+    ],
+    "price": [
+      350,
+      126,
+      310,
+      41.2
+    ],
+    "recipe": [
+      573.6,
+      499.2,
+      73.4,
+      20
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

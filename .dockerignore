@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+release
+.git
+.vscode
+user-guide
+tests
+docs
+cloud
+*.log
+.env*

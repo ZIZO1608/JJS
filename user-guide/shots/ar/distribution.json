@@ -1,0 +1,42 @@
+{
+  "image": "distribution.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/distribution/route",
+  "display_url": "JJ's ERP/distribution/route",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "tabs": [
+      28,
+      101.2,
+      704,
+      41.2
+    ],
+    "print": [
+      321.4,
+      186.5,
+      134.4,
+      41.2
+    ],
+    "inv": [
+      647,
+      388.8,
+      68,
+      41.2
+    ],
+    "cons": [
+      523.6,
+      388.8,
+      115.4,
+      41.2
+    ],
+    "ret": [
+      445.6,
+      388.8,
+      70.0,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

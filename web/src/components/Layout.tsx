@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { Icon } from "./Icon";
+import { InstallButton } from "./InstallButton";
 import { Field, Modal, TextInput } from "./ui";
 
 export const pathFor = (m: Module) =>
@@ -127,6 +128,7 @@ export function Layout() {
         </div>
         <div className="ms-auto flex items-center gap-3">
           {!simple && <RateChip />}
+          <InstallButton className="hidden px-3 py-1.5 text-sm sm:inline-flex" />
           <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group" aria-label={t("auth.language")}>
             {(["ar", "en"] as const).map((l) => (
               <button

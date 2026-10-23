@@ -1,0 +1,36 @@
+{
+  "image": "client-page.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/clients/01a15e69-f2f0-7494-b270-acd46f753ee7",
+  "display_url": "JJ's ERP/clients/01a15e69-f2f0-7494-b270-acd46f753ee7",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "pay": [
+      632.6,
+      127.2,
+      99.4,
+      41.2
+    ],
+    "balance": [
+      386,
+      212.5,
+      346,
+      122
+    ],
+    "limit": [
+      386,
+      346.5,
+      346,
+      98
+    ],
+    "statement": [
+      428.1,
+      464.5,
+      100.7,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

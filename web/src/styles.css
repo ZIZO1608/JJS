@@ -67,7 +67,81 @@ h3 {
     @apply rounded-xl border border-line bg-surface p-4;
   }
   .input {
-    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink placeholder:text-faint focus:border-ink focus:outline-none disabled:opacity-60;
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-ink transition-[border-color,box-shadow] placeholder:text-faint focus:border-brand focus:shadow-[0_0_0_3px_rgb(var(--brand)/0.15)] focus:outline-none disabled:opacity-60;
+  }
+
+  /* Branded dropdown (components/Dropdown.tsx) and calendar (components/DateField.tsx) */
+  .dd-trigger {
+    @apply flex cursor-pointer items-center gap-2 text-start hover:border-brand/60 disabled:cursor-not-allowed disabled:hover:border-line;
+  }
+  .dd-trigger:focus-visible {
+    outline: none;
+  }
+  .dd-open {
+    @apply border-brand shadow-[0_0_0_3px_rgb(var(--brand)/0.15)];
+  }
+  .dd-chevron {
+    @apply h-4 w-4 shrink-0 text-brand transition-transform duration-150;
+  }
+  .dd-pop {
+    @apply z-50 overflow-y-auto overscroll-contain rounded-xl border border-line bg-surface p-1 shadow-[0_12px_32px_-8px_rgb(0_0_0/0.25)] outline-none;
+    animation: jj-pop 0.12s ease-out;
+  }
+  .dd-search {
+    @apply w-full rounded-lg border border-line bg-sunken px-3 py-1.5 text-sm text-ink placeholder:text-faint focus:border-brand focus:outline-none;
+  }
+  .dd-group {
+    @apply px-3 pb-1 pt-2.5 text-xs font-semibold uppercase tracking-wide text-brand;
+  }
+  .dd-option {
+    @apply flex cursor-pointer select-none items-center gap-2 rounded-lg px-3 py-2 text-ink;
+  }
+  .dd-active {
+    @apply bg-brand/10;
+  }
+  .dd-selected {
+    @apply font-semibold text-brand;
+  }
+  .cal-pop {
+    @apply z-50 rounded-2xl border border-line bg-surface p-3 shadow-[0_12px_32px_-8px_rgb(0_0_0/0.25)];
+    animation: jj-pop 0.12s ease-out;
+  }
+  .cal-head {
+    @apply mb-2 flex items-center justify-between gap-1;
+  }
+  .cal-title {
+    @apply rounded-lg px-3 py-1.5 font-bold text-ink hover:bg-brand/10 hover:text-brand;
+  }
+  .cal-nav {
+    @apply grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-brand/10 hover:text-brand;
+  }
+  .cal-weekday {
+    @apply pb-1 text-center text-[11px] font-semibold text-faint;
+  }
+  .cal-day {
+    @apply grid aspect-square place-items-center rounded-full text-sm text-ink hover:bg-brand/10 hover:text-brand disabled:cursor-not-allowed disabled:text-faint/50 disabled:hover:bg-transparent;
+  }
+  .cal-month {
+    @apply rounded-lg px-1 py-2.5 text-sm text-ink hover:bg-brand/10 hover:text-brand disabled:cursor-not-allowed disabled:text-faint/50 disabled:hover:bg-transparent;
+  }
+  .cal-out {
+    @apply text-faint;
+  }
+  .cal-today {
+    @apply font-bold text-brand ring-1 ring-inset ring-brand/50;
+  }
+  .cal-sel,
+  .cal-sel:hover {
+    @apply bg-brand font-bold text-white ring-0;
+  }
+  input[type="file"] {
+    @apply text-sm text-muted;
+  }
+  input[type="file"]::file-selector-button {
+    @apply me-3 cursor-pointer rounded-lg border border-brand/40 bg-brand/10 px-3 py-1.5 font-semibold text-brand transition-colors hover:bg-brand/20;
+  }
+  .cal-link {
+    @apply rounded-lg px-2.5 py-1 text-sm font-semibold hover:bg-brand/10 disabled:opacity-40;
   }
   .label {
     @apply mb-1 block text-sm font-medium text-muted;
@@ -95,8 +169,46 @@ h3 {
   }
 }
 
+@keyframes jj-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+/* Branded scrollbars: a thin orange pill that darkens on hover. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--brand) / 0.45);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--brand) / 0.75);
+}
+::-webkit-scrollbar-thumb:active {
+  background-color: rgb(var(--brand));
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--brand) / 0.55) transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }

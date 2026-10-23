@@ -1,0 +1,36 @@
+{
+  "image": "reports.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/reports",
+  "display_url": "JJ's ERP/reports",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "presets": [
+      384.8,
+      85.2,
+      92.7,
+      37.2
+    ],
+    "range": [
+      546.5,
+      130.5,
+      177.5,
+      41.2
+    ],
+    "print": [
+      28,
+      24,
+      69.3,
+      41.2
+    ],
+    "pl": [
+      45,
+      332.8,
+      670,
+      23.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

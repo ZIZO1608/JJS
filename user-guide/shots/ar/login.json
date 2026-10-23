@@ -1,0 +1,30 @@
+{
+  "image": "login.png",
+  "width": 488,
+  "height": 350.5,
+  "url": "http://127.0.0.1:4396/",
+  "display_url": "JJ's ERP/",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "user": [
+      45,
+      117.0,
+      398,
+      41.2
+    ],
+    "pass": [
+      45,
+      194.2,
+      398,
+      41.2
+    ],
+    "go": [
+      45,
+      255.5,
+      398,
+      50
+    ]
+  },
+  "captured": "2026-10-21 16:07"
+}

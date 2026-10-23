@@ -15,6 +15,11 @@ import { AuthProvider } from "./lib/auth";
 import { I18nProvider } from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
 
+// Lets the browser install the app (desktop / home-screen icon). Not in dev: Vite serves fresh files.
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(() => undefined));
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>

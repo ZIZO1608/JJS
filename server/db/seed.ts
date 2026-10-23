@@ -1,9 +1,10 @@
 import { count, eq } from "drizzle-orm";
 import { DEFAULT_ROLE_PERMISSIONS, type SystemRoleKey } from "../../shared/permissions.js";
+import { hashPassword } from "../lib/auth.js";
 import { newId } from "../lib/util.js";
 import { db } from "./client.js";
 import { getSetting, setSetting } from "../lib/settings.js";
-import { cashBoxes, clientTiers, locations, lookups, paymentMethods, permissions, roles, warehouses } from "./schema.js";
+import { cashBoxes, clientTiers, locations, lookups, paymentMethods, permissions, roles, users, warehouses } from "./schema.js";
 
 const SYSTEM_ROLES: { key: SystemRoleKey; nameAr: string; nameEn: string }[] = [
   { key: "admin", nameAr: "الإدارة", nameEn: "Admin" },
@@ -102,4 +103,27 @@ export function seed() {
       setSetting("seed.version", 2, tx);
     }
   });
+}
+
+/**
+ * Online server: the first Admin comes from JJS_ADMIN_USERNAME / JJS_ADMIN_PASSWORD, so nobody
+ * who opens the public site first can claim the setup page. Does nothing once any user exists.
+ */
+export function seedAdminFromEnv() {
+  const username = process.env.JJS_ADMIN_USERNAME?.trim().toLowerCase();
+  const password = process.env.JJS_ADMIN_PASSWORD;
+  if (!username || !password) return;
+  if ((db.select({ n: count() }).from(users).get()?.n ?? 0) > 0) return;
+  if (password.length < 6) throw new Error("JJS_ADMIN_PASSWORD must be at least 6 characters");
+  const admin = db.select().from(roles).where(eq(roles.systemKey, "admin")).get();
+  if (!admin) throw new Error("The Admin role is missing");
+  db.transaction((tx) => {
+    tx.insert(users)
+      .values({ id: newId(), name: process.env.JJS_ADMIN_NAME?.trim() || username, username, passwordHash: hashPassword(password), roleId: admin.id, language: "ar" })
+      .run();
+    const nameEn = process.env.JJS_BUSINESS_NAME_EN?.trim();
+    const nameAr = process.env.JJS_BUSINESS_NAME_AR?.trim();
+    if (nameEn || nameAr) setSetting("business", { ...getSetting("business"), ...(nameAr && { nameAr }), ...(nameEn && { nameEn }) }, tx);
+  });
+  console.log(`[jjs] admin "${username}" created from environment`);
 }

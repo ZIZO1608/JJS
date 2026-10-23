@@ -1,0 +1,30 @@
+{
+  "image": "warehouse.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/warehouse/fridge",
+  "display_url": "JJ's ERP/warehouse/fridge",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "tabs": [
+      28,
+      101.2,
+      704,
+      41.2
+    ],
+    "scan": [
+      28,
+      162.5,
+      294,
+      41.2
+    ],
+    "batch": [
+      29,
+      307,
+      702,
+      60.2
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

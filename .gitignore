@@ -4,3 +4,7 @@ data/
 *.log
 .DS_Store
 release/
+user-guide/out/
+user-guide/.build-*
+.env
+.env.*

@@ -1,0 +1,30 @@
+{
+  "image": "clients.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/clients",
+  "display_url": "JJ's ERP/clients",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "new": [
+      611.5,
+      40,
+      120.5,
+      41.2
+    ],
+    "filters": [
+      213.3,
+      287.5,
+      118.5,
+      30
+    ],
+    "row": [
+      29,
+      530,
+      778.6,
+      109
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

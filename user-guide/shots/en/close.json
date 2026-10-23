@@ -1,0 +1,30 @@
+{
+  "image": "close.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/close",
+  "display_url": "JJ's ERP/close",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "rep": [
+      570.7,
+      221.5,
+      131.3,
+      41.2
+    ],
+    "count": [
+      45,
+      571.8,
+      212.7,
+      46
+    ],
+    "withdraw": [
+      28,
+      93.2,
+      177.5,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

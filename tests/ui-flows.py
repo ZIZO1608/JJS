@@ -134,7 +134,8 @@ with sync_playwright() as p:
         page.goto(BASE + f"/clients/{clients['City Distributor']['id']}")
         page.get_by_role("button", name="Return").first.click()
         dialog = page.get_by_role("dialog")
-        dialog.locator("#rt-o").select_option(index=1)
+        dialog.locator("#rt-o").click()
+        page.get_by_role("option").nth(1).click()
         page.wait_for_timeout(500)
         row = dialog.locator("div.grid").filter(has_text="Turkey & Cheddar").last
         row.get_by_role("button", name="+").click()

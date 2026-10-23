@@ -1,0 +1,24 @@
+{
+  "image": "usermenu.png",
+  "width": 1000,
+  "height": 760,
+  "url": "http://127.0.0.1:4396/",
+  "display_url": "JJ's ERP/",
+  "clipped": false,
+  "device": "desktop",
+  "boxes": {
+    "pwd": [
+      21,
+      69,
+      198,
+      39.2
+    ],
+    "out": [
+      21,
+      108.2,
+      198,
+      39.2
+    ]
+  },
+  "captured": "2026-10-21 16:07"
+}

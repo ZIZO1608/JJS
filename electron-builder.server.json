@@ -1,0 +1,15 @@
+{
+  "appId": "com.jjs.erp.server",
+  "productName": "JJ's ERP Server",
+  "files": ["dist/**/*", "electron/server.cjs", "drizzle/**/*", "package.json"],
+  "extraMetadata": { "name": "jjs-erp-server", "main": "electron/server.cjs" },
+  "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico" },
+  "directories": { "buildResources": "build", "output": "release/server" },
+  "nsis": {
+    "oneClick": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "shortcutName": "JJ's ERP Server",
+    "runAfterFinish": true
+  }
+}

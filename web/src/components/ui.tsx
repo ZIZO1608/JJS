@@ -1,5 +1,7 @@
 import { useEffect, useRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { useI18n } from "../lib/i18n";
+import { DateField } from "./DateField";
+import { Dropdown } from "./Dropdown";
 
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
   return (
@@ -26,11 +28,12 @@ export function Field({ label, error, hint, children, htmlFor }: { label: string
 }
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
+  if (props.type === "date" || props.type === "month") return <DateField {...props} />;
   return <input {...props} className={`input ${props.className ?? ""}`} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={`input ${props.className ?? ""}`} />;
+  return <Dropdown {...props} />;
 }
 
 export function Modal({

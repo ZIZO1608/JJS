@@ -1,0 +1,30 @@
+{
+  "image": "currency.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/settings/currency",
+  "display_url": "JJ's ERP/settings/currency",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "manual": [
+      555,
+      480.8,
+      160,
+      41.2
+    ],
+    "use": [
+      413.8,
+      480.8,
+      133.2,
+      41.2
+    ],
+    "api": [
+      45,
+      631.2,
+      670,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

@@ -1,0 +1,30 @@
+{
+  "image": "costing.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/costing/products",
+  "display_url": "JJ's ERP/costing/products",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "tabs": [
+      28,
+      101.2,
+      704,
+      41.2
+    ],
+    "margin": [
+      433.2,
+      198.8,
+      66.8,
+      32.5
+    ],
+    "target": [
+      500.1,
+      198.8,
+      105.7,
+      32.5
+    ]
+  },
+  "captured": "2026-10-21 16:09"
+}

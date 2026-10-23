@@ -1,0 +1,1776 @@
+{
+  "meta": {
+    "language": "en",
+    "title": "JJ's ERP User Guide",
+    "subtitle": "Orders, kitchen, money and reports — step by step",
+    "client_name": "JJ's deli shop",
+    "product_name": "JJ's ERP",
+    "version": "1.0",
+    "date": "October 2026",
+    "confidential": "For JJ's team only"
+  },
+  "brand": {
+    "primary": "#D2561A",
+    "logo": "assets/logo.png"
+  },
+  "intro": {
+    "text": "This guide shows you how to run JJ's deli shop with JJ's ERP, one task at a time. Each task says what it is for, then gives numbered steps with a picture of the real screen. The letters on the pictures match the letters in the steps.",
+    "cards": [
+      {
+        "title": "New to the system?",
+        "text": "Start with **Getting started**: open the shop, sign in and learn the main screen."
+      },
+      {
+        "title": "Working at the counter or in the kitchen?",
+        "text": "**Daily work** covers orders, clients, production, the fridge, expenses and closing the day."
+      },
+      {
+        "title": "Running the shop?",
+        "text": "**Managing the shop** covers the menu, purchases, distribution, staff, users and settings."
+      },
+      {
+        "title": "The owner",
+        "text": "**For the owner** explains the five daily answers, reports, costs and the audit log."
+      }
+    ]
+  },
+  "parts": [
+    {
+      "title": "Getting started",
+      "audience": [
+        "all"
+      ],
+      "intro": "Everyone reads this part first. It takes about ten minutes.",
+      "chapters": [
+        {
+          "id": "start",
+          "title": "Open the shop and sign in",
+          "intro": "JJ's ERP works with no internet. It has two parts on the shop computer: **JJ's ERP Server** keeps the data, and **JJ's ERP** is the window you work in.",
+          "tasks": [
+            {
+              "id": "start-shop",
+              "title": "Start the shop in the morning",
+              "goal": "Do this once when you turn on the shop computer.",
+              "time": "1 min",
+              "steps": [
+                "On the desktop, double-click **JJ's ERP Server**. Nothing opens; a small JJ's icon appears next to the clock at the bottom of the screen. This means the shop is running.",
+                "Double-click **JJ's ERP** on the desktop. The work window opens.",
+                {
+                  "text": "If you open **JJ's ERP** first, it shows *Starting the shop…* and starts the server for you. Wait a few seconds.",
+                  "tip": "Right-click the JJ's icon next to the clock and tick **Start with Windows**. The shop then starts by itself every time the computer is turned on."
+                }
+              ],
+              "result": "The sign-in screen of JJ's ERP is open.",
+              "warning": "Closing the **JJ's ERP** window does not stop the shop. To really stop it, right-click the JJ's icon next to the clock and choose **Stop the shop**. Nobody can work until it is started again."
+            },
+            {
+              "id": "sign-in",
+              "title": "Sign in",
+              "goal": "Each person signs in with their own username, so the system knows who did what.",
+              "time": "30 sec",
+              "before": [
+                "Your username and password (the owner gives them to you)"
+              ],
+              "steps": [
+                {
+                  "text": "Type your username in [[user]].",
+                  "shot": {
+                    "id": "login",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "user",
+                        "label": "**Username** — English letters, for example `manager1`"
+                      },
+                      {
+                        "key": "pass",
+                        "label": "**Password** — at least 6 characters"
+                      },
+                      {
+                        "key": "go",
+                        "label": "**Log in**"
+                      }
+                    ]
+                  }
+                },
+                "Type your password in **Password**.",
+                "Press **Log in**, or press `Enter`."
+              ],
+              "result": "Your home screen opens with your name at the top.",
+              "note": "The owner and managers see the full menu on the side. Members see a simpler screen with big buttons (see *What a Member sees*).",
+              "new_page": true
+            },
+            {
+              "id": "tour",
+              "title": "Learn the main screen",
+              "goal": "Know where everything is before you start.",
+              "time": "3 min",
+              "steps": [
+                {
+                  "text": "Look at the main screen. These are its parts:",
+                  "shot": {
+                    "id": "home",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "menu",
+                        "label": "**The menu** — every area of the system. Click a name to open it."
+                      },
+                      {
+                        "key": "lang",
+                        "label": "**عربي / EN** — switch the language. The whole screen turns right-to-left in Arabic."
+                      },
+                      {
+                        "key": "rate",
+                        "label": "Today's dollar rate, used for SYP prices"
+                      },
+                      {
+                        "key": "user",
+                        "label": "Your name — click it to change your password or log out"
+                      },
+                      {
+                        "key": "five",
+                        "label": "**Your day in five answers** — today's sales, costs, profit and cash at a glance"
+                      },
+                      {
+                        "key": "neworder",
+                        "label": "**+ New order** — the fastest way to sell"
+                      }
+                    ]
+                  }
+                },
+                "Click **Home** in the menu at any time to come back here."
+              ],
+              "tip": "Dropdown lists and date fields work the same everywhere: click to open, click a choice. Long lists have a search box at the top — type a few letters to find an item fast.",
+              "new_page": true
+            },
+            {
+              "id": "password",
+              "title": "Change your password or log out",
+              "goal": "Change the password the owner gave you, and log out when you leave the counter.",
+              "time": "1 min",
+              "steps": [
+                {
+                  "text": "Click your name at the top. Choose [[pwd]] **Change password**.",
+                  "shot": {
+                    "id": "usermenu",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "pwd",
+                        "label": "**Change password**"
+                      },
+                      {
+                        "key": "out",
+                        "label": "**Log out** — use it when someone else takes the computer"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "text": "Type your current password in [[cur]], then your new password in [[new]].",
+                  "shot": {
+                    "id": "password",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "cur",
+                        "label": "Current password"
+                      },
+                      {
+                        "key": "new",
+                        "label": "New password — at least 6 characters"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Save**"
+                      }
+                    ]
+                  }
+                },
+                "Press **Save**. A message *Password changed* appears."
+              ],
+              "result": "Next time, sign in with the new password.",
+              "note": "Forgot your password? Ask the owner. They can set a new one in **Users** → **Edit**.",
+              "new_page": true
+            },
+            {
+              "id": "member-screen",
+              "title": "What a Member sees",
+              "roles": [
+                "staff"
+              ],
+              "goal": "Members (counter and kitchen staff) get big buttons for their daily work and never see costs or profit.",
+              "steps": [
+                {
+                  "text": "After signing in, a Member sees this screen:",
+                  "shot": {
+                    "id": "member-home",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "invoice",
+                        "label": "**New invoice** — sell to a shop or a client"
+                      },
+                      {
+                        "key": "tabs",
+                        "label": "The Member's menu: Orders, Production, Warehouse & fridge, Distribution"
+                      }
+                    ]
+                  }
+                },
+                "Every task in **Daily work** works the same way for a Member: the screens are the same, only the menu is shorter."
+              ],
+              "new_page": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Daily work",
+      "audience": [
+        "staff"
+      ],
+      "intro": "Everything done at the counter and in the kitchen, many times a day.",
+      "chapters": [
+        {
+          "id": "orders",
+          "title": "Orders and invoices",
+          "intro": "Every sale is an order. A new order has three steps: **1 Who** → **2 Items** → **3 Pay**.",
+          "tasks": [
+            {
+              "id": "sell-walkin",
+              "title": "Sell to a walk-in customer",
+              "goal": "Use this when someone buys at the counter and pays now.",
+              "time": "1 min",
+              "new_page": true,
+              "steps": [
+                {
+                  "text": "Click **+ New order** on the home screen, or **Orders** → **+ New order**. In step 1, press [[walkin]] **Walk-in**.",
+                  "shot": {
+                    "id": "order-who",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "walkin",
+                        "label": "**Walk-in** — a customer who is not registered"
+                      },
+                      {
+                        "key": "account",
+                        "label": "**Account client** — a registered shop or person"
+                      },
+                      {
+                        "key": "trial",
+                        "label": "**Free trial** — free samples for a new client"
+                      },
+                      {
+                        "key": "staff",
+                        "label": "**Staff purchase** — an employee buys with the staff discount"
+                      },
+                      {
+                        "key": "tasting",
+                        "label": "**Tasting / internal** — no payment, the cost is recorded"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "text": "Click a product to add it. If it has extras, a small window opens: choose the extras in [[extras]], set the quantity with [[qty]], then press [[add]] **Add to order**.",
+                  "shot": {
+                    "id": "order-addons",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "extras",
+                        "label": "Extras like **Double filling** — each adds to the price"
+                      },
+                      {
+                        "key": "qty",
+                        "label": "Quantity"
+                      },
+                      {
+                        "key": "add",
+                        "label": "**Add to order**"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "text": "Add the other products. The order builds up on [[cart]]. Then press [[next]] **Next: payment**.",
+                  "sub": [
+                    "Click a product again to add one more, or use **+** and **−** in the order list.",
+                    "Have a barcode scanner? Scan the product code into and press `Enter`."
+                  ],
+                  "shot": {
+                    "id": "order-items",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "cats",
+                        "label": "Categories — **All**, Sandwiches, Salads, Drinks"
+                      },
+                      {
+                        "key": "scan",
+                        "label": "Scan a barcode or type a product code"
+                      },
+                      {
+                        "key": "product",
+                        "label": "A product — the number shows how many are in the order"
+                      },
+                      {
+                        "key": "cart",
+                        "label": "The order and its total"
+                      },
+                      {
+                        "key": "next",
+                        "label": "**Next: payment**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Choose [[pickup]] **Pickup** and how the customer paid in [[method]]: **Cash** or **Sham Cash**.",
+                  "sub": [
+                    "The customer pays only part? Type what they paid in **Paid now**. Leave it empty when they pay all of it.",
+                    "A discount? Type the percent in **Manual discount %**."
+                  ],
+                  "shot": {
+                    "id": "order-pay",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "pickup",
+                        "label": "**Pickup** or **Delivery**"
+                      },
+                      {
+                        "key": "method",
+                        "label": "How did they pay?"
+                      },
+                      {
+                        "key": "paid",
+                        "label": "**Paid now** — empty = paid in full"
+                      },
+                      {
+                        "key": "disc",
+                        "label": "**Manual discount %**"
+                      },
+                      {
+                        "key": "print",
+                        "label": "Tick to print the receipt by itself every time"
+                      },
+                      {
+                        "key": "confirm",
+                        "label": "**Confirm order**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Press **Confirm order**. Then press [[receipt]] **Print receipt**.",
+                  "shot": {
+                    "id": "order-saved",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "receipt",
+                        "label": "**Print receipt** — small receipt printer (58 or 80 mm)"
+                      },
+                      {
+                        "key": "a4",
+                        "label": "**A4 invoice** — full-page invoice for shops"
+                      },
+                      {
+                        "key": "again",
+                        "label": "**New order** — start the next sale"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "result": "The screen shows *Order saved* with the order number. The money is in the cash box and the products are taken from the fridge (oldest first).",
+              "tip": "In **3 Pay**, tick *Print the receipt automatically* once. From then on the receipt prints as soon as you confirm."
+            },
+            {
+              "id": "sell-account",
+              "title": "Sell to a client on their account (part paid)",
+              "goal": "Use this for registered shops and clients — for example an invoice of $8.50 where they pay $5 now and the rest later.",
+              "time": "2 min",
+              "steps": [
+                {
+                  "text": "**+ New order** → **Account client**. Find the client with [[search]] (name or phone) and click [[client]].",
+                  "sub": [
+                    "Client not in the list? Press **+ New client**, fill the name and phone and press **Save & choose**."
+                  ],
+                  "shot": {
+                    "id": "order-account",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "search",
+                        "label": "Search by name or phone"
+                      },
+                      {
+                        "key": "client",
+                        "label": "A client — their balance shows under the name"
+                      },
+                      {
+                        "key": "newc",
+                        "label": "**+ New client**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Add the products, then press **Next: payment**. The client's own prices are used by themselves.",
+                {
+                  "text": "Choose how they paid and type what they paid now in [[paid]]. The rest goes on their account. To put the whole order on the account, choose [[credit]] **On credit**.",
+                  "shot": {
+                    "id": "order-credit",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "paid",
+                        "label": "**Paid now** — for example 5"
+                      },
+                      {
+                        "key": "credit",
+                        "label": "**On credit** — nothing paid now"
+                      },
+                      {
+                        "key": "balance",
+                        "label": "The client's balance and credit limit"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Confirm order** and print the receipt. It shows what was paid, what is left, and the balance before and after."
+              ],
+              "result": "The client's balance goes up by the unpaid part. You see it in **Clients**.",
+              "warning": "If the order goes over the client's credit limit, a warning appears. When the limit is set to block, the order is refused — take a payment first (see *Take a payment from a client*).",
+              "new_page": true
+            },
+            {
+              "id": "delivery",
+              "title": "Send an order with the delivery person",
+              "goal": "Use this when the order goes out with Ahmad or another delivery person.",
+              "steps": [
+                "Make the order as usual. In **3 Pay**, press **Delivery**.",
+                {
+                  "text": "Type the delivery fee if there is one, and choose who delivers it in **Delivered by**.",
+                  "shot": {
+                    "id": "order-delivery",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "delivery",
+                        "label": "**Delivery**"
+                      }
+                    ]
+                  }
+                },
+                "Press **Confirm order** and print the receipt for the delivery person.",
+                "When the order arrives, open it in **Orders** and press **Mark delivered**."
+              ],
+              "result": "The cash stays with the delivery person until they hand it over at **Daily close**.",
+              "note": "The home screen shows *Cash not handed over yet* while a delivery person still holds money.",
+              "new_page": true
+            },
+            {
+              "id": "find-order",
+              "title": "Find an order and print the receipt again",
+              "goal": "Use this when a customer asks for a copy of their receipt, or to check an order.",
+              "steps": [
+                {
+                  "text": "Click **Orders** in the menu. Today's orders are shown. To see another day, click the date [[date]] and pick a day in the calendar.",
+                  "shot": {
+                    "id": "orders-list",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "date",
+                        "label": "The day — click for the calendar"
+                      },
+                      {
+                        "key": "search",
+                        "label": "Search by order number or client"
+                      },
+                      {
+                        "key": "row",
+                        "label": "An order — click it to open"
+                      },
+                      {
+                        "key": "new",
+                        "label": "**+ New order**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Click the order. Press [[print]] **Print receipt**, or [[a4]] **A4** for a full-page invoice.",
+                  "shot": {
+                    "id": "order-detail",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "print",
+                        "label": "**Print receipt**"
+                      },
+                      {
+                        "key": "a4",
+                        "label": "**A4** invoice"
+                      },
+                      {
+                        "key": "deliv",
+                        "label": "**Mark delivered**"
+                      },
+                      {
+                        "key": "ret",
+                        "label": "**Return** — the client brought goods back"
+                      },
+                      {
+                        "key": "cancel",
+                        "label": "**Cancel order**"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "new_page": true
+            },
+            {
+              "id": "cancel-order",
+              "title": "Cancel an order entered by mistake",
+              "roles": [
+                "manager"
+              ],
+              "goal": "Use this when an order was entered wrong. Cancel it, then make it again correctly.",
+              "steps": [
+                "Open **Orders** and click the order.",
+                "Press **Cancel order** and confirm.",
+                "Make the order again the right way."
+              ],
+              "result": "The order shows as cancelled. Its stock, money and client debt go back as they were.",
+              "warning": "A closed day cannot be changed. If the day is already closed, only the owner (Admin) can reopen it in **Daily close**.",
+              "new_page": true
+            },
+            {
+              "id": "other-orders",
+              "title": "Free trial, staff purchase or tasting",
+              "goal": "The other three kinds of order in step **1 Who**.",
+              "steps": [
+                "**Free trial**: choose or add the prospect. Everything is free; the system remembers it so you can see later who became a client.",
+                "**Staff purchase**: choose the employee. Their staff discount is applied; they can pay or have it deducted from their salary.",
+                "**Tasting / internal**: no invoice and no payment. The goods leave stock and their cost is recorded."
+              ],
+              "new_page": true
+            }
+          ]
+        },
+        {
+          "id": "clients",
+          "title": "Clients",
+          "intro": "Each client has a balance: orders on credit add to what they owe, payments take it down.",
+          "tasks": [
+            {
+              "id": "new-client",
+              "title": "Add a new client",
+              "goal": "Register a shop or a person who buys regularly.",
+              "time": "2 min",
+              "steps": [
+                {
+                  "text": "Click **Clients** in the menu, then [[new]] **+ New client**.",
+                  "shot": {
+                    "id": "clients",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "new",
+                        "label": "**+ New client**"
+                      },
+                      {
+                        "key": "filters",
+                        "label": "Filters — for example **Owe money** or **Late payers**"
+                      },
+                      {
+                        "key": "row",
+                        "label": "A client — click to open their page"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Choose [[type]] **Business** or **Person**, and fill [[name]] and [[phone]].",
+                  "sub": [
+                    "**Payment terms (days)** — how many days they have to pay.",
+                    "**Credit limit ($)** — the most they may owe. 0 means no limit."
+                  ],
+                  "shot": {
+                    "id": "client-new",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "type",
+                        "label": "Business or person"
+                      },
+                      {
+                        "key": "name",
+                        "label": "Name"
+                      },
+                      {
+                        "key": "phone",
+                        "label": "Phone"
+                      },
+                      {
+                        "key": "terms",
+                        "label": "Payment terms in days"
+                      },
+                      {
+                        "key": "limit",
+                        "label": "Credit limit"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Save**."
+              ],
+              "result": "The client appears in the list and can be chosen in a new order."
+            },
+            {
+              "id": "client-payment",
+              "title": "Take a payment from a client",
+              "goal": "Use this when a client pays money towards what they owe.",
+              "time": "1 min",
+              "steps": [
+                {
+                  "text": "Open **Clients** and click the client. Their balance [[balance]] shows what they owe. Press [[pay]] **Record payment**.",
+                  "shot": {
+                    "id": "client-page",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "pay",
+                        "label": "**Record payment**"
+                      },
+                      {
+                        "key": "balance",
+                        "label": "**Balance** — red means the client owes money"
+                      },
+                      {
+                        "key": "limit",
+                        "label": "**Credit limit**"
+                      },
+                      {
+                        "key": "statement",
+                        "label": "**Statement** — print the client's account"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Type the amount in [[amount]], check the currency [[cur]] and choose how they paid [[method]].",
+                  "sub": [
+                    "**This money is**: **Paying their debt**, or **Prepaid top-up** when they pay in advance."
+                  ],
+                  "shot": {
+                    "id": "client-payment",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "amount",
+                        "label": "Amount"
+                      },
+                      {
+                        "key": "cur",
+                        "label": "Currency — USD or SYP"
+                      },
+                      {
+                        "key": "method",
+                        "label": "Cash or Sham Cash"
+                      },
+                      {
+                        "key": "kind",
+                        "label": "Debt payment or top-up"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Record payment**"
+                      }
+                    ]
+                  }
+                },
+                "Press **Record payment**."
+              ],
+              "result": "The balance goes down by the amount and the money is added to the cash box.",
+              "tip": "To give the client a copy of their account, open the **Statement** tab and print it.",
+              "new_page": true
+            }
+          ]
+        },
+        {
+          "id": "kitchen",
+          "title": "Production and the fridge",
+          "intro": "In the morning you make the day's products. Each product made becomes a dated batch in the fridge with its own label.",
+          "tasks": [
+            {
+              "id": "production",
+              "title": "Make the morning production",
+              "goal": "Record what the kitchen makes today, so stock and costs stay right.",
+              "time": "3 min",
+              "new_page": true,
+              "steps": [
+                {
+                  "text": "Click **Production** in the menu. For each product, type how many you are making in [[qty]] or use **+**.",
+                  "shot": {
+                    "id": "production",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "qty",
+                        "label": "How many to make"
+                      },
+                      {
+                        "key": "materials",
+                        "label": "**Materials needed** — what this uses and what is in stock"
+                      },
+                      {
+                        "key": "by",
+                        "label": "**Made by**"
+                      },
+                      {
+                        "key": "place",
+                        "label": "**Put in** — which fridge"
+                      },
+                      {
+                        "key": "confirm",
+                        "label": "**Confirm production**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Check **Materials needed**. If a material is short, it is shown before you confirm.",
+                "Choose who made it in **Made by** and where it goes in **Put in**.",
+                "Press **Confirm production**, then **Print all labels** and stick a label on each pack."
+              ],
+              "result": "The materials leave the store and the products appear in **Warehouse & fridge** with their expiry date.",
+              "note": "When you sell, the system takes from the oldest batch in the fridge first."
+            },
+            {
+              "id": "batch",
+              "title": "Check a batch, print labels, move or count it",
+              "goal": "See what is in the fridge, when it expires, and work with one batch.",
+              "steps": [
+                {
+                  "text": "Click **Warehouse & fridge**. Scan a label into [[scan]], or click a batch [[batch]].",
+                  "shot": {
+                    "id": "warehouse",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "tabs",
+                        "label": "Tabs — **Fridge & stock**, **Make**, **Items**, **Moves**, **Places**"
+                      },
+                      {
+                        "key": "scan",
+                        "label": "Scan a label or type a batch number"
+                      },
+                      {
+                        "key": "batch",
+                        "label": "A batch — how many are left and when it expires"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Choose what to do:",
+                  "sub": [
+                    "**Print labels** — print more labels for this batch.",
+                    "**Move** — put it in another fridge or shelf.",
+                    "**Count** — fix the quantity after counting.",
+                    "**Who got this batch?** — every shop that received it."
+                  ],
+                  "shot": {
+                    "id": "batch",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "labels",
+                        "label": "**Print labels**"
+                      },
+                      {
+                        "key": "waste",
+                        "label": "**Waste**"
+                      },
+                      {
+                        "key": "move",
+                        "label": "**Move**"
+                      },
+                      {
+                        "key": "count",
+                        "label": "**Count**"
+                      },
+                      {
+                        "key": "who",
+                        "label": "**Who got this batch?**"
+                      }
+                    ]
+                  }
+                }
+              ],
+              "new_page": true
+            },
+            {
+              "id": "waste",
+              "title": "Record waste",
+              "goal": "Use this when products expire, fall or are thrown away. It keeps stock and profit honest.",
+              "time": "1 min",
+              "steps": [
+                "Open the batch in **Warehouse & fridge** and press **Waste**.",
+                {
+                  "text": "Type how many in [[qty]] and choose the reason in [[reason]].",
+                  "shot": {
+                    "id": "waste",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "qty",
+                        "label": "Quantity wasted"
+                      },
+                      {
+                        "key": "reason",
+                        "label": "**Reason** — expired, damaged…"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Record waste**"
+                      }
+                    ]
+                  }
+                },
+                "Press **Record waste**."
+              ],
+              "result": "The quantity leaves the fridge and appears in the waste report.",
+              "new_page": true
+            }
+          ]
+        },
+        {
+          "id": "money",
+          "title": "Expenses and closing the day",
+          "tasks": [
+            {
+              "id": "expense",
+              "title": "Record an expense",
+              "roles": [
+                "manager"
+              ],
+              "goal": "Every time the shop spends money — gas, repairs, cleaning — record it so the profit is right.",
+              "time": "1 min",
+              "new_page": true,
+              "steps": [
+                {
+                  "text": "Click **Expenses**, then **+ Add expense**. Choose what it was for in [[item]].",
+                  "sub": [
+                    "Not in the list? The last choice, **+ Add new**, adds it to the list."
+                  ],
+                  "shot": {
+                    "id": "expense",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "item",
+                        "label": "**What for** — the item"
+                      },
+                      {
+                        "key": "cat",
+                        "label": "**Category**"
+                      },
+                      {
+                        "key": "amount",
+                        "label": "**Amount**"
+                      },
+                      {
+                        "key": "box",
+                        "label": "**Paid from** — which cash box"
+                      },
+                      {
+                        "key": "date",
+                        "label": "**Date**"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Save expense**"
+                      }
+                    ]
+                  }
+                },
+                "Type the amount in **Amount**.",
+                {
+                  "text": "Choose the cash box in **Paid from**. The list opens; the chosen box has a check mark.",
+                  "shot": {
+                    "id": "dropdown",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "list",
+                        "label": "Click the box the money came from"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "text": "The date is today. For another day, click **Date** and pick the day in the calendar.",
+                  "shot": {
+                    "id": "calendar",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "month",
+                        "label": "Click the month to jump to another month"
+                      },
+                      {
+                        "key": "sel",
+                        "label": "The chosen day"
+                      },
+                      {
+                        "key": "today",
+                        "label": "**Today** — back to today"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Save expense**."
+              ],
+              "result": "The expense is in the list and the money is taken from the cash box.",
+              "tip": "Rent or a bill not paid yet? Choose **Not paid yet** at the top of the form and set the **Due date**. It waits in **Due (not paid)** until you pay it."
+            },
+            {
+              "id": "close-day",
+              "title": "Close the day",
+              "roles": [
+                "manager"
+              ],
+              "goal": "At the end of the day: take the cash from the delivery person, count the cash box and lock the day.",
+              "time": "5 min",
+              "new_page": true,
+              "steps": [
+                {
+                  "text": "Click **Daily close**. In *1 · Settle with the delivery person*, take the cash and press [[rep]] **Cash received**.",
+                  "shot": {
+                    "id": "close",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "rep",
+                        "label": "**Cash received** — the delivery person handed over the money"
+                      },
+                      {
+                        "key": "count",
+                        "label": "**Counted** — the cash you counted in the box"
+                      },
+                      {
+                        "key": "withdraw",
+                        "label": "**Personal withdrawal** — money the owner takes out"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Count all the cash in the box. Type the total in **Counted**. The system shows what should be in the box and the difference.",
+                {
+                  "text": "If everything is right, press [[lock]] **Close the day**.",
+                  "shot": {
+                    "id": "close-lock",
+                    "size": "small",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "lock",
+                        "label": "**Close the day** — locks today"
+                      }
+                    ]
+                  }
+                },
+                "Print the day report if you want a paper copy."
+              ],
+              "result": "The day is locked. No orders or money moves can be added to it.",
+              "warning": "Only the owner (Admin) can reopen a closed day, with **Reopen**. Check the count before you close.",
+              "note": "A personal withdrawal lowers the cash box but not the profit. It has its own report."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Managing the shop",
+      "audience": [
+        "manager"
+      ],
+      "intro": "Setting up the menu, buying stock, distribution, staff and the system settings.",
+      "chapters": [
+        {
+          "id": "menu-stock",
+          "title": "Menu, purchases and distribution",
+          "tasks": [
+            {
+              "id": "product",
+              "title": "Add or change a product and its recipe",
+              "goal": "Keep the menu, prices and recipes right — the recipe is what makes costs and stock correct.",
+              "time": "5 min",
+              "steps": [
+                {
+                  "text": "Click **Menu**. Press [[new]] **+ Product**, or click a product [[row]] to change it.",
+                  "shot": {
+                    "id": "menu",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "tabs",
+                        "label": "**Products**, **Categories**, **Add-ons**"
+                      },
+                      {
+                        "key": "new",
+                        "label": "**+ Product**"
+                      },
+                      {
+                        "key": "row",
+                        "label": "A product — click to edit"
+                      },
+                      {
+                        "key": "margin",
+                        "label": "**Margin** — profit as a percent of the price"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Choose the category [[cat]], and type the names and the price [[price]].",
+                  "sub": [
+                    "**Shelf life (hours)** sets the expiry date on the labels.",
+                    "Lower down, the recipe lists each ingredient and packaging with its quantity. The cost per piece updates as you type."
+                  ],
+                  "shot": {
+                    "id": "product",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "cat",
+                        "label": "Category"
+                      },
+                      {
+                        "key": "price",
+                        "label": "Price"
+                      },
+                      {
+                        "key": "recipe",
+                        "label": "Cost of one piece from the recipe"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Save** at the bottom of the window."
+              ],
+              "result": "The product appears in new orders with the new price. Old invoices keep their old price."
+            },
+            {
+              "id": "purchase",
+              "title": "Enter a supplier's invoice",
+              "goal": "When goods arrive from a supplier, enter the invoice so stock, costs and supplier debts are right.",
+              "time": "5 min",
+              "steps": [
+                {
+                  "text": "Click **Purchasing** → **New purchase**. Choose the supplier [[supplier]] and type their invoice number [[inv]].",
+                  "shot": {
+                    "id": "purchase",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "supplier",
+                        "label": "Supplier"
+                      },
+                      {
+                        "key": "inv",
+                        "label": "Supplier's invoice number"
+                      },
+                      {
+                        "key": "disc",
+                        "label": "Discount on the invoice"
+                      },
+                      {
+                        "key": "transport",
+                        "label": "Transport cost"
+                      },
+                      {
+                        "key": "due",
+                        "label": "Due date if paid later"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Add a line for each item: the item, quantity, unit price, where it goes and the expiry date.",
+                "Fill the discount and transport if any — they are spread over the items' real cost.",
+                "Type what you paid now. If you pay later, set the due date.",
+                "Press **Save purchase**."
+              ],
+              "result": "The items are in stock at their real cost. Anything unpaid shows in **Supplier debts**.",
+              "note": "If a price went up, **Costing** → **Price changes** shows which products lost margin.",
+              "new_page": true
+            },
+            {
+              "id": "distribution",
+              "title": "Route sheet, consignment and returns",
+              "goal": "For shops the delivery person visits: what to deliver, goods left on consignment, and goods coming back.",
+              "steps": [
+                {
+                  "text": "Click **Distribution**. Choose the day and the delivery person, then press [[print]] **Print route sheet** for the driver.",
+                  "shot": {
+                    "id": "distribution",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "tabs",
+                        "label": "**Route sheet**, **Consignment**, **Returns**"
+                      },
+                      {
+                        "key": "print",
+                        "label": "**Print route sheet**"
+                      },
+                      {
+                        "key": "inv",
+                        "label": "**Invoice** — sell to this shop"
+                      },
+                      {
+                        "key": "cons",
+                        "label": "**Consignment** — leave goods, they pay only for what they sell"
+                      },
+                      {
+                        "key": "ret",
+                        "label": "**Return** — goods coming back"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "For each shop: **Invoice** to sell, **Consignment** to leave goods, or **Return** when goods come back.",
+                "On a return, choose for each line: back to the fridge, or waste. Then choose whether the client is credited or refunded."
+              ],
+              "note": "To settle a consignment: open the **Consignment** tab, count what came back, and the sold part becomes an invoice at the agreed price.",
+              "new_page": true
+            }
+          ]
+        },
+        {
+          "id": "team",
+          "title": "Staff, users and permissions",
+          "tasks": [
+            {
+              "id": "people",
+              "title": "Employees, advances and payroll",
+              "goal": "Keep each employee's pay, record advances (سلف) and run the monthly payroll.",
+              "steps": [
+                {
+                  "text": "Click **People & payroll**. Press [[new]] **+ Employee** to add someone, and choose how they are paid: fixed, commission, or both.",
+                  "shot": {
+                    "id": "people",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "tabs",
+                        "label": "**Employees**, **Advances**, **Payroll**, **Sales calls**"
+                      },
+                      {
+                        "key": "new",
+                        "label": "**+ Employee**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "When an employee takes money in advance, record it in the **Advances** tab.",
+                "At the end of the month, open **Payroll** and pick the **Month**. Check each person's **Net pay**, choose the box in **Pay from box** and press **Pay salaries**. Advances and staff purchases are taken from the salary."
+              ]
+            },
+            {
+              "id": "users",
+              "title": "Add a user and choose their role",
+              "roles": [
+                "owner",
+                "manager"
+              ],
+              "goal": "Give each person their own sign-in. The role decides what they can see and do.",
+              "time": "2 min",
+              "steps": [
+                {
+                  "text": "Click **Users** → [[new]] **New user**.",
+                  "shot": {
+                    "id": "users",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "new",
+                        "label": "**New user**"
+                      },
+                      {
+                        "key": "row",
+                        "label": "A user — **Edit** to change the name, role or password"
+                      },
+                      {
+                        "key": "deact",
+                        "label": "**Deactivate** — stops the user signing in"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Fill the name [[name]], username [[user]] and password [[pass]]. Choose the role [[role]] and language [[lang]].",
+                  "shot": {
+                    "id": "user-new",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "name",
+                        "label": "Name"
+                      },
+                      {
+                        "key": "user",
+                        "label": "Username — English letters and numbers"
+                      },
+                      {
+                        "key": "pass",
+                        "label": "Password — at least 6 characters"
+                      },
+                      {
+                        "key": "role",
+                        "label": "**Admin**, **Manager** or **Member**"
+                      },
+                      {
+                        "key": "lang",
+                        "label": "Language of their screens"
+                      }
+                    ]
+                  }
+                },
+                "Press **Save** and give the person their username and password."
+              ],
+              "result": "The person can sign in now.",
+              "warning": "When someone leaves, press **Deactivate** — don't share passwords. The last Admin cannot be deactivated.",
+              "new_page": true
+            },
+            {
+              "id": "roles",
+              "title": "Change what a role can do",
+              "roles": [
+                "owner"
+              ],
+              "goal": "Decide exactly which areas each role can view, add, edit, delete or export.",
+              "steps": [
+                {
+                  "text": "Click **Roles & permissions** and choose a role [[list]].",
+                  "shot": {
+                    "id": "roles",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "list",
+                        "label": "The roles — click one"
+                      },
+                      {
+                        "key": "grid",
+                        "label": "Tick what this role may do in each area"
+                      },
+                      {
+                        "key": "cost",
+                        "label": "**See costs** — without it, the user gets the simple screens"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Save**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Tick or untick the boxes in the grid, then press **Save**."
+              ],
+              "note": "The Admin role always keeps every permission. You can add your own role with **New role**.",
+              "new_page": true
+            }
+          ]
+        },
+        {
+          "id": "settings",
+          "title": "Settings",
+          "tasks": [
+            {
+              "id": "rate",
+              "title": "Set the dollar rate",
+              "roles": [
+                "owner",
+                "manager"
+              ],
+              "goal": "Prices are in dollars; the rate turns them into Syrian pounds. Set it before selling in SYP.",
+              "steps": [
+                {
+                  "text": "Click **Settings** → **Currency & rate**. Type today's rate in [[manual]] (1 USD = how many SYP).",
+                  "shot": {
+                    "id": "currency",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "manual",
+                        "label": "**Manual rate**"
+                      },
+                      {
+                        "key": "use",
+                        "label": "**Use this rate**"
+                      },
+                      {
+                        "key": "api",
+                        "label": "A rate website, used when there is internet (optional)"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Use this rate**."
+              ],
+              "result": "The rate shows at the top of every screen. Old orders keep the rate of their day, so reports never change."
+            },
+            {
+              "id": "backups",
+              "title": "Back up and restore the data",
+              "roles": [
+                "owner"
+              ],
+              "goal": "The system copies all data once a day by itself and keeps the last 30 copies. You can also make a copy now or go back to an old one.",
+              "steps": [
+                {
+                  "text": "Click **Settings** → **Backups**. Press [[now]] **Back up now** before big changes.",
+                  "shot": {
+                    "id": "backups",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "now",
+                        "label": "**Back up now**"
+                      },
+                      {
+                        "key": "restore",
+                        "label": "**Restore** — go back to this copy"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "To go back to a copy, press **Restore** next to it and confirm.",
+                "Stop the shop (right-click the JJ's icon → **Stop the shop**) and start it again. The copy is applied when it starts."
+              ],
+              "danger": "Restoring replaces today's data with the old copy. The replaced data is kept as a backup, but anything entered after that copy will not be in the system.",
+              "tip": "Once a week, copy the backups folder to a USB stick and keep it at home.",
+              "new_page": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "For the owner",
+      "audience": [
+        "owner"
+      ],
+      "intro": "How to follow the shop's money in a few minutes a day.",
+      "chapters": [
+        {
+          "id": "owner",
+          "title": "Numbers, reports and control",
+          "tasks": [
+            {
+              "id": "five",
+              "title": "Read your day in five answers",
+              "goal": "The five questions every owner asks at the end of the day, answered on the home screen.",
+              "time": "1 min",
+              "steps": [
+                {
+                  "text": "Open **Home**. Read the five boxes from first to last:",
+                  "sub": [
+                    "**1. How much did I really sell?** — sales after discounts.",
+                    "**2. What did the goods I sold cost me?** — ingredients and packaging.",
+                    "**3. What did I earn after all expenses?** — profit after today's expenses.",
+                    "**4. How much cash do I have, and what do shops owe me?**",
+                    "**5. Are my prices still profitable?** — *Yes* when every product is above the target margin."
+                  ],
+                  "shot": {
+                    "id": "five",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "wa",
+                        "label": "**Send on WhatsApp** — send the five answers to your phone"
+                      }
+                    ]
+                  }
+                },
+                "Press **Send on WhatsApp** to keep a copy on your phone."
+              ]
+            },
+            {
+              "id": "reports",
+              "title": "See reports for any period",
+              "goal": "Sales, profit and loss, money, products and clients for a day, a month or any dates.",
+              "steps": [
+                {
+                  "text": "Click **Reports**. Choose a period in [[presets]] (**Today**, **This month**…) or pick dates in [[range]].",
+                  "shot": {
+                    "id": "reports",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "presets",
+                        "label": "Quick periods"
+                      },
+                      {
+                        "key": "range",
+                        "label": "From – to dates"
+                      },
+                      {
+                        "key": "pl",
+                        "label": "**Profit & loss**"
+                      },
+                      {
+                        "key": "print",
+                        "label": "**Print**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                {
+                  "text": "Scroll down for money, products, categories, clients and waste. Under **More reports** you find cash flow, month comparison, purchases, debts and more.",
+                  "shot": {
+                    "id": "reports-more",
+                    "size": "small",
+                    "frame": "plain"
+                  }
+                },
+                "Press **Print** for a paper copy. Lists can also be exported to Excel (CSV, opens with Arabic)."
+              ],
+              "new_page": true
+            },
+            {
+              "id": "costing",
+              "title": "Check the cost and margin of every product",
+              "goal": "Know what each sandwich really costs and the price that gives your target margin.",
+              "steps": [
+                {
+                  "text": "Click **Costing**. The **Product costs** tab lists each product's cost, profit and [[margin]].",
+                  "shot": {
+                    "id": "costing",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "tabs",
+                        "label": "**Product costs**, **Ingredient prices**, **Price changes**, **Fixed costs**, **Prep & forecast**"
+                      },
+                      {
+                        "key": "margin",
+                        "label": "**Margin**"
+                      },
+                      {
+                        "key": "target",
+                        "label": "**Price for target** — the price that reaches your target margin"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "If a margin is low, compare the price with **Price for target** and change the price in **Menu**."
+              ],
+              "tip": "**Prep & forecast** shows what to prepare tomorrow from the standing orders.",
+              "new_page": true
+            },
+            {
+              "id": "audit",
+              "title": "See who did what",
+              "goal": "Every change in the system is written down: who, what and when.",
+              "steps": [
+                {
+                  "text": "Click **Audit log**. Filter by record, user or dates in [[filter]].",
+                  "shot": {
+                    "id": "audit",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "filter",
+                        "label": "Filters"
+                      },
+                      {
+                        "key": "row",
+                        "label": "One change — press **Details** to see before and after"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Press **Details** on a line to see the values before and after."
+              ],
+              "note": "Passwords are never shown in the log.",
+              "new_page": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "quick_reference": [
+    {
+      "group": "Every day"
+    },
+    {
+      "action": "Start the shop",
+      "how": "Double-click **JJ's ERP Server**, then **JJ's ERP**"
+    },
+    {
+      "action": "Sell at the counter",
+      "how": "**+ New order** → **Walk-in** → products → **Next: payment** → **Confirm order**"
+    },
+    {
+      "action": "Sell on a client's account",
+      "how": "**+ New order** → **Account client** → client → products → **Paid now** → **Confirm order**"
+    },
+    {
+      "action": "Send a delivery",
+      "how": "In **3 Pay** → **Delivery** → **Delivered by**"
+    },
+    {
+      "action": "Print a receipt again",
+      "how": "**Orders** → the order → **Print receipt**"
+    },
+    {
+      "action": "Take a client's payment",
+      "how": "**Clients** → the client → **Record payment**"
+    },
+    {
+      "action": "Morning production",
+      "how": "**Production** → quantities → **Confirm production** → **Print all labels**"
+    },
+    {
+      "action": "Record waste",
+      "how": "**Warehouse & fridge** → the batch → **Waste**"
+    },
+    {
+      "action": "Record an expense",
+      "how": "**Expenses** → **+ Add expense** → **Save expense**"
+    },
+    {
+      "action": "Close the day",
+      "how": "**Daily close** → **Cash received** → **Counted** → **Close the day**"
+    },
+    {
+      "group": "Managing"
+    },
+    {
+      "action": "Add a product or change a price",
+      "how": "**Menu** → **+ Product** or click the product → **Save**"
+    },
+    {
+      "action": "Enter a supplier invoice",
+      "how": "**Purchasing** → **New purchase**"
+    },
+    {
+      "action": "Print the route sheet",
+      "how": "**Distribution** → **Print route sheet**"
+    },
+    {
+      "action": "Add a user",
+      "how": "**Users** → **New user**"
+    },
+    {
+      "action": "Set the dollar rate",
+      "how": "**Settings** → **Currency & rate** → **Use this rate**"
+    },
+    {
+      "action": "Back up now",
+      "how": "**Settings** → **Backups** → **Back up now**"
+    },
+    {
+      "group": "Owner"
+    },
+    {
+      "action": "Today's numbers",
+      "how": "**Home** → *Your day in five answers*"
+    },
+    {
+      "action": "Monthly profit",
+      "how": "**Reports** → **This month** → *Profit & loss*"
+    },
+    {
+      "action": "Who changed something",
+      "how": "**Audit log**"
+    }
+  ],
+  "faq": [
+    {
+      "q": "Does it need the internet?",
+      "a": "No. Everything works with no internet. The internet is only used for the automatic dollar rate and the optional cloud copy."
+    },
+    {
+      "q": "I closed the JJ's ERP window. Is the shop stopped?",
+      "a": "No. The shop keeps running in **JJ's ERP Server** (the icon next to the clock). Open **JJ's ERP** again to continue."
+    },
+    {
+      "q": "Why can't I see Reports or Costing?",
+      "a": "Your role doesn't allow it. Members get the simple screens. Ask the owner if you need more."
+    },
+    {
+      "q": "I made a mistake in an order. What do I do?",
+      "a": "A manager opens the order in **Orders**, presses **Cancel order**, and you make it again. Stock, money and debt go back."
+    },
+    {
+      "q": "A client wants to pay only part of an invoice.",
+      "a": "Make the order as an **Account client** and type what they pay in **Paid now**. The rest goes on their balance."
+    },
+    {
+      "q": "How do I switch between Arabic and English?",
+      "a": "Press **عربي** or **EN** at the top of the screen. Each user keeps their own language."
+    },
+    {
+      "q": "Can I change an order after the day is closed?",
+      "a": "No. Only the owner (Admin) can reopen the day in **Daily close** → **Reopen**."
+    },
+    {
+      "q": "Where is my data kept?",
+      "a": "On the shop computer, in `%APPDATA%\\jjs-erp\\data`. A copy is made every day in the `backups` folder next to it."
+    },
+    {
+      "q": "I forgot my password.",
+      "a": "Ask the owner. They open **Users** → **Edit** and set a new one."
+    }
+  ],
+  "troubleshooting": [
+    {
+      "problem": "JJ's ERP shows *The shop is not started*",
+      "cause": "JJ's ERP Server is not running and could not be found.",
+      "fix": "Double-click **JJ's ERP Server** on the desktop, wait a few seconds."
+    },
+    {
+      "problem": "Wrong username or password",
+      "cause": "A typo, Caps Lock on, or the user was deactivated.",
+      "fix": "Type again slowly; check Caps Lock. If it still fails, ask the owner to check **Users**."
+    },
+    {
+      "problem": "A button is grey and can't be pressed",
+      "cause": "Something required is missing (for example no products in the order), or your role doesn't allow it.",
+      "fix": "Fill the missing field. If it is a permission, ask the owner."
+    },
+    {
+      "problem": "*This order passes the client's credit limit and will be refused.*",
+      "cause": "The client owes too much and their limit blocks new credit.",
+      "fix": "Take a payment first (**Record payment**), or ask a manager to raise the credit limit."
+    },
+    {
+      "problem": "Can't sell in SYP — the rate is missing",
+      "cause": "No dollar rate is set.",
+      "fix": "**Settings** → **Currency & rate** → type the rate → **Use this rate**."
+    },
+    {
+      "problem": "The receipt doesn't print",
+      "cause": "The printer is off, out of paper, or the wrong paper size is set.",
+      "fix": "Check the printer. Set the size (58 or 80 mm) in **Settings** → **Printing**."
+    },
+    {
+      "problem": "*Your role cannot close the day.*",
+      "cause": "Members can't close the day.",
+      "fix": "A manager or the owner closes it."
+    },
+    {
+      "problem": "The difference at daily close is not zero",
+      "cause": "Cash counted wrong, a payment not entered, or an expense missing.",
+      "fix": "Count again. Check today's expenses and client payments, then close."
+    }
+  ],
+  "glossary": [
+    {
+      "term": "Walk-in",
+      "definition": "A customer who is not registered and pays at the counter."
+    },
+    {
+      "term": "Account client",
+      "definition": "A registered shop or person with a balance; they can buy on credit."
+    },
+    {
+      "term": "Balance",
+      "definition": "What a client owes (red) or has paid in advance."
+    },
+    {
+      "term": "Credit limit",
+      "definition": "The most a client may owe. It can warn or block new credit."
+    },
+    {
+      "term": "Batch",
+      "definition": "One lot of a product made at one time, with its own number, label and expiry."
+    },
+    {
+      "term": "Consignment",
+      "definition": "Goods left at a shop that pays only for what it sells."
+    },
+    {
+      "term": "Waste",
+      "definition": "Products thrown away; recorded so stock and profit stay right."
+    },
+    {
+      "term": "Margin",
+      "definition": "Profit as a percent of the price."
+    },
+    {
+      "term": "Daily close",
+      "definition": "Counting the cash and locking the day so it can't be changed."
+    },
+    {
+      "term": "Personal withdrawal",
+      "definition": "Money the owner takes from the box; it lowers the cash, not the profit."
+    },
+    {
+      "term": "Advance (سلفة)",
+      "definition": "Money an employee takes before payday; taken from the salary."
+    },
+    {
+      "term": "Role",
+      "definition": "Admin, Manager or Member — decides what a user sees and does."
+    }
+  ],
+  "support": {
+    "title": "Need help?",
+    "text": "Ask the shop owner first. Keep this guide next to the counter computer.",
+    "contacts": [
+      {
+        "label": "Shop owner",
+        "value": "Jabal — [[to fill: phone]]"
+      },
+      {
+        "label": "Shop phone",
+        "value": "[[to fill]]"
+      }
+    ]
+  }
+}

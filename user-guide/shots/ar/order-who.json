@@ -1,0 +1,48 @@
+{
+  "image": "order-who.png",
+  "width": 760,
+  "height": 250,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "steps": [
+      28,
+      81.2,
+      704,
+      44
+    ],
+    "walkin": [
+      597.6,
+      145.2,
+      134.4,
+      64
+    ],
+    "account": [
+      455.2,
+      145.2,
+      134.4,
+      64
+    ],
+    "trial": [
+      312.8,
+      145.2,
+      134.4,
+      64
+    ],
+    "staff": [
+      170.4,
+      145.2,
+      134.4,
+      64
+    ],
+    "tasting": [
+      28.0,
+      145.2,
+      134.4,
+      64
+    ]
+  },
+  "captured": "2026-10-21 16:14"
+}

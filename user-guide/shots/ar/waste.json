@@ -1,0 +1,30 @@
+{
+  "image": "waste.png",
+  "width": 464,
+  "height": 565,
+  "url": "http://127.0.0.1:4396/warehouse/fridge",
+  "display_url": "JJ's ERP/warehouse/fridge",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "qty": [
+      28,
+      280.0,
+      408,
+      41.2
+    ],
+    "reason": [
+      28,
+      357.2,
+      408,
+      41.2
+    ],
+    "save": [
+      28,
+      495.8,
+      98.0,
+      41.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

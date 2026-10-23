@@ -1,0 +1,30 @@
+{
+  "image": "order-saved.png",
+  "width": 528,
+  "height": 318.5,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "receipt": [
+      40,
+      40,
+      448,
+      60
+    ],
+    "a4": [
+      40,
+      112,
+      448,
+      41.2
+    ],
+    "again": [
+      40,
+      165.2,
+      448,
+      60
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

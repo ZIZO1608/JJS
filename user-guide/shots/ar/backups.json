@@ -1,0 +1,24 @@
+{
+  "image": "backups.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/settings/backups",
+  "display_url": "JJ's ERP/settings/backups",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "now": [
+      28,
+      135.2,
+      137.7,
+      41.2
+    ],
+    "restore": [
+      41,
+      268.5,
+      61.8,
+      30
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}

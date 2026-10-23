@@ -1,0 +1,1474 @@
+{
+ "base_url": "http://127.0.0.1:4396",
+ "display_base_url": "JJ's ERP",
+ "viewport": {
+  "width": 1000,
+  "height": 760
+ },
+ "device_scale_factor": 2,
+ "delay_ms": 400,
+ "hide": [
+  "[role=status]",
+  ".toast"
+ ],
+ "login": {
+  "url": "/",
+  "actions": [
+   {
+    "fill": {
+     "selector": "#login-user",
+     "value": "jabal"
+    }
+   },
+   {
+    "fill": {
+     "selector": "#login-pass",
+     "value": "jabal123"
+    }
+   },
+   {
+    "press": "Enter"
+   },
+   {
+    "wait_for": "header"
+   }
+  ]
+ },
+ "languages": {
+  "ar": {
+   "setup": [
+    {
+     "click": "header button:text-is('عربي')"
+    },
+    {
+     "wait_for": "html[dir=rtl]"
+    }
+   ],
+   "locale": "ar-SY"
+  },
+  "en": {
+   "setup": [
+    {
+     "click": "header button:text-is('EN')"
+    },
+    {
+     "wait_for": "html[dir=ltr]"
+    }
+   ],
+   "locale": "en-GB"
+  }
+ },
+ "screens": [
+  {
+   "id": "login",
+   "url": "/",
+   "actions": [
+    {
+     "eval": "fetch('/api/auth/logout', {method: 'POST'}).then(() => location.assign('/'))"
+    },
+    {
+     "wait": 900
+    },
+    {
+     "wait_for": "#login-user"
+    }
+   ],
+   "clip": "div:has(> form)",
+   "clip_padding": 20,
+   "callouts": [
+    {
+     "key": "user",
+     "selector": "#login-user"
+    },
+    {
+     "key": "pass",
+     "selector": "#login-pass"
+    },
+    {
+     "key": "go",
+     "selector": "form .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "home",
+   "url": null,
+   "actions": [
+    {
+     "fill": {
+      "selector": "#login-user",
+      "value": "jabal"
+     }
+    },
+    {
+     "fill": {
+      "selector": "#login-pass",
+      "value": "jabal123"
+     }
+    },
+    {
+     "press": "Enter"
+    },
+    {
+     "wait_for": "header"
+    },
+    {
+     "goto": "/"
+    }
+   ],
+   "callouts": [
+    {
+     "key": "menu",
+     "selector": "nav[aria-label=Sections]"
+    },
+    {
+     "key": "lang",
+     "selector": "button:text-is(\"EN\"), button:text-is(\"EN\")"
+    },
+    {
+     "key": "user",
+     "selector": "header button:has(span:text-is('J'))"
+    },
+    {
+     "key": "rate",
+     "selector": "header :text-matches('^1 (USD|دولار)')"
+    },
+    {
+     "key": "five",
+     "selector": "main div.card:has(h2:text-is('Your day in five answers')), main div.card:has(h2:text-is('يومك بخمس أجوبة'))"
+    },
+    {
+     "key": "neworder",
+     "selector": "a:has-text(\"+ New order\"), a:has-text(\"+ طلب جديد\")"
+    }
+   ]
+  },
+  {
+   "id": "usermenu",
+   "url": "/",
+   "actions": [
+    {
+     "click": "header button:has(span:text-is('J'))"
+    },
+    {
+     "wait": 300
+    }
+   ],
+   "callouts": [
+    {
+     "key": "pwd",
+     "selector": "button:text-is(\"Change password\"), button:text-is(\"تغيير كلمة المرور\")"
+    },
+    {
+     "key": "out",
+     "selector": "button:text-is(\"Log out\"), button:text-is(\"تسجيل الخروج\")"
+    }
+   ]
+  },
+  {
+   "id": "password",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Change password\"), button:text-is(\"تغيير كلمة المرور\")"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "cur",
+     "selector": "#pw-cur"
+    },
+    {
+     "key": "new",
+     "selector": "#pw-new"
+    },
+    {
+     "key": "save",
+     "selector": "[role=dialog] .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "order-who",
+   "url": "/orders/new",
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 250px; overflow: hidden; }",
+   "callouts": [
+    {
+     "key": "steps",
+     "selector": "main ol, main [aria-label=steps], main div:has(> button:has-text('1')) >> nth=0"
+    },
+    {
+     "key": "walkin",
+     "selector": "button:text-is(\"Walk-in\"), button:text-is(\"زبون عابر\")"
+    },
+    {
+     "key": "account",
+     "selector": "button:text-is(\"Account client\"), button:text-is(\"زبون مسجّل\")"
+    },
+    {
+     "key": "trial",
+     "selector": "button:text-is(\"Free trial\"), button:text-is(\"تجربة مجانية\")"
+    },
+    {
+     "key": "staff",
+     "selector": "button:text-is(\"Staff purchase\"), button:text-is(\"شراء موظف\")"
+    },
+    {
+     "key": "tasting",
+     "selector": "button:text-is(\"Tasting / internal\"), button:text-is(\"تذوّق / داخلي\")"
+    }
+   ]
+  },
+  {
+   "id": "order-addons",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Walk-in\"), button:text-is(\"زبون عابر\")"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "click": "main button:has-text('Turkey & Cheddar'), main button:has-text('حبش وشيدر')"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    },
+    {
+     "click": "[role=dialog] button:has-text('Double filling'), [role=dialog] button:has-text('حشوة مضاعفة')",
+     "optional": true
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "extras",
+     "selector": "[role=dialog] button:has-text('Double filling'), [role=dialog] button:has-text('حشوة مضاعفة')"
+    },
+    {
+     "key": "qty",
+     "selector": "[role=dialog] button:text-is('+')"
+    },
+    {
+     "key": "add",
+     "selector": "button:text-is(\"Add to order\"), button:text-is(\"أضف للطلب\")"
+    }
+   ]
+  },
+  {
+   "id": "order-items",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Add to order\"), button:text-is(\"أضف للطلب\")"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "click": "main button:has-text('Greek Salad'), main button:has-text('سلطة يونانية')"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "cats",
+     "selector": "button:text-is(\"All\"), button:text-is(\"الكل\")"
+    },
+    {
+     "key": "scan",
+     "selector": "#scan"
+    },
+    {
+     "key": "product",
+     "selector": "main button:has-text('Greek Salad'), main button:has-text('سلطة يونانية')"
+    },
+    {
+     "key": "cart",
+     "selector": "main aside, main div.card:has-text('Subtotal'), main div.card:has-text('المجموع') >> nth=0"
+    },
+    {
+     "key": "next",
+     "selector": "button:text-is(\"Next: payment\"), button:text-is(\"التالي: الدفع\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "order-pay",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Next: payment\"), button:text-is(\"التالي: الدفع\")"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "pickup",
+     "selector": "button:text-is(\"Pickup\"), button:text-is(\"استلام من المحل\")"
+    },
+    {
+     "key": "method",
+     "selector": "button:text-is(\"Cash\"), button:text-is(\"كاش\")"
+    },
+    {
+     "key": "paid",
+     "selector": "#paidnow"
+    },
+    {
+     "key": "disc",
+     "selector": "#mdisc"
+    },
+    {
+     "key": "print",
+     "selector": "main label:has(input[type=checkbox])"
+    },
+    {
+     "key": "confirm",
+     "selector": "button:text-is(\"Confirm order\"), button:text-is(\"تأكيد الطلب\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "order-saved",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Confirm order\"), button:text-is(\"تأكيد الطلب\")"
+    },
+    {
+     "wait": 700
+    }
+   ],
+   "clip": "main button:text-is('Print receipt'), main button:text-is('طباعة الفاتورة') >> xpath=..",
+   "clip_padding": 40,
+   "callouts": [
+    {
+     "key": "receipt",
+     "selector": "button:text-is(\"Print receipt\"), button:text-is(\"طباعة الفاتورة\")"
+    },
+    {
+     "key": "a4",
+     "selector": "button:text-is(\"A4 invoice\"), button:text-is(\"فاتورة A4\")"
+    },
+    {
+     "key": "again",
+     "selector": "button:text-is(\"New order\"), button:text-is(\"طلب جديد\")"
+    }
+   ]
+  },
+  {
+   "id": "order-account",
+   "url": "/orders/new",
+   "actions": [
+    {
+     "click": "button:text-is(\"Account client\"), button:text-is(\"زبون مسجّل\")"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "search",
+     "selector": "main input[type=search], main input[placeholder*='phone'], main input[placeholder*='الهاتف']"
+    },
+    {
+     "key": "client",
+     "selector": "main button:has-text('Bean & Book'), main button:has-text('Bean')"
+    },
+    {
+     "key": "newc",
+     "selector": "button:text-is(\"+ New client\"), button:text-is(\"+ زبون جديد\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "order-credit",
+   "url": null,
+   "actions": [
+    {
+     "click": "main button:has-text('Bean & Book')"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "click": "main button:has-text('Greek Salad'), main button:has-text('سلطة يونانية')"
+    },
+    {
+     "click": "main button:has-text('Greek Salad'), main button:has-text('سلطة يونانية')"
+    },
+    {
+     "click": "main button:has-text('Caesar Salad'), main button:has-text('سلطة سيزر')"
+    },
+    {
+     "wait": 200
+    },
+    {
+     "click": "button:text-is(\"Next: payment\"), button:text-is(\"التالي: الدفع\")"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "click": "button:text-is(\"Cash\"), button:text-is(\"كاش\")"
+    },
+    {
+     "fill": {
+      "selector": "#paidnow",
+      "value": "5"
+     }
+    },
+    {
+     "wait": 300
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "paid",
+     "selector": "#paidnow"
+    },
+    {
+     "key": "balance",
+     "selector": "main :text-matches('Client balance|رصيد الزبون')"
+    },
+    {
+     "key": "credit",
+     "selector": "button:text-is(\"On credit\"), button:text-is(\"دين (على الحساب)\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "order-delivery",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Delivery\"), button:text-is(\"توصيل\")"
+    },
+    {
+     "wait": 400
+    }
+   ],
+   "clip": "main div.card:has-text('Delivered by'), main div.card:has-text('مين يوصّل') >> nth=0",
+   "clip_padding": 10,
+   "callouts": [
+    {
+     "key": "delivery",
+     "selector": "button:text-is(\"Delivery\"), button:text-is(\"توصيل\")"
+    }
+   ]
+  },
+  {
+   "id": "orders-list",
+   "url": "/orders",
+   "callouts": [
+    {
+     "key": "date",
+     "selector": "main button[aria-haspopup=dialog]"
+    },
+    {
+     "key": "search",
+     "selector": "main input"
+    },
+    {
+     "key": "row",
+     "selector": "main tbody tr >> nth=0"
+    },
+    {
+     "key": "new",
+     "selector": "a:has-text(\"+ New order\"), a:has-text(\"+ طلب جديد\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "order-detail",
+   "url": null,
+   "actions": [
+    {
+     "click": "main tbody tr >> nth=0"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "cancel",
+     "selector": "button:text-is(\"Cancel order\"), button:text-is(\"إلغاء الطلب\")"
+    },
+    {
+     "key": "ret",
+     "selector": "[role=dialog] button:text-is(\"Return\"), [role=dialog] button:text-is(\"مرتجع\")"
+    },
+    {
+     "key": "deliv",
+     "selector": "button:text-is(\"Mark delivered\"), button:text-is(\"تم التسليم\")"
+    },
+    {
+     "key": "a4",
+     "selector": "button:text-is(\"A4\"), button:text-is(\"A4\")"
+    },
+    {
+     "key": "print",
+     "selector": "button:text-is(\"Print receipt\"), button:text-is(\"طباعة الفاتورة\")"
+    }
+   ]
+  },
+  {
+   "id": "clients",
+   "url": "/clients",
+   "callouts": [
+    {
+     "key": "new",
+     "selector": "button:text-is(\"+ New client\"), button:text-is(\"+ زبون جديد\")"
+    },
+    {
+     "key": "filters",
+     "selector": "button:has-text(\"Owe money\"), button:has-text(\"عليهم دين\")"
+    },
+    {
+     "key": "row",
+     "selector": "main tbody tr:has-text('Bean & Book')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "client-new",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"+ New client\"), button:text-is(\"+ زبون جديد\")"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "type",
+     "selector": "#c-type"
+    },
+    {
+     "key": "name",
+     "selector": "#c-name"
+    },
+    {
+     "key": "phone",
+     "selector": "#c-phone"
+    },
+    {
+     "key": "terms",
+     "selector": "#c-terms"
+    },
+    {
+     "key": "limit",
+     "selector": "#c-limit"
+    }
+   ]
+  },
+  {
+   "id": "client-page",
+   "url": "/clients",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "click": "main tbody tr:has-text('Bean & Book')"
+    },
+    {
+     "wait": 600
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "pay",
+     "selector": "button:text-is(\"Record payment\"), button:text-is(\"سجّل دفعة\")"
+    },
+    {
+     "key": "balance",
+     "selector": "main div.card >> nth=0"
+    },
+    {
+     "key": "limit",
+     "selector": "main div.card:has-text('Credit limit'), main div.card:has-text('حد الدين') >> nth=0"
+    },
+    {
+     "key": "statement",
+     "selector": "[role=tab]:text-is('Statement'), [role=tab]:text-is('كشف حساب')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "client-payment",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"Record payment\"), button:text-is(\"سجّل دفعة\")"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    },
+    {
+     "fill": {
+      "selector": "#p-amount",
+      "value": "5"
+     }
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "amount",
+     "selector": "#p-amount"
+    },
+    {
+     "key": "cur",
+     "selector": "#p-cur"
+    },
+    {
+     "key": "method",
+     "selector": "#p-method"
+    },
+    {
+     "key": "kind",
+     "selector": "#p-kind"
+    },
+    {
+     "key": "save",
+     "selector": "[role=dialog] .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "production",
+   "url": "/production",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "click": "main div:has(> div:has-text('TC')) button:text-is('+') >> nth=0",
+     "optional": true
+    },
+    {
+     "wait": 150
+    },
+    {
+     "fill": {
+      "selector": "main input >> nth=2",
+      "value": "30"
+     }
+    },
+    {
+     "wait": 600
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "qty",
+     "selector": "main input >> nth=2"
+    },
+    {
+     "key": "materials",
+     "selector": "main h3:text-is('Materials needed'), main h3:text-is('المواد اللازمة')"
+    },
+    {
+     "key": "by",
+     "selector": "#pr-e"
+    },
+    {
+     "key": "place",
+     "selector": "#pr-l"
+    },
+    {
+     "key": "confirm",
+     "selector": "button:text-is(\"Confirm production\"), button:text-is(\"اعتماد الإنتاج\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "warehouse",
+   "url": "/warehouse",
+   "callouts": [
+    {
+     "key": "tabs",
+     "selector": "main [role=tablist]"
+    },
+    {
+     "key": "scan",
+     "selector": "main input >> nth=0"
+    },
+    {
+     "key": "batch",
+     "selector": "main button:has-text('B-1021-01')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "batch",
+   "url": null,
+   "actions": [
+    {
+     "click": "main button:has-text('B-1021-01')"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "labels",
+     "selector": "button:text-is(\"Print labels\"), button:text-is(\"اطبع ملصقات\")"
+    },
+    {
+     "key": "waste",
+     "selector": "[role=dialog] button:text-is(\"Waste\"), [role=dialog] button:text-is(\"هدر\")"
+    },
+    {
+     "key": "move",
+     "selector": "button:text-is(\"Move\"), button:text-is(\"انقل\"), button:text-is('نقل')"
+    },
+    {
+     "key": "count",
+     "selector": "button:text-is(\"Count\"), button:text-is(\"جرد\")"
+    },
+    {
+     "key": "who",
+     "selector": "a:text-is(\"Who got this batch?\"), a:text-is(\"مين أخد من هالدفعة؟\")"
+    }
+   ]
+  },
+  {
+   "id": "waste",
+   "url": null,
+   "actions": [
+    {
+     "click": "[role=dialog] button:text-is(\"Waste\"), [role=dialog] button:text-is(\"هدر\")"
+    },
+    {
+     "wait": 400
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "qty",
+     "selector": "#w-qty"
+    },
+    {
+     "key": "reason",
+     "selector": "#w-reason"
+    },
+    {
+     "key": "save",
+     "selector": "[role=dialog] .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "expense",
+   "url": "/expenses",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "click": "main .btn-primary >> nth=0"
+    },
+    {
+     "wait": 400
+    }
+   ],
+   "clip": "main div.card >> nth=0",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "item",
+     "selector": "#x-item"
+    },
+    {
+     "key": "cat",
+     "selector": "#x-cat"
+    },
+    {
+     "key": "amount",
+     "selector": "#x-amt"
+    },
+    {
+     "key": "box",
+     "selector": "#x-box"
+    },
+    {
+     "key": "date",
+     "selector": "#x-date"
+    },
+    {
+     "key": "save",
+     "selector": "main div.card >> nth=0 >> .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "dropdown",
+   "url": null,
+   "actions": [
+    {
+     "click": "#x-box"
+    },
+    {
+     "wait": 300
+    }
+   ],
+   "clip": "main div.card >> nth=0",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "list",
+     "selector": ".dd-pop"
+    }
+   ]
+  },
+  {
+   "id": "calendar",
+   "url": null,
+   "actions": [
+    {
+     "press": "Escape"
+    },
+    {
+     "click": "#x-date"
+    },
+    {
+     "wait": 300
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "month",
+     "selector": ".cal-title"
+    },
+    {
+     "key": "today",
+     "selector": ".cal-pop .cal-link.text-brand"
+    },
+    {
+     "key": "sel",
+     "selector": ".cal-sel"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "close",
+   "url": "/close",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "rep",
+     "selector": "button:text-is(\"Cash received\"), button:text-is(\"استلمت الكاش\")"
+    },
+    {
+     "key": "count",
+     "selector": "main input >> nth=0"
+    },
+    {
+     "key": "withdraw",
+     "selector": "button:text-is(\"Personal withdrawal\"), button:text-is(\"سحب شخصي\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "close-lock",
+   "url": null,
+   "actions": [
+    {
+     "scroll_to": "main section.card:has(h2:has-text('3 ·'))"
+    }
+   ],
+   "clip": "main section.card:has(h2:has-text('3 ·'))",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "lock",
+     "selector": "button:text-is(\"Close the day\"), button:text-is(\"اقفل اليوم\")"
+    }
+   ]
+  },
+  {
+   "id": "menu",
+   "url": "/menu",
+   "callouts": [
+    {
+     "key": "tabs",
+     "selector": "main [role=tablist]"
+    },
+    {
+     "key": "new",
+     "selector": "button:text-is(\"+ Product\"), button:text-is(\"+ منتج\")"
+    },
+    {
+     "key": "row",
+     "selector": "main tbody tr:has-text('TC')"
+    },
+    {
+     "key": "margin",
+     "selector": "main th:has-text('Margin'), main th:has-text('الهامش')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "product",
+   "url": null,
+   "css": " [role=dialog] { max-height: 900px; overflow: hidden; }",
+   "actions": [
+    {
+     "click": "main tbody tr:has-text('TC') >> td >> nth=1"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "cat",
+     "selector": "[role=dialog] button[role=combobox] >> nth=0"
+    },
+    {
+     "key": "price",
+     "selector": "[role=dialog] input >> nth=3"
+    },
+    {
+     "key": "recipe",
+     "selector": "[role=dialog] :text-matches('^(Cost|الكلفة|التكلفة):')"
+    }
+   ]
+  },
+  {
+   "id": "purchase",
+   "url": "/purchasing",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "click": "main [role=tablist] a:text-is('New purchase'), main [role=tablist] a:text-is('فاتورة جديدة')"
+    },
+    {
+     "wait": 500
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "supplier",
+     "selector": "#np-s"
+    },
+    {
+     "key": "inv",
+     "selector": "#np-r"
+    },
+    {
+     "key": "disc",
+     "selector": "#np-d"
+    },
+    {
+     "key": "transport",
+     "selector": "#np-t"
+    },
+    {
+     "key": "due",
+     "selector": "#np-dd"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "distribution",
+   "url": "/distribution",
+   "callouts": [
+    {
+     "key": "tabs",
+     "selector": "main [role=tablist]"
+    },
+    {
+     "key": "print",
+     "selector": "button:text-is(\"Print route sheet\"), button:text-is(\"اطبع ورقة التوزيع\")"
+    },
+    {
+     "key": "inv",
+     "selector": "a:text-is(\"Invoice\"), a:text-is(\"فاتورة\")"
+    },
+    {
+     "key": "cons",
+     "selector": "button:text-is(\"Consignment\"), button:text-is(\"بضاعة بالأمانة\")"
+    },
+    {
+     "key": "ret",
+     "selector": "main button:text-is(\"Return\"), main button:text-is(\"مرتجع\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "people",
+   "url": "/people",
+   "callouts": [
+    {
+     "key": "tabs",
+     "selector": "main [role=tablist]"
+    },
+    {
+     "key": "new",
+     "selector": "button:text-is(\"+ Employee\"), button:text-is(\"+ موظف\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "users",
+   "url": "/users",
+   "callouts": [
+    {
+     "key": "new",
+     "selector": "button:text-is(\"New user\"), button:text-is(\"مستخدم جديد\")"
+    },
+    {
+     "key": "row",
+     "selector": "main tbody tr:has-text('manager1')"
+    },
+    {
+     "key": "deact",
+     "selector": "main tbody tr:has-text('manager1') button:text-is('Deactivate'), main tbody tr:has-text('manager1') button:text-is('إيقاف')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "user-new",
+   "url": null,
+   "actions": [
+    {
+     "click": "button:text-is(\"New user\"), button:text-is(\"مستخدم جديد\")"
+    },
+    {
+     "wait_for": "[role=dialog]"
+    }
+   ],
+   "clip": "[role=dialog]",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "name",
+     "selector": "#u-name"
+    },
+    {
+     "key": "user",
+     "selector": "#u-username"
+    },
+    {
+     "key": "pass",
+     "selector": "#u-pass"
+    },
+    {
+     "key": "role",
+     "selector": "#u-role"
+    },
+    {
+     "key": "lang",
+     "selector": "#u-lang"
+    }
+   ]
+  },
+  {
+   "id": "roles",
+   "url": "/roles",
+   "actions": [
+    {
+     "press": "Escape",
+     "optional": true
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "list",
+     "selector": "main button:has-text('Manager'), main button:has-text('المدير') >> nth=0"
+    },
+    {
+     "key": "grid",
+     "selector": "main table"
+    },
+    {
+     "key": "cost",
+     "selector": "main th:has-text('See costs'), main th:has-text('رؤية التكاليف')"
+    },
+    {
+     "key": "save",
+     "selector": "button:text-is(\"Save\"), button:text-is(\"حفظ\")"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "currency",
+   "url": "/settings/currency",
+   "callouts": [
+    {
+     "key": "manual",
+     "selector": "#fx-manual"
+    },
+    {
+     "key": "use",
+     "selector": "button:text-is(\"Use this rate\"), button:text-is(\"اعتماد هذا السعر\")"
+    },
+    {
+     "key": "api",
+     "selector": "#fx-url"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "backups",
+   "url": "/settings/backups",
+   "actions": [
+    {
+     "eval": "document.querySelectorAll('main *').forEach(e => { if (!e.children.length && e.textContent.includes('jjs-guide-demo')) e.textContent = ['C:', 'Users', '…', 'AppData', 'Roaming', 'jjs-erp', 'data', 'backups'].join(String.fromCharCode(92)) })"
+    },
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ],
+   "callouts": [
+    {
+     "key": "now",
+     "selector": "button:text-is(\"Back up now\"), button:text-is(\"نسخ احتياطي الآن\")"
+    },
+    {
+     "key": "restore",
+     "selector": "main button:text-is('Restore'), main button:text-is('استرجاع') >> nth=0"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }"
+  },
+  {
+   "id": "five",
+   "url": "/",
+   "clip": "main div.card:has(h2:text-is('Your day in five answers')), main div.card:has(h2:text-is('يومك بخمس أجوبة'))",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "wa",
+     "selector": "a:text-is(\"Send on WhatsApp\"), a:text-is(\"ابعتها واتساب\")"
+    }
+   ]
+  },
+  {
+   "id": "reports",
+   "url": "/reports",
+   "callouts": [
+    {
+     "key": "presets",
+     "selector": "button:text-is(\"This month\"), button:text-is(\"هذا الشهر\")"
+    },
+    {
+     "key": "range",
+     "selector": "main button[aria-haspopup=dialog] >> nth=0"
+    },
+    {
+     "key": "print",
+     "selector": "button:text-is(\"Print\"), button:text-is(\"طباعة\")"
+    },
+    {
+     "key": "pl",
+     "selector": "main h2:text-is('Profit & loss'), main h2:text-is('الأرباح والخسائر')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "reports-more",
+   "url": null,
+   "actions": [
+    {
+     "scroll_to": "main section.card:has(h2:text-is('More reports')), main section.card:has(h2:text-is('تقارير إضافية'))"
+    }
+   ],
+   "clip": "main section.card:has(h2:text-is('More reports')), main section.card:has(h2:text-is('تقارير إضافية'))",
+   "clip_padding": 8,
+   "callouts": []
+  },
+  {
+   "id": "costing",
+   "url": "/costing",
+   "callouts": [
+    {
+     "key": "tabs",
+     "selector": "main [role=tablist]"
+    },
+    {
+     "key": "margin",
+     "selector": "main th:text-is('Margin'), main th:text-is('الهامش')"
+    },
+    {
+     "key": "target",
+     "selector": "main th:text-is('Price for target'), main th:text-is('السعر للهدف')"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  },
+  {
+   "id": "audit",
+   "url": "/audit",
+   "callouts": [
+    {
+     "key": "filter",
+     "selector": "main button[role=combobox] >> nth=0"
+    },
+    {
+     "key": "row",
+     "selector": "main tbody tr >> nth=0"
+    }
+   ],
+   "clip": "main",
+   "clip_padding": 0,
+   "css": " main { max-height: 690px; overflow: hidden; }",
+   "actions": [
+    {
+     "eval": "window.scrollTo(0, 0)"
+    },
+    {
+     "wait": 150
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,42 @@
+{
+  "image": "order-items.png",
+  "width": 760,
+  "height": 690,
+  "url": "http://127.0.0.1:4396/orders/new",
+  "display_url": "JJ's ERP/orders/new",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "cats": [
+      28,
+      153.2,
+      44.8,
+      41.2
+    ],
+    "scan": [
+      28,
+      206.5,
+      704,
+      41.2
+    ],
+    "product": [
+      28,
+      356.5,
+      229.3,
+      88.8
+    ],
+    "cart": [
+      28,
+      558,
+      704,
+      246.5
+    ],
+    "next": [
+      28,
+      816.5,
+      704,
+      49.2
+    ]
+  },
+  "captured": "2026-10-21 16:08"
+}
