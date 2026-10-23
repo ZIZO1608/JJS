@@ -18,17 +18,17 @@ Check it with `nslookup jjs.ahmad-zaven.io` before going on.
 5. **Environment Variables**: one login for each role. Tick "Is Secret" for the passwords.
 
    ```
-   JJS_ADMIN_USERNAME=zaven
+   JJS_ADMIN_USERNAME=jabal
    JJS_ADMIN_PASSWORD=<strong password>
-   JJS_ADMIN_NAME=Zaven
+   JJS_ADMIN_NAME=Jabal
 
-   JJS_MANAGER_USERNAME=rami
+   JJS_MANAGER_USERNAME=manager
    JJS_MANAGER_PASSWORD=<strong password>
-   JJS_MANAGER_NAME=رامي
+   JJS_MANAGER_NAME=Manager
 
-   JJS_MEMBER_USERNAME=sami
+   JJS_MEMBER_USERNAME=member
    JJS_MEMBER_PASSWORD=<strong password>
-   JJS_MEMBER_NAME=سامي
+   JJS_MEMBER_NAME=Member
 
    JJS_BUSINESS_NAME_AR=جي جيز ديلي شوب
    JJS_BUSINESS_NAME_EN=JJ's deli shop
@@ -62,7 +62,7 @@ Usernames are not case-sensitive. To see who exists and set a new password, open
 
 ```sh
 node scripts/reset-password.mjs                    # lists all users
-node scripts/reset-password.mjs zaven NewPass123   # sets a new password and logs that user out everywhere
+node scripts/reset-password.mjs jabal NewPass123   # sets a new password and logs that user out everywhere
 ```
 
 ## Backups
