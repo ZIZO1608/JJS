@@ -11,7 +11,7 @@ Check it with `nslookup jjs.ahmad-zaven.io` before going on.
 ## 2. Create the app in Coolify
 
 1. **Projects → + New → Resource → Private Repository (with GitHub App)**. If GitHub is not connected yet, connect it under **Sources**. Pick this repository, branch `main`.
-2. **Build Pack:** `Dockerfile`. **Ports Exposes:** `4310`.
+2. **Build Pack:** `Dockerfile`. **Ports Exposes:** `4310` (if Coolify shows `3000`, that works too: the app follows the PORT Coolify gives it).
 3. **Domains:** `https://jjs.ahmad-zaven.io`. Coolify gets the free SSL certificate by itself.
 4. **Persistent Storage → + Add → Volume:** name `jjs-data`, destination path `/data`.
    **Do not skip this.** Without it, every redeploy wipes the database.
