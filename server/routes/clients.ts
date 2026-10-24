@@ -461,14 +461,28 @@ clientsRouter.post(
 );
 
 /* ---------- client portal login ---------- */
-function createPortalAccount(tx: Q, clientId: string, userId: string) {
+/** Optional: the admin picks the username and password instead of having them made up. */
+const chosenSchema = z.object({
+  username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/).optional(),
+  password: z.string().min(6).max(100).optional(),
+});
+type Chosen = z.infer<typeof chosenSchema>;
+
+const assertUsernameFree = (tx: Q, username: string, exceptAccountId?: string) => {
+  const hit = tx.select({ id: clientAccounts.id }).from(clientAccounts).where(eq(clientAccounts.username, username)).get();
+  if (hit && hit.id !== exceptAccountId) throw new HttpError(409, "duplicate", "This username is taken.");
+};
+
+function createPortalAccount(tx: Q, clientId: string, userId: string, chosen: Chosen = {}) {
   const c = tx.select().from(clients).where(and(eq(clients.id, clientId), isNull(clients.deletedAt))).get();
   if (!c) throw notFound("client");
   if (accountOf(tx, clientId)) throw new HttpError(409, "has_account", "This client already has a portal login.");
-  const username = suggestUsername(tx, c);
-  const password = generatePassword();
+  const username = chosen.username?.toLowerCase() ?? suggestUsername(tx, c);
+  assertUsernameFree(tx, username);
+  const password = chosen.password ?? generatePassword();
   const id = newId();
-  tx.insert(clientAccounts).values({ id, clientId, username, passwordHash: hashPassword(password) }).run();
+  // A password the admin chose is kept; a made-up one must be replaced on first sign-in.
+  tx.insert(clientAccounts).values({ id, clientId, username, passwordHash: hashPassword(password), mustChangePassword: !chosen.password }).run();
   writeAudit(tx, { userId, action: "create", entity: "client_account", entityId: id, after: { client: c.name, username } });
   return { username, password };
 }
@@ -487,26 +501,26 @@ clientsRouter.post(
   requirePerm("clients", "create"),
   h((req, res) => {
     const id = String(req.params.id);
-    const credentials = db.transaction((tx) => createPortalAccount(tx, id, req.user!.id));
+    const chosen = parse(chosenSchema, req.body ?? {});
+    const credentials = db.transaction((tx) => createPortalAccount(tx, id, req.user!.id, chosen));
     res.status(201).json({ credentials, account: portalOut(accountOf(db, id)) });
   }),
 );
 
-/** New password (shown once). Every phone logged in to this account is signed out. */
+/** New password (made up, or the admin's choice), optionally a new username. Every phone logged in to this account is signed out. */
 clientsRouter.post(
   "/:id/portal/reset",
   requirePerm("clients", "create"),
   h((req, res) => {
     const id = String(req.params.id);
-    const body = parse(z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/).optional() }), req.body ?? {});
+    const body = parse(chosenSchema, req.body ?? {});
     const credentials = db.transaction((tx) => {
       const a = accountOf(tx, id);
       if (!a) throw notFound("portal login");
       const username = body.username ? body.username.toLowerCase() : a.username;
-      if (username !== a.username && tx.select({ id: clientAccounts.id }).from(clientAccounts).where(eq(clientAccounts.username, username)).get())
-        throw new HttpError(409, "duplicate", "This username is taken.");
-      const password = generatePassword();
-      tx.update(clientAccounts).set({ username, passwordHash: hashPassword(password), mustChangePassword: true, active: true, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
+      assertUsernameFree(tx, username, a.id);
+      const password = body.password ?? generatePassword();
+      tx.update(clientAccounts).set({ username, passwordHash: hashPassword(password), mustChangePassword: !body.password, active: true, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
       tx.delete(clientSessions).where(eq(clientSessions.accountId, a.id)).run();
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client_account", entityId: a.id, after: { username, password: "reset" } });
       return { username, password };

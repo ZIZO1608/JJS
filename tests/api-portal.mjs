@@ -229,5 +229,20 @@ await step("reset password signs the client out; disabled account cannot log in"
   ok(await sara("POST", "/portal/login", { username: r.credentials.username, password: r.credentials.password }));
 });
 
+await step("admin can choose the username and password (no forced change)", async () => {
+  const c = ok(await admin("POST", "/clients", { type: "business", name: "Study Zone", portalAccess: false }), 201);
+  assert.equal((await admin("POST", `/clients/${c.row.id}/portal`, { username: S.sara.username, password: "whatever1" })).status, 409);
+  const made = ok(await admin("POST", `/clients/${c.row.id}/portal`, { username: "StudyZone", password: "studyzone123" }), 201);
+  assert.equal(made.credentials.username, "studyzone");
+  assert.equal(made.account.mustChangePassword, false);
+  const sz = client();
+  const me = ok(await sz("POST", "/portal/login", { username: "studyzone", password: "studyzone123" }));
+  assert.equal(me.client.mustChangePassword, false);
+  const r = ok(await admin("POST", `/clients/${c.row.id}/portal/reset`, { username: "study.zone", password: "newpass99" }));
+  assert.equal(r.credentials.username, "study.zone");
+  assert.equal((await sz("GET", "/portal/me")).status, 401);
+  ok(await sz("POST", "/portal/login", { username: "study.zone", password: "newpass99" }));
+});
+
 console.log(failed ? `\n${failed} step(s) failed` : "\nAll portal steps passed");
 process.exit(failed ? 1 : 0);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Modal, Spinner } from "../../components/ui";
+import { Field, Modal, Spinner, TextInput } from "../../components/ui";
 import { post, put } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
@@ -80,6 +80,32 @@ export function CredentialsDialog({ credentials, clientName, phone, onClose }: {
   );
 }
 
+/** Admin types the username and password (e.g. studyzone / studyzone123) instead of a made-up one. */
+function ChooseLoginForm({ initialUsername, busy, onSubmit }: { initialUsername: string; busy: boolean; onSubmit: (body: { username: string; password: string }) => void }) {
+  const { tr } = useI18n();
+  const [f, setF] = useState({ username: initialUsername, password: "" });
+  const okUser = /^[a-zA-Z0-9._-]{3,40}$/.test(f.username.trim());
+  return (
+    <form
+      className="mt-4 grid gap-3 rounded-xl border border-line bg-sunken/40 p-4 text-start sm:grid-cols-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({ username: f.username.trim(), password: f.password });
+      }}
+    >
+      <Field label={tr("اسم المستخدم", "Username")} htmlFor="pl-user" hint={tr("أحرف إنكليزية وأرقام", "English letters and numbers")}>
+        <TextInput id="pl-user" dir="ltr" autoCapitalize="none" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} />
+      </Field>
+      <Field label={tr("كلمة المرور", "Password")} htmlFor="pl-pass" hint={tr("6 أحرف على الأقل", "At least 6 characters")}>
+        <TextInput id="pl-pass" dir="ltr" autoComplete="off" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+      </Field>
+      <button className="btn btn-primary sm:col-span-2" disabled={busy || !okUser || f.password.length < 6}>
+        {tr("احفظ الدخول", "Save login")}
+      </button>
+    </form>
+  );
+}
+
 /** Client page tab: the client's own login to the ordering portal. */
 export function PortalTab({ clientId, clientName, phone }: { clientId: string; clientName: string; phone: string }) {
   const { tr, fmtDate, err } = useI18n();
@@ -88,6 +114,7 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
   const { data, reload } = useData<{ account: PortalAccount | null }>(`/clients/${clientId}/portal`);
   const [shown, setShown] = useState<PortalCredentials | null>(null);
   const [busy, setBusy] = useState(false);
+  const [choosing, setChoosing] = useState(false);
   const manage = can("clients", "create");
   if (!data) return <Spinner />;
   const a = data.account;
@@ -97,6 +124,7 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
     try {
       const r = await fn();
       if (r.credentials) setShown(r.credentials);
+      setChoosing(false);
       await reload();
     } catch (e) {
       toast(err(e), "error");
@@ -131,11 +159,15 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
               <button className="btn" disabled={busy} onClick={() => void run(() => post(`/clients/${clientId}/portal/reset`))}>
                 {tr("كلمة مرور جديدة", "New password")}
               </button>
+              <button className="btn" disabled={busy} onClick={() => setChoosing((v) => !v)} aria-expanded={choosing}>
+                {tr("اختر اسماً وكلمة مرور", "Set username & password")}
+              </button>
               <button className={`btn ${a.active ? "text-bad" : ""}`} disabled={busy} onClick={() => void run(() => put(`/clients/${clientId}/portal`, { active: !a.active }))}>
                 {a.active ? tr("إيقاف الدخول", "Stop access") : tr("تفعيل الدخول", "Allow access")}
               </button>
             </div>
           )}
+          {manage && choosing && <ChooseLoginForm initialUsername={a.username} busy={busy} onSubmit={(body) => void run(() => post(`/clients/${clientId}/portal/reset`, body))} />}
         </>
       ) : (
         <div className="text-center">
@@ -145,10 +177,16 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
           <p className="mt-2 font-semibold">{tr("هذا الزبون ليس لديه دخول بعد", "This client has no login yet")}</p>
           <p className="text-sm text-muted">{tr("مع الدخول يطلب من هاتفه وتصلك الطلبات للموافقة.", "With a login they order from their phone and you approve each order.")}</p>
           {manage && (
-            <button className="btn btn-primary mt-4" disabled={busy} onClick={() => void run(() => post(`/clients/${clientId}/portal`))}>
-              {tr("أنشئ دخولاً للزبون", "Create a login")}
-            </button>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button className="btn btn-primary" disabled={busy} onClick={() => void run(() => post(`/clients/${clientId}/portal`))}>
+                {tr("أنشئ دخولاً تلقائياً", "Create a login")}
+              </button>
+              <button className="btn" disabled={busy} onClick={() => setChoosing((v) => !v)} aria-expanded={choosing}>
+                {tr("أو اختر الاسم وكلمة المرور", "Or choose them yourself")}
+              </button>
+            </div>
           )}
+          {manage && choosing && <ChooseLoginForm initialUsername="" busy={busy} onSubmit={(body) => void run(() => post(`/clients/${clientId}/portal`, body))} />}
         </div>
       )}
       {shown && <CredentialsDialog credentials={shown} clientName={clientName} phone={phone} onClose={() => setShown(null)} />}

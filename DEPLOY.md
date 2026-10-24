@@ -71,7 +71,13 @@ Clients sign in at **https://your-domain/portal**. Their login is separate from 
 
 - **Giving a client a login:** when you add a new client, keep **Give the client a login** ticked. A card then shows the username, password and link, with **Copy** and **Send on WhatsApp** buttons. For an existing client, open the client → **Client login** tab → **Create a login**.
 - **The password is shown once.** If it is lost, open the client → **Client login** → **New password**. This also signs the client out on every phone. **Stop access** blocks the login without deleting anything.
-- On first sign-in the client chooses their own password.
+- **Choosing the username and password yourself:** in the **Client login** tab, use **Set username & password** (or **Or choose them yourself** for a client with no login yet). A login whose password you chose works straight away, with no forced change. From the Coolify terminal it's one line, and the client is created if it doesn't exist:
+
+  ```sh
+  node scripts/client-login.mjs "Study Zone" studyzone studyzone123
+  node scripts/client-login.mjs        # lists all client logins
+  ```
+- With a made-up password, the client chooses their own on first sign-in.
 - **Orders from clients:** a client's order is a *request*. Admin and Manager hear a chime and see it under the bell and in **Client requests**. **Accept** turns it into a normal invoice on the client's account (stock, balance and receipt as usual). **Decline** asks for a reason, which the client sees. Members do not get these requests.
 - "Pay on delivery" orders are on the client's account too, marked 💵 on the invoice. Record the cash with **Record payment** when you collect it.
 - To accept orders, the business day must be open and an active "On credit" payment method must exist (it does by default).
