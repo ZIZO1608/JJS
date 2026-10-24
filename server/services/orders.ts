@@ -49,6 +49,7 @@ export interface OrderOptions {
   presetRate?: number | null;
   consignmentId?: string;
   fulfilmentNote?: string;
+  source?: "staff" | "portal";
 }
 
 export interface PricedLine {
@@ -298,6 +299,7 @@ export function createOrder(tx: Q, input: OrderInput, userId: string, opts: Orde
       userId,
       paidAmount: paidNow,
       consignmentId: opts.consignmentId ?? null,
+      source: opts.source ?? "staff",
     })
     .run();
   priced.lines.forEach((l, i) =>

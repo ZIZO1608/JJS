@@ -65,6 +65,18 @@ node scripts/reset-password.mjs                    # lists all users
 node scripts/reset-password.mjs jabal NewPass123   # sets a new password and logs that user out everywhere
 ```
 
+## Client portal (clients order from their phone)
+
+Clients sign in at **https://your-domain/portal**. Their login is separate from staff logins, so a client can never see staff screens.
+
+- **Giving a client a login:** when you add a new client, keep **Give the client a login** ticked. A card then shows the username, password and link, with **Copy** and **Send on WhatsApp** buttons. For an existing client, open the client → **Client login** tab → **Create a login**.
+- **The password is shown once.** If it is lost, open the client → **Client login** → **New password**. This also signs the client out on every phone. **Stop access** blocks the login without deleting anything.
+- On first sign-in the client chooses their own password.
+- **Orders from clients:** a client's order is a *request*. Admin and Manager hear a chime and see it under the bell and in **Client requests**. **Accept** turns it into a normal invoice on the client's account (stock, balance and receipt as usual). **Decline** asks for a reason, which the client sees. Members do not get these requests.
+- "Pay on delivery" orders are on the client's account too, marked 💵 on the invoice. Record the cash with **Record payment** when you collect it.
+- To accept orders, the business day must be open and an active "On credit" payment method must exist (it does by default).
+- On phones, clients can install the portal as an app: Chrome → **Add to Home screen**, or Safari → **Share → Add to Home Screen**.
+
 ## Backups
 
 The app keeps 30 daily backups in `/data/backups` inside the volume. For copies off the server, use **Settings → Backups → download** in the app, or Coolify's volume backup.

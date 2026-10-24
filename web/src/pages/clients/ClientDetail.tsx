@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Stat, Tabs } from "../../components/Tabs";
 import { ConfirmDialog, Empty, Field, Modal, PageHeader, Select, Spinner, TextInput } from "../../components/ui";
 import { del, get, post, put } from "../../lib/api";
@@ -12,6 +12,7 @@ import type { Catalog, ClientSummary, Named } from "../../lib/types";
 import { useData } from "../../lib/useData";
 import { AdjustDialog, BalanceText, ClientDialog, PaymentDialog } from "./ClientDialogs";
 import { LateBadge } from "./Clients";
+import { CredentialsDialog, PortalTab, type PortalCredentials } from "./PortalAccess";
 import { ConsignmentDialog, ReturnDialog, STATUS_LABEL, SettleDialog, waLink, type Consignment } from "../distribution/common";
 
 type MoveType = "charge" | "payment" | "topup" | "refund" | "adjust" | "subscription" | "return" | "opening";
@@ -829,7 +830,7 @@ function StandingOrders({ d, onSaved }: { d: Detail; onSaved: () => void }) {
   );
 }
 
-type TabKey = "overview" | "moves" | "statement" | "returns" | "consignments" | "prices" | "subscription" | "standing";
+type TabKey = "overview" | "moves" | "statement" | "returns" | "consignments" | "prices" | "subscription" | "standing" | "portal";
 
 export function ClientDetailPage() {
   const { id = "" } = useParams();
@@ -837,7 +838,15 @@ export function ClientDetailPage() {
   const { can, simple } = useAuth();
   const toast = useToast();
   const { data, reload, error } = useData<Detail>(`/clients/${id}`);
-  const [tab, setTab] = useState<TabKey>("overview");
+  const location = useLocation();
+  const navigate = useNavigate();
+  // A brand-new client arrives here with their portal login to show once.
+  const [newLogin, setNewLogin] = useState<PortalCredentials | null>(() => (location.state as { portal?: PortalCredentials } | null)?.portal ?? null);
+  const [tab, setTab] = useState<TabKey>(newLogin ? "portal" : "overview");
+  const closeNewLogin = () => {
+    setNewLogin(null);
+    navigate(location.pathname, { replace: true, state: null });
+  };
   const [dialog, setDialog] = useState<"pay" | "edit" | "adjust" | "return" | "consign" | null>(null);
   const [settle, setSettle] = useState<Consignment | null>(null);
   const openSettle = async (cid: string) => {
@@ -870,8 +879,9 @@ export function ClientDetailPage() {
     c.paymentTermsDays ? tr(`مدة السداد ${c.paymentTermsDays} يوم`, `${c.paymentTermsDays} days to pay`) : tr("الدفع فوراً", "Pays on the spot"),
   ].filter(Boolean);
 
+  const portalTab = { key: "portal" as TabKey, label: tr("دخول الزبون", "Client login") };
   const tabs: { key: TabKey; label: string }[] = simple
-    ? [{ key: "moves", label: tr("حركات الحساب", "Account moves") }]
+    ? [{ key: "moves", label: tr("حركات الحساب", "Account moves") }, portalTab]
     : [
         { key: "overview", label: tr("نظرة عامة", "Overview") },
         { key: "moves", label: tr("حركات الحساب", "Account moves") },
@@ -881,8 +891,9 @@ export function ClientDetailPage() {
         { key: "prices", label: tr("أسعار خاصة", "Special prices") },
         { key: "subscription", label: tr("الاشتراك", "Subscription") },
         { key: "standing", label: tr("طلبات ثابتة", "Standing orders") },
+        portalTab,
       ];
-  const current = simple ? "moves" : tab;
+  const current = simple && tab !== "portal" ? "moves" : tab;
 
   return (
     <>
@@ -1001,6 +1012,8 @@ export function ClientDetailPage() {
       {current === "prices" && <SpecialPrices d={data} onSaved={() => void reload()} />}
       {current === "subscription" && <SubscriptionTab d={data} onSaved={() => void reload()} />}
       {current === "standing" && <StandingOrders d={data} onSaved={() => void reload()} />}
+      {current === "portal" && <PortalTab clientId={c.id} clientName={c.name} phone={c.phone} />}
+      {newLogin && <CredentialsDialog credentials={newLogin} clientName={c.name} phone={c.phone} onClose={closeNewLogin} />}
 
       {dialog === "pay" && <PaymentDialog client={c} onClose={() => setDialog(null)} onSaved={done} />}
       {dialog === "edit" && <ClientDialog client={c} onClose={() => setDialog(null)} onSaved={done} />}

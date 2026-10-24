@@ -458,7 +458,8 @@ create table if not exists public."orders" (
   "cancelled_at" text,
   "cancel_reason" text,
   "paid_amount" double precision,
-  "consignment_id" text
+  "consignment_id" text,
+  "source" text
 );
 alter table public."orders" enable row level security;
 

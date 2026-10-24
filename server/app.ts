@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import { WEB_DIST_DIR } from "./env.js";
 import { sessionMiddleware } from "./lib/auth.js";
+import { clientSessionMiddleware } from "./lib/clientAuth.js";
 import { errorHandler, HttpError } from "./lib/util.js";
 import { auditRouter } from "./routes/audit.js";
 import { authRouter } from "./routes/auth.js";
@@ -27,6 +28,8 @@ import { reportsRouter } from "./routes/reports.js";
 import { stockRouter } from "./routes/stock.js";
 import { systemRouter } from "./routes/system.js";
 import { wholesaleRouter } from "./routes/wholesale.js";
+import { portalRouter } from "./routes/portal.js";
+import { notificationsRouter, requestsRouter } from "./routes/requests.js";
 
 export function createApp() {
   const app = express();
@@ -36,6 +39,7 @@ export function createApp() {
   app.use(express.json({ limit: "6mb" }));
   app.use(cookieParser());
   app.use(sessionMiddleware);
+  app.use(clientSessionMiddleware);
 
   const api = express.Router();
   api.get("/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
@@ -61,6 +65,9 @@ export function createApp() {
   api.use("/people", peopleRouter);
   api.use("/reports", reportsRouter);
   api.use("/system", systemRouter);
+  api.use("/portal", portalRouter);
+  api.use("/requests", requestsRouter);
+  api.use("/notifications", notificationsRouter);
   api.use(wholesaleRouter);
   api.use((_req, _res, next) => next(new HttpError(404, "not_found", "No such API route.")));
   app.use("/api", api);

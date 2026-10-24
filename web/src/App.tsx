@@ -27,6 +27,7 @@ import { WarehousePage } from "./pages/warehouse/Warehouse";
 import { DistributionPage } from "./pages/distribution/Distribution";
 import { PrintRouteSheet } from "./pages/distribution/PrintRoute";
 import { ProductionPage } from "./pages/production/Production";
+import { RequestsPage } from "./pages/requests/Requests";
 import { AppSettingsProvider } from "./lib/appSettings";
 import { useAuth } from "./lib/auth";
 import { useI18n } from "./lib/i18n";
@@ -60,6 +61,7 @@ export function App() {
             <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
             <Route path="orders" element={g("orders", <OrdersPage />)} />
             <Route path="orders/new" element={g("orders", <NewOrderPage />)} />
+            <Route path="requests" element={g("orders", <RequestsPage />)} />
             <Route path="close" element={g("daily_close", <DailyClosePage />)} />
             <Route path="distribution/*" element={g("orders", <DistributionPage />)} />
             <Route path="production/*" element={g("warehouse", <ProductionPage />)} />

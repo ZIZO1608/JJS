@@ -8,7 +8,8 @@ interface Toast {
 }
 const Ctx = createContext<(text: string, kind?: Kind) => void>(() => undefined);
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+/** `raised` lifts the toasts above a bottom tab bar (the client portal). */
+export function ToastProvider({ children, raised = false }: { children: ReactNode; raised?: boolean }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seq = useRef(0);
   const show = useCallback((text: string, kind: Kind = "ok") => {
@@ -19,7 +20,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={show}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex flex-col items-center gap-2 px-4" aria-live="polite">
+      <div className={`pointer-events-none fixed inset-x-0 ${raised ? "bottom-28" : "bottom-5"} z-50 flex flex-col items-center gap-2 px-4`} aria-live="polite">
         {toasts.map((t) => (
           <div
             key={t.id}

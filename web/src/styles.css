@@ -212,3 +212,34 @@ h3 {
     animation: none !important;
   }
 }
+
+/* ---------- Client portal ---------- */
+.portal-hero {
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgb(255 255 255 / 0.18) 0%, transparent 55%),
+    linear-gradient(135deg, rgb(var(--brand)) 0%, rgb(171 61 12) 100%);
+}
+.portal-sheet {
+  animation: portal-up 0.28s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.portal-pop {
+  animation: portal-pop 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+@keyframes portal-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+@keyframes portal-pop {
+  from {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .portal-sheet,
+  .portal-pop {
+    animation: none;
+  }
+}

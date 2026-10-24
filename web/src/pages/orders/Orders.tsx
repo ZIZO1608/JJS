@@ -10,7 +10,7 @@ import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
 import type { Lookup } from "../../lib/types";
 import { ReturnDialog } from "../distribution/common";
-import { Confirm, discountWords, payStatusLabel, statusLabel, timeOf, typeLabel, type OrderDetail, type OrderRow } from "./shared";
+import { Confirm, discountWords, PortalBadge, payStatusLabel, statusLabel, timeOf, typeLabel, type OrderDetail, type OrderRow } from "./shared";
 
 interface DueRow {
   id: string;
@@ -335,7 +335,10 @@ export function OrdersPage() {
             <button key={o.id} onClick={() => setOpen(o.id)} className={`card flex items-center gap-3 text-start hover:border-ink ${o.status === "cancelled" ? "opacity-50" : ""}`}>
               <span className="num text-lg font-bold">#{o.number}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">{o.clientName ?? tr("زبون عابر", "Walk-in")}</span>
+                <span className="block truncate font-semibold">
+                  {o.clientName ?? tr("زبون عابر", "Walk-in")}
+                  {o.source === "portal" && <PortalBadge label={tr("من التطبيق", "Portal")} />}
+                </span>
                 <span className="block text-sm text-muted">
                   {timeOf(o.createdAt, lang)} · {o.itemsCount} {tr("قطعة", "items")} · {o.status === "cancelled" ? statusLabel(o.status, tr) : payStatusLabel(o.paymentStatus, tr)}
                   {o.fulfilment === "delivery" && ` · ${tr("توصيل", "Delivery")}`}
@@ -366,6 +369,7 @@ export function OrdersPage() {
                   <td className="td num">{timeOf(o.createdAt, lang)}</td>
                   <td className="td">
                     {o.clientName ?? <span className="text-muted">{tr("زبون عابر", "Walk-in")}</span>}
+                    {o.source === "portal" && <PortalBadge label={tr("من التطبيق", "Portal")} />}
                     {o.type !== "normal" && <span className="chip ms-2">{typeLabel(o.type, tr)}</span>}
                   </td>
                   <td className="td num">

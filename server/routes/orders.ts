@@ -11,6 +11,7 @@ import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { cancelOrder, createOrder, priceOrder } from "../services/orders.js";
+import { notifyOrderStatus } from "../services/portal.js";
 
 export const ordersRouter = Router();
 
@@ -113,6 +114,7 @@ ordersRouter.post(
     db.transaction((tx) => {
       const o = cancelOrder(tx, id, req.user!.id, body.reason);
       writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "order", entityId: id, before: { number: o.number, total: o.total }, after: { reason: body.reason } });
+      notifyOrderStatus(tx, id, "cancelled", body.reason);
     });
     res.json({ ok: true });
   }),
@@ -127,11 +129,14 @@ ordersRouter.post(
     const o = db.select().from(orders).where(eq(orders.id, id)).get();
     if (!o) throw notFound("order");
     if (o.status === "cancelled") throw new HttpError(409, "cancelled", "This order was cancelled.");
-    db.update(orders)
-      .set({ status: "delivered", assignedTo: body.assignedTo ?? o.assignedTo, updatedAt: nowIso(), syncedAt: null })
-      .where(eq(orders.id, id))
-      .run();
-    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "order", entityId: id, after: { status: "delivered" } });
+    db.transaction((tx) => {
+      tx.update(orders)
+        .set({ status: "delivered", assignedTo: body.assignedTo ?? o.assignedTo, updatedAt: nowIso(), syncedAt: null })
+        .where(eq(orders.id, id))
+        .run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order", entityId: id, after: { status: "delivered" } });
+      if (o.status !== "delivered") notifyOrderStatus(tx, id, "delivered");
+    });
     res.json({ ok: true });
   }),
 );

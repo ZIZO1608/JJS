@@ -8,6 +8,7 @@ import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../lib/toast";
 import type { ClientSummary, Named, PaymentMethod } from "../../lib/types";
 import { useData } from "../../lib/useData";
+import type { PortalCredentials } from "./PortalAccess";
 
 export interface Tier extends Named {
   discountPct: number;
@@ -19,7 +20,7 @@ export interface PriceListRow extends Named {
   active: boolean;
 }
 
-export function ClientDialog({ client, onClose, onSaved }: { client: ClientSummary | null; onClose: () => void; onSaved: (id: string) => void }) {
+export function ClientDialog({ client, onClose, onSaved }: { client: ClientSummary | null; onClose: () => void; onSaved: (id: string, portal?: PortalCredentials | null) => void }) {
   const { tr, pick, err, fieldErrors } = useI18n();
   const toast = useToast();
   const { s: app } = useAppSettings();
@@ -45,6 +46,7 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
     consignment: client?.consignment ?? false,
     repId: client?.repId ?? "",
   });
+  const [portalAccess, setPortalAccess] = useState(true);
   const [opening, setOpening] = useState({ amount: "", currency: (app?.defaultCurrency ?? "USD") as Currency });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -67,15 +69,16 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
         creditLimitUsd: Number.isNaN(limit) ? 0 : limit,
       };
       if (!client) {
+        body.portalAccess = portalAccess;
         const ob = num(opening.amount);
         if (!Number.isNaN(ob) && ob !== 0) {
           body.openingBalance = ob;
           body.openingCurrency = opening.currency;
         }
       }
-      const r = client ? await put<{ row: ClientSummary }>(`/clients/${client.id}`, body) : await post<{ row: ClientSummary }>("/clients", body);
+      const r = client ? await put<{ row: ClientSummary; portal?: undefined }>(`/clients/${client.id}`, body) : await post<{ row: ClientSummary; portal: PortalCredentials | null }>("/clients", body);
       toast(tr("تم الحفظ", "Saved"));
-      onSaved(r.row.id);
+      onSaved(r.row.id, r.portal);
     } catch (e) {
       if (e instanceof ApiError && e.issues) setErrors(fieldErrors(e));
       else toast(err(e), "error");
@@ -179,6 +182,15 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
           <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment} onChange={(e) => set("consignment", e.target.checked)} />
           {tr("محل بالأمانة (بيدفع بس على اللي باعه)", "Consignment shop (pays only for what it sold)")}
         </label>
+        {!client && (
+          <label className="flex items-start gap-2 rounded-xl border border-line bg-sunken/50 p-3 sm:col-span-2">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-ink" checked={portalAccess} onChange={(e) => setPortalAccess(e.target.checked)} />
+            <span>
+              <span className="block font-semibold">{tr("أنشئ دخولاً للزبون (طلب من الهاتف)", "Give the client a login (order from their phone)")}</span>
+              <span className="block text-sm text-muted">{tr("يُنشأ اسم مستخدم وكلمة مرور تظهر بعد الحفظ لترسلها له.", "A username and password are made and shown after saving, ready to send.")}</span>
+            </span>
+          </label>
+        )}
         {!client && (
           <div className="grid grid-cols-[1fr_auto] gap-2 sm:col-span-2">
             <Field label={tr("رصيد سابق (اختياري)", "Opening balance (optional)")} htmlFor="c-open" hint={tr("موجب = عليه لنا، سالب = دافع سلف", "+ owes us · − prepaid")}>

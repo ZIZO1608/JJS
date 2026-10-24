@@ -228,6 +228,19 @@
   "tooLong": "Too long: at most {n} characters.",
   "tooSmall": "Must be at least {n}.",
   "badFormat": "The format is not right.",
-  "badValue": "This value is not accepted."
+  "badValue": "This value is not accepted.",
+  "not_pending": "This request was already answered.",
+  "has_subscription": "There is already an active subscription.",
+  "request_pending": "You already have a subscription request waiting.",
+  "has_account": "This client already has a login.",
+  "account_inactive": "This account is stopped. Contact the shop.",
+  "no_credit_method": "Add an active “On credit” payment method first.",
+  "empty_order": "Add at least one item.",
+  "product_unavailable": "One of the products is no longer available.",
+  "option_unavailable": "One of the add-ons is no longer available.",
+  "credit_limit": "This order goes over the credit limit.",
+  "day_closed": "The day is closed. Ask the admin to reopen it.",
+  "no_rate": "Set the USD exchange rate first.",
+  "not_found": "Not found."
  }
 }

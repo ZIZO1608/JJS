@@ -14,6 +14,15 @@ import { App } from "./App";
 import { AuthProvider } from "./lib/auth";
 import { I18nProvider } from "./lib/i18n";
 import { ToastProvider } from "./lib/toast";
+import { PortalApp } from "./portal/PortalApp";
+
+// Clients use the same address under /portal: their own login, screens and home-screen icon.
+const isPortal = window.location.pathname === "/portal" || window.location.pathname.startsWith("/portal/");
+if (isPortal) {
+  document.querySelector('link[rel="manifest"]')?.setAttribute("href", "/portal.webmanifest");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#d2561a");
+  document.title = "JJ's";
+}
 
 // Lets the browser install the app (desktop / home-screen icon). Not in dev: Vite serves fresh files.
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
@@ -23,10 +32,14 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      <ToastProvider>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
+      <ToastProvider raised={isPortal}>
+        {isPortal ? (
+          <PortalApp />
+        ) : (
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        )}
       </ToastProvider>
     </I18nProvider>
   </StrictMode>,

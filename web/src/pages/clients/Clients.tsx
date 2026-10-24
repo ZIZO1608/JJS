@@ -268,9 +268,9 @@ export function ClientsPage() {
         <ClientDialog
           client={null}
           onClose={() => setCreating(false)}
-          onSaved={(id) => {
+          onSaved={(id, portal) => {
             setCreating(false);
-            navigate(`/clients/${id}`);
+            navigate(`/clients/${id}`, { state: portal ? { portal } : undefined });
           }}
         />
       )}

@@ -6,6 +6,7 @@ import { useAuth } from "../lib/auth";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
 import { Icon } from "./Icon";
+import { InboxProvider, NotificationBell, useInbox } from "./Inbox";
 import { InstallButton } from "./InstallButton";
 import { Field, Modal, TextInput } from "./ui";
 
@@ -30,23 +31,25 @@ export const pathFor = (m: Module) =>
     settings: "/settings",
   } as Record<Module, string>)[m];
 
-/** Screens that are not a permission module of their own: they follow another module's "view". */
-type Extra = "distribution" | "production";
+/** Screens that are not a permission module of their own: they follow another module's permission. */
+type Extra = "distribution" | "production" | "requests";
 type NavKey = Module | Extra;
-const EXTRA: Record<Extra, { module: Module; to: string; ar: string; en: string }> = {
+const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: string; en: string }> = {
   distribution: { module: "orders", to: "/distribution", ar: "التوزيع", en: "Distribution" },
   production: { module: "warehouse", to: "/production", ar: "الإنتاج", en: "Production" },
+  // answering client requests is for whoever may edit orders (admin, manager)
+  requests: { module: "orders", action: "edit", to: "/requests", ar: "طلبات الزبائن", en: "Client requests" },
 };
 const isExtra = (k: NavKey): k is Extra => k in EXTRA;
 
 const FULL_GROUPS: NavKey[][] = [
   ["home", "dashboard"],
-  ["orders", "distribution", "daily_close", "clients"],
+  ["orders", "requests", "distribution", "daily_close", "clients"],
   ["production", "menu", "warehouse", "purchasing", "costing"],
   ["expenses", "assets", "people", "reports"],
   ["users", "roles", "audit", "settings"],
 ];
-const SIMPLE_ITEMS: NavKey[] = ["home", "orders", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
+const SIMPLE_ITEMS: NavKey[] = ["home", "orders", "requests", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
 
 function RateChip() {
   const { t } = useI18n();
@@ -106,13 +109,29 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
 }
 
 export function Layout() {
+  return (
+    <InboxProvider>
+      <LayoutInner />
+    </InboxProvider>
+  );
+}
+
+/** Pending client requests next to the nav label. */
+function NavBadge({ k }: { k: NavKey }) {
+  const { pending } = useInbox();
+  const n = k === "requests" ? pending.orders + pending.subscriptions : 0;
+  if (!n) return null;
+  return <span className="ms-auto grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1.5 text-[11px] font-bold text-white num">{n}</span>;
+}
+
+function LayoutInner() {
   const { t, pick, lang } = useI18n();
   const { me, business, can, simple, logout, setLanguage } = useAuth();
   const [menu, setMenu] = useState(false);
   const [pw, setPw] = useState(false);
   if (!me) return null;
 
-  const visible = (k: NavKey) => can(isExtra(k) ? EXTRA[k].module : k, "view");
+  const visible = (k: NavKey) => (isExtra(k) ? can(EXTRA[k].module, EXTRA[k].action ?? "view") : can(k, "view"));
   const to = (k: NavKey) => (isExtra(k) ? EXTRA[k].to : pathFor(k));
   const label = (k: NavKey) => (isExtra(k) ? pick(EXTRA[k]) : pick(MODULE_LABEL[k]));
   const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -129,6 +148,7 @@ export function Layout() {
         <div className="ms-auto flex items-center gap-3">
           {!simple && <RateChip />}
           <InstallButton className="hidden px-3 py-1.5 text-sm sm:inline-flex" />
+          <NotificationBell />
           <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group" aria-label={t("auth.language")}>
             {(["ar", "en"] as const).map((l) => (
               <button
@@ -170,6 +190,7 @@ export function Layout() {
               <NavLink key={m} to={to(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap px-4 py-2.5 text-[15.5px]`}>
                 <Icon name={m} />
                 {label(m)}
+                <NavBadge k={m} />
               </NavLink>
             ))}
           </nav>
@@ -189,6 +210,7 @@ export function Layout() {
                     <NavLink key={m} to={to(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap`}>
                       <Icon name={m} />
                       <span>{label(m)}</span>
+                      <NavBadge k={m} />
                     </NavLink>
                   ))}
                 </div>

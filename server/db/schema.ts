@@ -543,6 +543,8 @@ export const orders = sqliteTable(
     /** Paid at the time of the order, in the order currency (the rest goes on the client's account). */
     paidAmount: real("paid_amount").notNull().default(0),
     consignmentId: text("consignment_id"),
+    /** staff = typed in the shop; portal = a client's request that staff accepted. */
+    source: text("source", { enum: ["staff", "portal"] }).notNull().default("staff"),
   },
   (t) => [uniqueIndex("orders_number_uq").on(t.number), index("orders_date_idx").on(t.businessDate), index("orders_client_idx").on(t.clientId, t.businessDate)],
 );
@@ -868,4 +870,94 @@ export const priceChanges = sqliteTable(
     businessDate: text("business_date").notNull(),
   },
   (t) => [index("price_changes_date_idx").on(t.businessDate)],
+);
+
+/* ---------- Client portal ---------- */
+/** A client's own login. Kept apart from `users` so a client can never get staff permissions. */
+export const clientAccounts = sqliteTable(
+  "client_accounts",
+  {
+    ...base,
+    clientId: text("client_id").notNull().references(() => clients.id),
+    username: text("username").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(true),
+    lastLoginAt: text("last_login_at"),
+  },
+  (t) => [uniqueIndex("client_accounts_client_uq").on(t.clientId), uniqueIndex("client_accounts_username_uq").on(t.username)],
+);
+
+export const clientSessions = sqliteTable(
+  "client_sessions",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => clientAccounts.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(now),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (t) => [index("client_sessions_account_idx").on(t.accountId)],
+);
+
+/** An order sent from the portal. Touches no stock or money until staff accept it. */
+export const orderRequests = sqliteTable(
+  "order_requests",
+  {
+    ...base,
+    number: integer("number").notNull(),
+    clientId: text("client_id").notNull().references(() => clients.id),
+    status: text("status", { enum: ["pending", "accepted", "declined", "cancelled"] }).notNull().default("pending"),
+    fulfilment: text("fulfilment", { enum: ["pickup", "delivery"] }).notNull().default("pickup"),
+    paymentChoice: text("payment_choice", { enum: ["on_account", "on_delivery"] }).notNull(),
+    note: text("note").notNull().default(""),
+    /** [{ productId, qty, optionIds }] */
+    linesJson: text("lines_json").notNull(),
+    /** What the client saw when sending; the real price is set again on accept. */
+    quotedTotal: real("quoted_total").notNull(),
+    currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
+    itemsCount: integer("items_count").notNull().default(0),
+    decidedBy: text("decided_by").references(() => users.id),
+    decidedAt: text("decided_at"),
+    declineReason: text("decline_reason").notNull().default(""),
+    orderId: text("order_id").references(() => orders.id),
+  },
+  (t) => [uniqueIndex("order_requests_number_uq").on(t.number), index("order_requests_client_idx").on(t.clientId, t.createdAt), index("order_requests_status_idx").on(t.status)],
+);
+
+export const subscriptionRequests = sqliteTable(
+  "subscription_requests",
+  {
+    ...base,
+    clientId: text("client_id").notNull().references(() => clients.id),
+    planId: text("plan_id").notNull().references(() => subscriptionPlans.id),
+    status: text("status", { enum: ["pending", "accepted", "declined", "cancelled"] }).notNull().default("pending"),
+    note: text("note").notNull().default(""),
+    decidedBy: text("decided_by").references(() => users.id),
+    decidedAt: text("decided_at"),
+    declineReason: text("decline_reason").notNull().default(""),
+    subscriptionId: text("subscription_id").references(() => subscriptions.id),
+  },
+  (t) => [index("sub_requests_client_idx").on(t.clientId, t.createdAt), index("sub_requests_status_idx").on(t.status)],
+);
+
+/** One row per recipient: a staff user or a client. */
+export const notifications = sqliteTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    clientId: text("client_id").references(() => clients.id),
+    kind: text("kind").notNull(),
+    titleAr: text("title_ar").notNull(),
+    titleEn: text("title_en").notNull(),
+    bodyAr: text("body_ar").notNull().default(""),
+    bodyEn: text("body_en").notNull().default(""),
+    link: text("link").notNull().default(""),
+    refId: text("ref_id"),
+    readAt: text("read_at"),
+    createdAt: text("created_at").notNull().default(now),
+  },
+  (t) => [index("notifications_user_idx").on(t.userId, t.createdAt), index("notifications_client_idx").on(t.clientId, t.createdAt)],
 );

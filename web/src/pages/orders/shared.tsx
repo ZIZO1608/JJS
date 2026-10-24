@@ -35,6 +35,7 @@ export interface OrderRow {
   cancelReason?: string;
   paidAmount?: number;
   consignmentId?: string | null;
+  source?: "staff" | "portal";
   clientName: string | null;
   method: { nameAr: string; nameEn: string } | null;
   userName: string | null;
@@ -75,6 +76,9 @@ export interface OrderDetail extends OrderRow {
 type Tr = (ar: string, en: string) => string;
 
 /** "tier:10%,subscription:5%" → "Favourite client 10% · Subscription 5%" */
+/** Marks an order a client sent from the portal. */
+export const PortalBadge = ({ label }: { label: string }) => <span className="ms-1.5 inline-block rounded-full bg-brand/15 px-2 py-0.5 align-middle text-[11px] font-bold text-brand no-underline">📱 {label}</span>;
+
 export function discountWords(reason: string, tr: Tr) {
   if (!reason) return "";
   const names: Record<string, [string, string]> = {

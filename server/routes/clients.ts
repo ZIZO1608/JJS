@@ -2,16 +2,18 @@ import { and, asc, count, desc, eq, gte, isNull, lt, lte, max, ne, sql } from "d
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { categories, clientMoves, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
+import { categories, clientAccounts, clientMoves, clientSessions, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { requirePerm } from "../lib/auth.js";
-import { addMonths, assertDayOpen, localDate, monthStart, rateFor, round4, toUsd } from "../lib/biz.js";
+import { hashPassword, requirePerm } from "../lib/auth.js";
+import { generatePassword, suggestUsername } from "../lib/clientAuth.js";
+import { addMonths, assertDayOpen, localDate, monthStart, rateFor, round4, toUsd, type Q } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus, startSubscription, subscriptionStatus } from "../services/clients.js";
 import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "../services/money.js";
 import { clientAging } from "../services/wholesale.js";
 import { getSetting } from "../lib/settings.js";
+import { accountOf } from "../services/portal.js";
 
 export const clientsRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(60), nameEn: z.string().trim().min(1).max(60) };
@@ -174,16 +176,19 @@ clientsRouter.post(
   h((req, res) => {
     const body = parse(clientSchema, req.body);
     const opening = parse(openingSchema, req.body);
+    const { portalAccess } = parse(z.object({ portalAccess: z.boolean().default(true) }), req.body);
     const id = newId();
-    db.transaction((tx) => {
+    const portal = db.transaction((tx) => {
       tx.insert(clients).values({ id, ...body, ...nullables(body) }).run();
       if (opening.openingBalance) {
         const cur = opening.openingCurrency ?? getSetting("currency.default");
         addClientMove(tx, { clientId: id, type: "opening", amount: -opening.openingBalance, currency: cur, rate: rateFor(cur), note: "Opening balance", userId: req.user!.id, date: localDate() });
       }
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "client", entityId: id, after: { ...body, ...opening } });
+      return portalAccess ? createPortalAccount(tx, id, req.user!.id) : null;
     });
-    res.status(201).json({ row: summary(db.select().from(clients).where(eq(clients.id, id)).get()!) });
+    // The password is shown this one time only; it is stored hashed.
+    res.status(201).json({ row: summary(db.select().from(clients).where(eq(clients.id, id)).get()!), portal });
   }),
 );
 
@@ -452,6 +457,78 @@ clientsRouter.post(
     db.update(subscriptions).set({ status: "cancelled", autoRenew: false, updatedAt: nowIso(), syncedAt: null }).where(eq(subscriptions.id, sid)).run();
     writeAudit(db, { userId: req.user!.id, action: "edit", entity: "subscription", entityId: sid, after: { status: "cancelled" } });
     res.json({ ok: true });
+  }),
+);
+
+/* ---------- client portal login ---------- */
+function createPortalAccount(tx: Q, clientId: string, userId: string) {
+  const c = tx.select().from(clients).where(and(eq(clients.id, clientId), isNull(clients.deletedAt))).get();
+  if (!c) throw notFound("client");
+  if (accountOf(tx, clientId)) throw new HttpError(409, "has_account", "This client already has a portal login.");
+  const username = suggestUsername(tx, c);
+  const password = generatePassword();
+  const id = newId();
+  tx.insert(clientAccounts).values({ id, clientId, username, passwordHash: hashPassword(password) }).run();
+  writeAudit(tx, { userId, action: "create", entity: "client_account", entityId: id, after: { client: c.name, username } });
+  return { username, password };
+}
+
+const portalOut = (a: typeof clientAccounts.$inferSelect | undefined) =>
+  a ? { username: a.username, active: a.active, mustChangePassword: a.mustChangePassword, lastLoginAt: a.lastLoginAt, createdAt: a.createdAt } : null;
+
+clientsRouter.get(
+  "/:id/portal",
+  requirePerm("clients", "view"),
+  h((req, res) => res.json({ account: portalOut(accountOf(db, String(req.params.id))) })),
+);
+
+clientsRouter.post(
+  "/:id/portal",
+  requirePerm("clients", "create"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const credentials = db.transaction((tx) => createPortalAccount(tx, id, req.user!.id));
+    res.status(201).json({ credentials, account: portalOut(accountOf(db, id)) });
+  }),
+);
+
+/** New password (shown once). Every phone logged in to this account is signed out. */
+clientsRouter.post(
+  "/:id/portal/reset",
+  requirePerm("clients", "create"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const body = parse(z.object({ username: z.string().trim().min(3).max(40).regex(/^[a-zA-Z0-9._-]+$/).optional() }), req.body ?? {});
+    const credentials = db.transaction((tx) => {
+      const a = accountOf(tx, id);
+      if (!a) throw notFound("portal login");
+      const username = body.username ? body.username.toLowerCase() : a.username;
+      if (username !== a.username && tx.select({ id: clientAccounts.id }).from(clientAccounts).where(eq(clientAccounts.username, username)).get())
+        throw new HttpError(409, "duplicate", "This username is taken.");
+      const password = generatePassword();
+      tx.update(clientAccounts).set({ username, passwordHash: hashPassword(password), mustChangePassword: true, active: true, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
+      tx.delete(clientSessions).where(eq(clientSessions.accountId, a.id)).run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client_account", entityId: a.id, after: { username, password: "reset" } });
+      return { username, password };
+    });
+    res.json({ credentials, account: portalOut(accountOf(db, id)) });
+  }),
+);
+
+clientsRouter.put(
+  "/:id/portal",
+  requirePerm("clients", "create"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const { active } = parse(z.object({ active: z.boolean() }), req.body);
+    db.transaction((tx) => {
+      const a = accountOf(tx, id);
+      if (!a) throw notFound("portal login");
+      tx.update(clientAccounts).set({ active, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
+      if (!active) tx.delete(clientSessions).where(eq(clientSessions.accountId, a.id)).run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client_account", entityId: a.id, after: { active } });
+    });
+    res.json({ account: portalOut(accountOf(db, id)) });
   }),
 );
 
