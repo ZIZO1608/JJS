@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { InstallHelp, useInstall } from "../../components/InstallButton";
 import { Spinner } from "../../components/ui";
 import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -50,6 +51,26 @@ export function Ring({ value, max, label }: { value: number; max: number; label:
   );
 }
 
+/** Invites the client to put the app on their home screen / desktop until it is installed. */
+function InstallCard() {
+  const { tr } = useI18n();
+  const { installed, install, help, closeHelp } = useInstall();
+  if (installed) return null;
+  return (
+    <>
+      <button onClick={() => void install()} className="flex items-center gap-4 rounded-3xl bg-ink p-4 text-start text-bg transition-transform active:scale-[0.98]">
+        <img src="/icon-192.png" alt="" className="h-14 w-14 shrink-0 rounded-2xl bg-white p-1" />
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold">{tr("ثبّت تطبيق JJ's 📲", "Install the JJ's app 📲")}</span>
+          <span className="block text-sm opacity-75">{tr("أيقونة على هاتفك أو الكمبيوتر، واطلب بضغطة واحدة", "An icon on your phone or computer — order in one tap")}</span>
+        </span>
+        <span className="rounded-full bg-brand px-3.5 py-2 text-sm font-bold text-white">{tr("تثبيت", "Install")}</span>
+      </button>
+      {help && <InstallHelp onClose={closeHelp} />}
+    </>
+  );
+}
+
 export function HomePage() {
   const { tr, pick, fmtDate } = useI18n();
   const m = useMoney();
@@ -95,6 +116,8 @@ export function HomePage() {
           +
         </span>
       </Link>
+
+      <InstallCard />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* subscription */}

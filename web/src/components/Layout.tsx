@@ -147,7 +147,7 @@ function LayoutInner() {
         </div>
         <div className="ms-auto flex items-center gap-3">
           {!simple && <RateChip />}
-          <InstallButton className="hidden px-3 py-1.5 text-sm sm:inline-flex" />
+          <InstallButton compact className="px-2.5 py-1.5 text-sm sm:px-3" />
           <NotificationBell />
           <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group" aria-label={t("auth.language")}>
             {(["ar", "en"] as const).map((l) => (

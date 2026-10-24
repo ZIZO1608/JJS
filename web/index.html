@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // Clients at /portal install their own app (start page /portal); staff install the ERP.
+      (function () {
+        var portal = /^\/portal(\/|$)/.test(location.pathname);
+        var link = document.createElement("link");
+        link.rel = "manifest";
+        link.href = portal ? "/portal.webmanifest" : "/manifest.webmanifest";
+        document.head.appendChild(link);
+      })();
+    </script>
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#141312" />
     <title>JJ's ERP</title>

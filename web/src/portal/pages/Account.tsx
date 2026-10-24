@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { InstallButton } from "../../components/InstallButton";
 import { Field, TextInput } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
@@ -63,6 +64,7 @@ export function LoginPage() {
           </button>
         </div>
         <p className="mt-4 text-center text-sm text-faint">{tr("نسيت كلمة المرور؟ تواصل مع المحل.", "Forgot your password? Contact the shop.")}</p>
+        <InstallButton className="mt-3 w-full !py-3" />
       </form>
     </div>
   );
@@ -159,6 +161,7 @@ export function AccountPage() {
           </div>
         )}
       </div>
+      <InstallButton className="w-full !py-3" />
       <button className="btn w-full !py-3 text-bad" onClick={() => void logout()}>
         {tr("تسجيل الخروج", "Sign out")}
       </button>
