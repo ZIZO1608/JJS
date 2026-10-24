@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
 import { runMigrations } from "./db/client.js";
-import { seed, seedUsersFromEnv } from "./db/seed.js";
+import { seed, seedStudyZoneLogin, seedUsersFromEnv } from "./db/seed.js";
 import { DATA_DIR, HOST, PORT } from "./env.js";
 import { startBackupScheduler } from "./services/backup.js";
 import { startFxScheduler } from "./services/fx.js";
@@ -17,6 +17,7 @@ export async function start(port = PORT, host?: string) {
   runMigrations();
   seed();
   seedUsersFromEnv();
+  seedStudyZoneLogin();
   startFxScheduler();
   startBackupScheduler();
   startSyncScheduler();

@@ -1,10 +1,10 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { DEFAULT_ROLE_PERMISSIONS, type SystemRoleKey } from "../../shared/permissions.js";
 import { hashPassword } from "../lib/auth.js";
 import { newId } from "../lib/util.js";
 import { db } from "./client.js";
 import { getSetting, setSetting } from "../lib/settings.js";
-import { cashBoxes, clientTiers, locations, lookups, paymentMethods, permissions, roles, users, warehouses } from "./schema.js";
+import { cashBoxes, clientAccounts, clients, clientTiers, locations, lookups, paymentMethods, permissions, roles, users, warehouses } from "./schema.js";
 
 const SYSTEM_ROLES: { key: SystemRoleKey; nameAr: string; nameEn: string }[] = [
   { key: "admin", nameAr: "الإدارة", nameEn: "Admin" },
@@ -135,5 +135,29 @@ export function seedUsersFromEnv() {
     const nameEn = process.env.JJS_BUSINESS_NAME_EN?.trim();
     const nameAr = process.env.JJS_BUSINESS_NAME_AR?.trim();
     if (firstStart && (nameEn || nameAr)) setSetting("business", { ...getSetting("business"), ...(nameAr && { nameAr }), ...(nameEn && { nameEn }) }, tx);
+  });
+}
+
+/**
+ * The owner's first portal client, asked for by name: Study Zone, signing in as studyzone.
+ * Online server only, once: if that username ever existed (even deleted) nothing happens,
+ * so changing or removing it in the app sticks. The password is stored only as its hash.
+ */
+export function seedStudyZoneLogin() {
+  if (process.env.JJS_TRUST_PROXY !== "1") return;
+  db.transaction((tx) => {
+    if ((tx.select({ n: count() }).from(users).get()?.n ?? 0) === 0) return;
+    if (tx.select({ id: clientAccounts.id }).from(clientAccounts).where(eq(clientAccounts.username, "studyzone")).get()) return;
+    const tag = tx.select({ id: lookups.id }).from(lookups).where(and(eq(lookups.listType, "client_tag"), eq(lookups.nameEn, "Study zone"))).get();
+    let client = tx.select({ id: clients.id }).from(clients).where(eq(clients.name, "Study Zone")).get();
+    if (!client) {
+      client = { id: newId() };
+      tx.insert(clients).values({ id: client.id, type: "business", name: "Study Zone", tagId: tag?.id ?? null }).run();
+    }
+    if (tx.select({ id: clientAccounts.id }).from(clientAccounts).where(eq(clientAccounts.clientId, client.id)).get()) return;
+    tx.insert(clientAccounts)
+      .values({ id: newId(), clientId: client.id, username: "studyzone", passwordHash: "$2a$10$y8pT0.4RjulOLIntBAUXH.Nd4pGs41jcrvMcgRuQKGVqXQDzOEcSW", mustChangePassword: false })
+      .run();
+    console.log('[jjs] portal client "Study Zone" created (studyzone)');
   });
 }
