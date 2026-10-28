@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Empty, Modal, PageHeader, Spinner, TextInput } from "../components/ui";
+import { Empty, Field, Modal, PageHeader, Spinner, TextInput } from "../components/ui";
+import { openPrint } from "../lib/print";
 import { addDaysTo, money, pct, qty, today, UNIT_LABEL, usd, type Currency } from "../lib/format";
 import { useI18n } from "../lib/i18n";
 import { useData } from "../lib/useData";
@@ -104,6 +105,7 @@ export function MyDayPage() {
   const { tr, pick, lang, fmtDate, err } = useI18n();
   const [date, setDate] = useState(today());
   const [open, setOpen] = useState<BoxKey | null>(null);
+  const [printing, setPrinting] = useState(false);
   const { data, error } = useData<Day>(`/reports/day?date=${date}`);
 
   const profit = useCountUp(data?.profit?.usd ?? 0);
@@ -140,10 +142,14 @@ export function MyDayPage() {
                 {tr("اليوم", "Today")}
               </button>
             )}
+            <button className="btn btn-primary" onClick={() => setPrinting(true)}>
+              🖨 {tr("كشف الزبائن", "Clients sheet")}
+            </button>
           </div>
         }
       />
 
+      {printing && <SheetDialog date={date} onClose={() => setPrinting(false)} />}
       {error ? (
         <p className="text-bad">{err(error)}</p>
       ) : !data ? (
@@ -296,6 +302,57 @@ function Details({ k, data, unit, onClose }: { k: BoxKey; data: Day; unit: (u: s
           <Row label={tr("المجموع بالدولار", "Total in USD")} value={usd(data.boxes.totalUsd)} strong />
         </div>
       )}
+    </Modal>
+  );
+}
+
+/** Pick a time window (date and hour) and print every client's quantities, amounts, payments and what is left. */
+function SheetDialog({ date, onClose }: { date: string; onClose: () => void }) {
+  const { tr } = useI18n();
+  const [from, setFrom] = useState(`${date}T00:00`);
+  const [to, setTo] = useState(`${date}T23:59`);
+  const quick: { ar: string; en: string; f: string; t: string }[] = [
+    { ar: "كل اليوم", en: "Whole day", f: `${date}T00:00`, t: `${date}T23:59` },
+    { ar: "الصبح", en: "Morning", f: `${date}T05:00`, t: `${date}T13:59` },
+    { ar: "بعد الضهر والمسا", en: "Afternoon & evening", f: `${date}T14:00`, t: `${date}T23:59` },
+    { ar: "آخر ٧ أيام", en: "Last 7 days", f: `${addDaysTo(date, -6)}T00:00`, t: `${date}T23:59` },
+  ];
+  const ok = !!from && !!to && from <= to;
+  const print = () => {
+    openPrint(`/print/clients-sheet?from=${encodeURIComponent(new Date(from).toISOString())}&to=${encodeURIComponent(new Date(`${to}:59.999`).toISOString())}`);
+    onClose();
+  };
+  return (
+    <Modal
+      title={tr("كشف الزبائن", "Clients sheet")}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {tr("إلغاء", "Cancel")}
+          </button>
+          <button className="btn btn-primary" onClick={print} disabled={!ok}>
+            🖨 {tr("اطبع", "Print")}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-muted">{tr("كل زبون: شو أخد، قديش، المبلغ، قديش دفع وقديش باقي عليه — ومجموع الكل.", "Every client: what they took, how many, the amount, what they paid and what is left — with the grand total.")}</p>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {quick.map((q) => (
+          <button key={q.en} type="button" className={`btn px-3 py-1.5 text-sm ${from === q.f && to === q.t ? "border-brand text-brand" : ""}`} onClick={() => (setFrom(q.f), setTo(q.t))}>
+            {tr(q.ar, q.en)}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={tr("من (تاريخ وساعة)", "From (date & time)")} htmlFor="cs-f">
+          <input id="cs-f" type="datetime-local" className="input num" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </Field>
+        <Field label={tr("إلى (تاريخ وساعة)", "To (date & time)")} htmlFor="cs-t" error={from && to && from > to ? tr("البداية بعد النهاية", "Start is after the end") : undefined}>
+          <input id="cs-t" type="datetime-local" className="input num" value={to} onChange={(e) => setTo(e.target.value)} />
+        </Field>
+      </div>
     </Modal>
   );
 }

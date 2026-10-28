@@ -18,7 +18,7 @@ import { MyDayPage } from "./pages/MyDay";
 import { NewOrderPage } from "./pages/orders/NewOrder";
 import { OrdersPage } from "./pages/orders/Orders";
 import { PeoplePage } from "./pages/People";
-import { PrintLabels, PrintReceipt, PrintReport, PrintStatement } from "./pages/print/Print";
+import { PrintClientReport, PrintClientsSheet, PrintLabels, PrintReceipt, PrintReport, PrintStatement } from "./pages/print/Print";
 import { PurchasingPage } from "./pages/Purchasing";
 import { ReportsPage } from "./pages/Reports";
 import { RolesPage } from "./pages/Roles";
@@ -56,6 +56,8 @@ export function App() {
           <Route path="print/labels" element={g("warehouse", <PrintLabels />)} />
           <Route path="print/statement/:id" element={g("clients", <PrintStatement />)} />
           <Route path="print/report" element={g("reports", <PrintReport />)} />
+          <Route path="print/client-report/:id" element={g("clients", <PrintClientReport />)} />
+          <Route path="print/clients-sheet" element={g("reports", <PrintClientsSheet />)} />
           <Route path="print/route" element={g("orders", <PrintRouteSheet />)} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />

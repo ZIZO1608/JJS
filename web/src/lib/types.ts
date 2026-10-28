@@ -63,6 +63,9 @@ export interface ClientSummary {
   priceListId: string | null;
   consignment: boolean;
   repId: string | null;
+  lat: number | null;
+  lng: number | null;
+  mapUrl: string;
   aging: { balanceUsd: number; oldestUnpaidDate: string | null; daysOutstanding: number; termsDays: number; overdueDays: number };
 }
 export interface PaymentMethod extends Named {

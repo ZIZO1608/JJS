@@ -1,13 +1,14 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { businessDays, cashBoxes, users } from "../db/schema.js";
+import { batches, businessDays, cashBoxes, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
 import { currentRate, getDay, localDate, round4 } from "../lib/biz.js";
 import { h, HttpError, nowIso, parse } from "../lib/util.js";
-import { addBoxMove, boxBalance, systemBox } from "../services/money.js";
+import { addBoxMove, boxBalance, handOverRepCash, systemBox } from "../services/money.js";
+import { takeFromBatch } from "../services/stock.js";
 import { periodReport, productionVsSales } from "../services/reports.js";
 import { employees } from "../db/schema.js";
 import { sql } from "drizzle-orm";
@@ -55,6 +56,13 @@ function dayView(date: string) {
     day: { ...day, totals: day.totalsJson ? JSON.parse(day.totalsJson) : null, closedByName: day.closedBy ? (db.select({ n: users.name }).from(users).where(eq(users.id, day.closedBy)).get()?.n ?? null) : null },
     report: periodReport(db, date, date),
     mainBox: { id: main.id, nameAr: main.nameAr, nameEn: main.nameEn, currency: main.currency, expected: round4(boxBalance(db, main.id)) },
+    // ready products still in the fridge: kept for tomorrow, or thrown away at close
+    leftovers: db
+      .all<{ id: string; batch_code: string; name_ar: string; name_en: string; qty_left: number; expires_at: string | null }>(
+        sql`select b.id, b.batch_code, i.name_ar, i.name_en, b.qty_left, b.expires_at from batches b join items i on i.id = b.item_id
+            where i.kind = 'product' and b.qty_left > 0 and b.deleted_at is null order by b.expires_at`,
+      )
+      .map((b) => ({ batchId: b.id, batchCode: b.batch_code, nameAr: b.name_ar, nameEn: b.name_en, qty: b.qty_left, expiresAt: b.expires_at, expired: !!b.expires_at && b.expires_at < nowIso() })),
     reps: reps.map((b) => ({ id: b.id, nameAr: b.nameAr, nameEn: b.nameEn, currency: b.currency, balance: round4(boxBalance(db, b.id)) })).filter((b) => Math.abs(b.balance) > 0.009),
   };
 }
@@ -87,11 +95,30 @@ daysRouter.post(
   requirePerm("daily_close", "create"),
   h((req, res) => {
     const date = parse(dateParam, req.params.date);
-    const body = parse(z.object({ counted: z.number().min(0) }), req.body);
+    const body = parse(
+      z.object({
+        counted: z.number().min(0),
+        // merged steps: delivery cash received and leftovers thrown away, all in the same lock
+        handoverBoxIds: z.array(z.string()).max(50).default([]),
+        wasteBatchIds: z.array(z.string()).max(200).default([]),
+      }),
+      req.body,
+    );
     if (date > localDate()) throw new HttpError(400, "future_day", "You cannot close a day that has not started.");
     db.transaction((tx) => {
       const day = getDay(tx, date);
       if (day.status === "closed") throw new HttpError(409, "day_closed", "This day is already closed.");
+      if ((body.handoverBoxIds.length || body.wasteBatchIds.length) && date !== localDate()) throw new HttpError(400, "not_today", "Cash and leftovers can only be handled when closing today.");
+      for (const boxId of body.handoverBoxIds) {
+        const r = handOverRepCash(tx, boxId, req.user!.id, date, currentRate());
+        if (r.amount > 0) writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.handover", entityId: boxId, after: { amount: r.amount, currency: r.currency } });
+      }
+      for (const batchId of body.wasteBatchIds) {
+        const b = tx.select().from(batches).where(and(eq(batches.id, batchId), isNull(batches.deletedAt))).get();
+        if (!b || b.qtyLeft <= 0) continue;
+        const r = takeFromBatch(tx, { batchId: b.id, qty: b.qtyLeft, type: "waste" }, { userId: req.user!.id, date, refType: "waste", note: "Left over at day close" });
+        writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.waste", entityId: b.id, after: { batch: b.batchCode, qty: b.qtyLeft, costUsd: r.costUsd, at: "day close" } });
+      }
       const main = systemBox(tx, "main_cash");
       const expected = round4(boxBalance(tx, main.id));
       const diff = round4(body.counted - expected);

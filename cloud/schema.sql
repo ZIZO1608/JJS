@@ -211,7 +211,10 @@ create table if not exists public."clients" (
   "payment_terms_days" bigint,
   "price_list_id" text,
   "consignment" boolean,
-  "rep_id" text
+  "rep_id" text,
+  "lat" double precision,
+  "lng" double precision,
+  "map_url" text
 );
 alter table public."clients" enable row level security;
 
@@ -743,6 +746,7 @@ create table if not exists public."returns" (
   "total_usd" double precision,
   "cost_usd" double precision,
   "settlement" text,
+  "given_order_id" text,
   "box_id" text,
   "rep_id" text,
   "note" text,

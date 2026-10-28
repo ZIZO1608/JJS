@@ -4,7 +4,8 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { categories, clientAccounts, clientMoves, clientSessions, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { hashPassword, requirePerm } from "../lib/auth.js";
+import { MAP_HOSTS, parseLatLng } from "../../shared/maps.js";
+import { hashPassword, requireAnyPerm, requirePerm } from "../lib/auth.js";
 import { generatePassword, suggestUsername } from "../lib/clientAuth.js";
 import { addMonths, assertDayOpen, localDate, monthStart, rateFor, round4, toUsd, type Q } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
@@ -133,6 +134,9 @@ const clientSchema = z.object({
   priceListId: z.string().nullable().optional(),
   consignment: z.boolean().default(false),
   repId: z.string().nullable().optional(),
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
+  mapUrl: z.string().trim().max(500).default(""),
 });
 /** On a new client only: what they already owed (+) or had prepaid (−) before the system. */
 const openingSchema = z.object({ openingBalance: z.number().default(0), openingCurrency: z.enum(["USD", "SYP"]).optional() });
@@ -142,6 +146,8 @@ const nullables = (b: z.infer<typeof clientSchema>) => ({
   areaId: b.areaId ?? null,
   priceListId: b.priceListId ?? null,
   repId: b.repId ?? null,
+  // a pasted long Google Maps link fills the pin when none was picked on the map
+  ...(b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : (parseLatLng(b.mapUrl) ?? { lat: null, lng: null })),
   paymentTermsDays: b.paymentTermsDays ?? getSetting("orders").defaultPaymentTermsDays,
 });
 
@@ -161,9 +167,42 @@ function summary(c: typeof clients.$inferSelect) {
   };
 }
 
+/** Follow a short Google Maps link (maps.app.goo.gl/…) to the coordinates inside it. Only Google hosts are fetched. */
+clientsRouter.post(
+  "/resolve-map-link",
+  requireAnyPerm(["clients", "create"], ["clients", "edit"]),
+  h(async (req, res) => {
+    const { url } = parse(z.object({ url: z.string().trim().min(4).max(500) }), req.body);
+    let at = parseLatLng(url);
+    let next = url;
+    for (let hop = 0; !at && hop < 5; hop++) {
+      let u: URL;
+      try {
+        u = new URL(next);
+      } catch {
+        break;
+      }
+      if (u.protocol !== "https:" || !MAP_HOSTS.includes(u.hostname)) break;
+      const r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(6000) }).catch(() => null);
+      const loc = r?.headers.get("location");
+      if (!loc) {
+        // some links land on a page that carries the coordinates in its body
+        const body = r && r.ok ? (await r.text()).slice(0, 200_000) : "";
+        at = parseLatLng(body.match(/https:\/\/www\.google\.com\/maps[^"'\s]+/)?.[0] ?? "") ?? parseLatLng(body.match(/@-?\d+\.\d+,-?\d+\.\d+/)?.[0] ?? "");
+        break;
+      }
+      next = new URL(loc, u).toString();
+      at = parseLatLng(next);
+    }
+    if (!at) throw new HttpError(422, "map_link_unreadable", "This link has no location in it. Open it in Google Maps, tap Share → Copy link, or pick the spot on the map.");
+    res.json(at);
+  }),
+);
+
 clientsRouter.get(
   "/",
-  requirePerm("clients", "view"),
+  // order takers pick the client inside the order screen
+  requireAnyPerm(["clients", "view"], ["orders", "create"]),
   h((_req, res) => {
     const rows = db.select().from(clients).where(isNull(clients.deletedAt)).orderBy(asc(clients.name)).all();
     res.json({ rows: rows.map(summary) });
@@ -403,13 +442,44 @@ clientsRouter.get(
       return { ...m, balanceUsd: run };
     });
     const ordersInRange = db
-      .select({ number: orders.number, date: orders.businessDate, total: orders.total, currency: orders.currency, itemsCount: orders.itemsCount, id: orders.id })
+      .select({ number: orders.number, date: orders.businessDate, total: orders.total, currency: orders.currency, itemsCount: orders.itemsCount, id: orders.id, totalUsd: orders.totalUsd, paidAmount: orders.paidAmount, fxRate: orders.fxRate, paymentStatus: orders.paymentStatus })
       .from(orders)
       .where(and(eq(orders.clientId, id), ne(orders.status, "cancelled"), gte(orders.businessDate, q.from), lte(orders.businessDate, q.to)))
       .orderBy(asc(orders.number))
       .all();
     const returnsInRange = db.select().from(returns).where(and(eq(returns.clientId, id), isNull(returns.deletedAt), gte(returns.businessDate, q.from), lte(returns.businessDate, q.to))).orderBy(asc(returns.number)).all();
-    res.json({ client: c, from: q.from, to: q.to, openingUsd: round4(opening), closingUsd: round4(run), lines, orders: ordersInRange, returns: returnsInRange, aging: clientAging(db, id) });
+    // For the full client report: what they took, per product, and the money in the period.
+    const productsTaken = db.all<{ name_ar: string; name_en: string; qty: number; usd: number }>(
+      sql`select l.name_ar, l.name_en, sum(l.qty) as qty, sum(case when o.currency = 'USD' then l.line_total else l.line_total / nullif(o.fx_rate,0) end) as usd
+          from order_lines l join orders o on o.id = l.order_id
+          where o.client_id = ${id} and o.status != 'cancelled' and o.deleted_at is null and o.business_date between ${q.from} and ${q.to}
+          group by l.product_id order by qty desc`,
+    );
+    const sumMoves = (types: string[]) => round4(rows.filter((m) => types.includes(m.type)).reduce((s, m) => s + m.amountUsd, 0));
+    const boughtUsd = round4(ordersInRange.reduce((s, o) => s + (o.totalUsd ?? 0), 0));
+    const paidOnSpotUsd = round4(ordersInRange.reduce((s, o) => s + Math.min(o.totalUsd ?? 0, o.currency === "USD" ? o.paidAmount : o.fxRate ? o.paidAmount / o.fxRate : 0), 0));
+    const summary = {
+      orders: ordersInRange.length,
+      items: ordersInRange.reduce((s, o) => s + o.itemsCount, 0),
+      boughtUsd,
+      paidOnSpotUsd,
+      paymentsUsd: sumMoves(["payment", "topup"]),
+      returnsUsd: round4(returnsInRange.reduce((s, r) => s + r.totalUsd, 0)),
+      returnedQty: returnsInRange.length ? (db.get<{ q: number }>(sql`select coalesce(sum(rl.qty),0) as q from return_lines rl join returns r on r.id = rl.return_id where r.client_id = ${id} and r.deleted_at is null and r.business_date between ${q.from} and ${q.to}`)?.q ?? 0) : 0,
+    };
+    res.json({
+      client: c,
+      from: q.from,
+      to: q.to,
+      openingUsd: round4(opening),
+      closingUsd: round4(run),
+      lines,
+      orders: ordersInRange,
+      returns: returnsInRange,
+      aging: clientAging(db, id),
+      products: productsTaken.map((p) => ({ nameAr: p.name_ar, nameEn: p.name_en, qty: p.qty, usd: round4(p.usd) })),
+      summary,
+    });
   }),
 );
 

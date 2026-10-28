@@ -387,6 +387,10 @@ export const clients = sqliteTable(
     /** Goods left on consignment: the shop pays only for what it sold. */
     consignment: integer("consignment", { mode: "boolean" }).notNull().default(false),
     repId: text("rep_id"),
+    /** Where the shop is: picked on the map or read from a Google Maps link. */
+    lat: real("lat"),
+    lng: real("lng"),
+    mapUrl: text("map_url").notNull().default(""),
   },
   (t) => [index("clients_name_idx").on(t.name)],
 );
@@ -817,6 +821,8 @@ export const returns = sqliteTable(
     costUsd: real("cost_usd").notNull().default(0),
     /** credit: added to the client's account · refund: cash back from a box · none: nothing to pay back */
     settlement: text("settlement", { enum: ["credit", "refund", "none"] }).notNull(),
+    /** The order that took the returned goods to another client. */
+    givenOrderId: text("given_order_id"),
     boxId: text("box_id"),
     repId: text("rep_id"),
     note: text("note").notNull().default(""),
@@ -837,7 +843,8 @@ export const returnLines = sqliteTable(
     unitPrice: real("unit_price").notNull(),
     lineTotal: real("line_total").notNull(),
     unitCostUsd: real("unit_cost_usd").notNull().default(0),
-    action: text("action", { enum: ["restock", "waste"] }).notNull(),
+    /** give = went straight to another client on a new order (see returns.givenOrderId). */
+    action: text("action", { enum: ["restock", "waste", "give"] }).notNull(),
     batchId: text("batch_id"),
   },
   (t) => [index("return_lines_idx").on(t.returnId)],

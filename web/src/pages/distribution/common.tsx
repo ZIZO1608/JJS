@@ -59,6 +59,7 @@ export const STATUS_LABEL: Record<string, { ar: string; en: string }> = {
   refund: { ar: "استرداد نقدي", en: "Cash refund" },
   none: { ar: "بدون مبلغ", en: "No money" },
   restock: { ar: "رجع للبرّاد", en: "Back to fridge" },
+  give: { ar: "لزبون تاني", en: "To another client" },
   waste: { ar: "تالف", en: "Waste" },
 };
 
@@ -263,11 +264,30 @@ interface OrderDetail {
   lines: { productId: string; nameAr: string; nameEn: string; qty: number }[];
 }
 
-/** Goods come back from a client: from an invoice or without one. */
+type Fate = "restock" | "waste" | "give";
+
+const FATES: { k: Fate; icon: string; ar: string; en: string; tone: string }[] = [
+  { k: "restock", icon: "🧊", ar: "للبرّاد", en: "To fridge", tone: "border-good bg-good/10 text-good" },
+  { k: "waste", icon: "🗑️", ar: "للزبالة", en: "To trash", tone: "border-bad bg-bad/10 text-bad" },
+  { k: "give", icon: "🤝", ar: "لزبون تاني", en: "To another client", tone: "border-brand bg-brand/10 text-brand" },
+];
+
+interface ReturnResult {
+  number: number;
+  total: number;
+  currency: Currency;
+  givenOrder: { id: string; number: number } | null;
+}
+
+/**
+ * Goods come back: for every product choose its fate — back to the fridge, the trash, or straight to another client
+ * (a new order for them). The first client is credited or refunded. Ends on a picture of where everything went.
+ */
 export function ReturnDialog({ clientId, orderId, onClose, onDone }: { clientId?: string; orderId?: string; onClose: () => void; onDone: () => void }) {
   const { tr, pick, err, fmtDate, lang } = useI18n();
   const toast = useToast();
   const { products, clients, boxes, reps } = useLists();
+  const methods = useData<{ rows: PaymentMethod[] }>("/money/methods");
   const [client, setClient] = useState(clientId ?? "");
   const [order, setOrder] = useState(orderId ?? "");
   const [settlement, setSettlement] = useState<"credit" | "refund" | "none">(clientId ? "credit" : "refund");
@@ -275,44 +295,118 @@ export function ReturnDialog({ clientId, orderId, onClose, onDone }: { clientId?
   const [rep, setRep] = useState("");
   const [note, setNote] = useState("");
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [action, setAction] = useState<Record<string, "restock" | "waste">>({});
+  const [fate, setFate] = useState<Record<string, Fate>>({});
+  const [giveTo, setGiveTo] = useState("");
+  const [giveMethod, setGiveMethod] = useState("");
   const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState<ReturnResult | null>(null);
   const orders = useData<{ rows: OrderRow[] }>(client ? `/orders?clientId=${client}` : null);
   const detail = useData<{ order: OrderDetail }>(order ? `/orders/${order}` : null);
   const choices = order && detail.data ? detail.data.order.lines.map((l) => ({ id: l.productId, nameAr: l.nameAr, nameEn: l.nameEn, max: l.qty })) : products.map((p) => ({ id: p.id, nameAr: p.nameAr, nameEn: p.nameEn, max: 5000 }));
+  // the same product can sit on several invoice lines (with different add-ons): return it as one row
+  const rows = choices.filter((c, i) => choices.findIndex((x) => x.id === c.id) === i).map((c) => ({ ...c, max: choices.filter((x) => x.id === c.id).reduce((s, x) => s + x.max, 0) }));
   const lines = Object.entries(qty)
     .filter(([, q]) => q > 0)
-    .map(([productId, q]) => ({ productId, qty: q, action: action[productId] ?? "waste" }));
+    .map(([productId, q]) => ({ productId, qty: q, action: fate[productId] ?? "restock" }));
+  const giving = lines.some((l) => l.action === "give");
+  const count = (k: Fate) => lines.filter((l) => l.action === k).reduce((s, l) => s + l.qty, 0);
+  const nameOf = (id: string) => pick(rows.find((r) => r.id === id) ?? { nameAr: "?", nameEn: "?" });
+  const payMethods = (methods.data?.rows ?? []).filter((m) => m.active && (m.kind === "box" || m.kind === "credit"));
+
   const save = async () => {
     setSaving(true);
     try {
-      const r = await post<{ number: number; total: number; currency: Currency }>("/returns", { clientId: client || null, orderId: order || null, repId: rep || null, settlement, boxId: settlement === "refund" ? box : null, note, lines });
-      toast(tr(`تم تسجيل المرتجع R${r.number} · ${money(r.total, r.currency, "ar")}`, `Return R${r.number} saved · ${money(r.total, r.currency, "en")}`));
-      onDone();
+      const r = await post<ReturnResult>("/returns", {
+        clientId: client || null,
+        orderId: order || null,
+        repId: rep || null,
+        settlement,
+        boxId: settlement === "refund" ? box : null,
+        note,
+        lines,
+        giveTo: giving ? { clientId: giveTo, methodId: giveMethod || null } : null,
+      });
+      setDone(r);
     } catch (e) {
       toast(err(e), "error");
     } finally {
       setSaving(false);
     }
   };
+
+  if (done) {
+    const target = clients.find((c) => c.id === giveTo);
+    return (
+      <Modal
+        wide
+        title={tr(`رجعت البضاعة · R${done.number}`, `Goods came back · R${done.number}`)}
+        onClose={onDone}
+        footer={
+          <button className="btn btn-primary" onClick={onDone}>
+            {tr("تمام", "Done")}
+          </button>
+        }
+      >
+        <div className="return-journey">
+          <div className="rounded-2xl bg-sunken p-4 text-center">
+            <div className="text-sm text-muted">{tr("رجع من", "Came back from")}</div>
+            <div className="text-lg font-bold">{clients.find((c) => c.id === client)?.name ?? tr("زبون عابر", "Walk-in")}</div>
+            <div className="text-3xl font-bold num">{lines.reduce((s, l) => s + l.qty, 0)}</div>
+            <div className="text-sm text-muted">{tr("قطعة", "pieces")}</div>
+            {done.total > 0 && settlement !== "none" && (
+              <div className="mt-1 text-sm font-semibold num ltr">
+                {settlement === "credit" ? tr("رصيد إلو", "Credited") : tr("رجعنالو", "Refunded")} {money(done.total, done.currency, lang)}
+              </div>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {FATES.map((f, i) =>
+              count(f.k) > 0 ? (
+                <div key={f.k} className={`journey-card rounded-2xl border-2 p-4 ${f.tone}`} style={{ animationDelay: `${150 + i * 120}ms` }}>
+                  <div className="text-3xl">{f.icon}</div>
+                  <div className="mt-1 font-bold">{tr(f.ar, f.en)}</div>
+                  <div className="text-2xl font-bold num">{count(f.k)}</div>
+                  <ul className="mt-1 text-sm text-ink/80">
+                    {lines
+                      .filter((l) => l.action === f.k)
+                      .map((l) => (
+                        <li key={l.productId}>
+                          {l.qty} × {nameOf(l.productId)}
+                        </li>
+                      ))}
+                  </ul>
+                  {f.k === "give" && done.givenOrder && (
+                    <div className="mt-2 text-sm font-semibold text-ink">
+                      → {target?.name} · {tr("فاتورة", "invoice")} #{done.givenOrder.number}
+                    </div>
+                  )}
+                </div>
+              ) : null,
+            )}
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       wide
-      title={tr("مرتجع من زبون", "Goods returned by a client")}
+      title={tr("رجعت الطلبية", "The order came back")}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
             {tr("إلغاء", "Cancel")}
           </button>
-          <button className="btn btn-primary" disabled={!lines.length || saving || (settlement === "refund" && !box) || (settlement === "credit" && !client)} onClick={save}>
-            {tr("تسجيل المرتجع", "Save return")}
+          <button className="btn btn-primary" disabled={!lines.length || saving || (settlement === "refund" && !box) || (settlement === "credit" && !client) || (giving && !giveTo)} onClick={save}>
+            {saving ? "…" : tr("سجّل الرجعة", "Save")}
           </button>
         </>
       }
     >
       <div className="mb-4 grid gap-3 sm:grid-cols-2">
-        <Field label={tr("الزبون", "Client")} htmlFor="rt-c">
+        <Field label={tr("رجعت من", "Came back from")} htmlFor="rt-c">
           <Select
             id="rt-c"
             value={client}
@@ -352,7 +446,71 @@ export function ReturnDialog({ clientId, orderId, onClose, onDone }: { clientId?
               ))}
           </Select>
         </Field>
-        <Field label={tr("المبلغ", "Money")} htmlFor="rt-s">
+      </div>
+
+      <div className="grid max-h-[46vh] gap-2 overflow-auto">
+        {rows.map((p) => {
+          const q = qty[p.id] ?? 0;
+          const f = fate[p.id] ?? "restock";
+          return (
+            <div key={p.id} className={`rounded-xl border px-3 py-2.5 transition-colors ${q > 0 ? "border-ink/40 bg-sunken/50" : "border-line"}`}>
+              <div className="flex items-center gap-3">
+                <span className="min-w-0 flex-1 truncate font-semibold">{pick(p)}</span>
+                <QtyInput value={q} max={p.max} onChange={(n) => setQty({ ...qty, [p.id]: n })} label={pick(p)} />
+              </div>
+              {q > 0 && (
+                <div className="mt-2 grid grid-cols-3 gap-1.5" role="radiogroup" aria-label={tr("وين بتروح؟", "Where does it go?")}>
+                  {FATES.map((x) => (
+                    <button
+                      key={x.k}
+                      type="button"
+                      role="radio"
+                      aria-checked={f === x.k}
+                      onClick={() => setFate({ ...fate, [p.id]: x.k })}
+                      className={`rounded-lg border-2 px-2 py-2 text-sm font-semibold transition ${f === x.k ? x.tone : "border-line text-muted hover:border-ink/40"}`}
+                    >
+                      <span className="me-1">{x.icon}</span>
+                      {tr(x.ar, x.en)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {giving && (
+        <div className="mt-3 grid gap-3 rounded-xl border-2 border-brand/50 bg-brand/5 p-3 sm:grid-cols-2">
+          <Field label={tr("🤝 مين بياخدها؟", "🤝 Who gets it?")} htmlFor="rt-g">
+            <Select id="rt-g" value={giveTo} onChange={(e) => setGiveTo(e.target.value)}>
+              <option value="">—</option>
+              {clients
+                .filter((c) => c.id !== client)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label={tr("كيف بيدفع؟", "How do they pay?")} htmlFor="rt-gm" hint={tr("بتنعمل إلو فاتورة جديدة بسعره", "A new invoice is made at their price")}>
+            <Select id="rt-gm" value={giveMethod} onChange={(e) => setGiveMethod(e.target.value)}>
+              <option value="">{tr("على الحساب", "On account")}</option>
+              {payMethods
+                .filter((m) => m.kind === "box")
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {pick(m)}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+        </div>
+      )}
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label={tr("مصاري الزبون الأول", "The first client's money")} htmlFor="rt-s">
           <Select id="rt-s" value={settlement} onChange={(e) => setSettlement(e.target.value as typeof settlement)}>
             {client && <option value="credit">{pick(STATUS_LABEL.credit_s!)}</option>}
             <option value="refund">{pick(STATUS_LABEL.refund!)}</option>
@@ -382,23 +540,11 @@ export function ReturnDialog({ clientId, orderId, onClose, onDone }: { clientId?
             </Select>
           </Field>
         )}
-      </div>
-      <div className="grid max-h-[40vh] gap-2 overflow-auto">
-        {choices.map((p) => (
-          <div key={p.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-lg border border-line px-3 py-2">
-            <span className="min-w-0 truncate font-semibold">{pick(p)}</span>
-            <QtyInput value={qty[p.id] ?? 0} max={p.max} onChange={(n) => setQty({ ...qty, [p.id]: n })} label={pick(p)} />
-            <Select value={action[p.id] ?? "waste"} onChange={(e) => setAction({ ...action, [p.id]: e.target.value as "restock" | "waste" })} aria-label={tr("المرتجع", "Returned goes")}>
-              <option value="waste">{pick(STATUS_LABEL.waste!)}</option>
-              <option value="restock">{pick(STATUS_LABEL.restock!)}</option>
-            </Select>
-          </div>
-        ))}
-      </div>
-      <div className="mt-3">
-        <Field label={tr("ملاحظة", "Note")} htmlFor="rt-n">
-          <TextInput id="rt-n" value={note} onChange={(e) => setNote(e.target.value)} />
-        </Field>
+        <div className="sm:col-span-2">
+          <Field label={tr("ملاحظة", "Note")} htmlFor="rt-n">
+            <TextInput id="rt-n" value={note} onChange={(e) => setNote(e.target.value)} />
+          </Field>
+        </div>
       </div>
     </Modal>
   );

@@ -21,7 +21,7 @@ const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution"; to?: stri
 function SimpleHome() {
   const { pick, tr } = useI18n();
   const { can } = useAuth();
-  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.to && !x.icon ? "create" : "view"));
+  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.icon === "distribution" ? "edit" : x.to && !x.icon ? "create" : "view"));
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       {tiles.map((x, i) => (

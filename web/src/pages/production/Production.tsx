@@ -4,7 +4,7 @@ import { Tabs } from "../../components/Tabs";
 import { Empty, Field, PageHeader, Select, Spinner, TextInput } from "../../components/ui";
 import { get, post } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
-import { qty as fq, today, UNIT_LABEL, usd } from "../../lib/format";
+import { addDaysTo, qty as fq, today, UNIT_LABEL, usd } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { openPrint } from "../../lib/print";
 import { useToast } from "../../lib/toast";
@@ -36,10 +36,50 @@ interface Run {
   itemsCount: number;
   costUsd: number;
   note: string;
-  batches: { id: string; batchCode: string; nameAr: string; nameEn: string; qtyIn: number; qtyLeft: number; expiresAt: string | null }[];
+  batches: { id: string; batchCode: string; nameAr: string; nameEn: string; qtyIn: number; qtyLeft: number; expiresAt: string | null; productId?: string | null }[];
 }
 
 /** The morning run: several products at once. Ingredients are checked before anything is taken. */
+/** A missing material arrived: put it in stock without leaving the production screen. */
+function ReceiveNow({ item, storeLoc, onDone }: { item: Preview["materials"][number]; storeLoc?: Location; onDone: () => void }) {
+  const { tr, err } = useI18n();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(String(Math.ceil(item.short * 100) / 100));
+  const [busy, setBusy] = useState(false);
+  if (!storeLoc) return null;
+  const save = async () => {
+    const q = Number(amount);
+    if (!(q > 0)) return;
+    setBusy(true);
+    try {
+      await post("/stock/receive", { itemId: item.itemId, locationId: storeLoc.id, qty: q, note: "received at production" });
+      toast(tr("انضافت للمخزون", "Added to stock"));
+      setOpen(false);
+      onDone();
+    } catch (e) {
+      toast(err(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!open)
+    return (
+      <button type="button" className="ms-2 rounded-md bg-ink/5 px-1.5 py-0.5 text-xs font-semibold text-ink hover:bg-ink/10" onClick={() => setOpen(true)}>
+        + {tr("وصلت", "Arrived")}
+      </button>
+    );
+  return (
+    <span className="mt-1 flex items-center gap-1">
+      <input className="input w-20 px-2 py-1 text-sm num ltr" inputMode="decimal" dir="ltr" value={amount} onChange={(e) => setAmount(e.target.value)} aria-label={tr("الكمية اللي وصلت", "Quantity received")} autoFocus />
+      <span className="text-xs text-muted">{item.unitCode}</span>
+      <button type="button" className="btn px-2 py-1 text-xs" disabled={busy} onClick={() => void save()}>
+        ✓
+      </button>
+    </span>
+  );
+}
+
 function NewRun() {
   const { tr, pick, err, simple } = { ...useI18n(), simple: useAuth().simple };
   const { can } = useAuth();
@@ -55,10 +95,21 @@ function NewRun() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [done, setDone] = useState<RunResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [autoLabels, setAutoLabels] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  // merged steps: start from the last run, and receive a missing material right here
+  const recent = useData<{ rows: Run[] }>(`/production?from=${addDaysTo(today(), -14)}&to=${today()}`);
+  const lastRun = recent.data?.rows[0];
+  const repeatLast = () => {
+    if (!lastRun) return;
+    const next: Record<string, number> = {};
+    for (const b of lastRun.batches) if (b.productId) next[b.productId] = (next[b.productId] ?? 0) + b.qtyIn;
+    setQty(next);
+  };
   const lines = Object.entries(qty)
     .filter(([, q]) => q > 0)
     .map(([productId, q]) => ({ productId, qty: q }));
-  const key = JSON.stringify(lines);
+  const key = JSON.stringify(lines) + refresh;
   useEffect(() => {
     if (!lines.length) return setPreview(null);
     const t = setTimeout(() => {
@@ -70,14 +121,19 @@ function NewRun() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   const fridgeLocs = (locs.data?.rows ?? []).filter((l) => whs.data?.rows.find((w) => w.id === l.warehouseId)?.kind !== "store");
+  const storeLoc = (locs.data?.rows ?? []).find((l) => whs.data?.rows.find((w) => w.id === l.warehouseId)?.kind === "store") ?? locs.data?.rows[0];
   const confirm = async () => {
     setBusy(true);
+    // opened now, while it is still a click, so the browser does not block it; filled once the run is saved
+    const labels = autoLabels ? window.open("about:blank", "_blank", "width=460,height=720") : null;
     try {
       const r = await post<RunResult>("/production", { lines, employeeId: emp || null, locationId: loc || null, note });
       setDone(r);
       setQty({});
+      if (labels) labels.location.href = `/print/labels?batches=${r.batches.map((b) => b.batchId).join(",")}`;
       toast(tr(`تم الإنتاج: دفعة رقم ${r.number}`, `Made: run #${r.number}`));
     } catch (e) {
+      labels?.close();
       toast(err(e), "error");
     } finally {
       setBusy(false);
@@ -116,7 +172,14 @@ function NewRun() {
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
       <div>
-        <p className="mb-3 text-muted">{tr("اكتب كم بدك تعمل من كل صنف. البرنامج بيحسب المواد اللازمة قبل ما تأكّد.", "Enter how many of each product you are making. The materials are checked before you confirm.")}</p>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <p className="min-w-0 flex-1 text-muted">{tr("اكتب كم بدك تعمل من كل صنف. البرنامج بيحسب المواد اللازمة قبل ما تأكّد.", "Enter how many of each product you are making. The materials are checked before you confirm.")}</p>
+          {lastRun && (
+            <button className="btn" onClick={repeatLast} title={tr(`دفعة رقم ${lastRun.number}`, `Run #${lastRun.number}`)}>
+              ↻ {tr(`نفس آخر دفعة (${lastRun.itemsCount} قطعة)`, `Same as last run (${lastRun.itemsCount} pcs)`)}
+            </button>
+          )}
+        </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {catalog.data.products
             .filter((p) => p.active)
@@ -160,7 +223,10 @@ function NewRun() {
                   <tbody>
                     {preview.materials.map((m) => (
                       <tr key={m.itemId} className={m.short > 0 ? "text-bad" : ""}>
-                        <td className="td">{pick(m)}</td>
+                        <td className="td">
+                          {pick(m)}
+                          {m.short > 0 && can("warehouse", "create") && <ReceiveNow item={m} storeLoc={storeLoc} onDone={() => setRefresh((n) => n + 1)} />}
+                        </td>
                         <td className="td text-end num ltr">
                           {fq(m.need)} {pick(UNIT_LABEL[m.unitCode] ?? { ar: m.unitCode, en: m.unitCode })}
                         </td>
@@ -204,6 +270,10 @@ function NewRun() {
             <Field label={tr("ملاحظة", "Note")} htmlFor="pr-n">
               <TextInput id="pr-n" value={note} onChange={(e) => setNote(e.target.value)} />
             </Field>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4 accent-ink" checked={autoLabels} onChange={(e) => setAutoLabels(e.target.checked)} />
+              {tr("اطبع الملصقات فوراً بعد الاعتماد", "Print the labels right after confirming")}
+            </label>
             <button className="btn btn-primary py-3 text-lg" disabled={!lines.length || busy || !can("warehouse", "create")} onClick={confirm}>
               {tr("اعتماد الإنتاج", "Confirm production")}
             </button>

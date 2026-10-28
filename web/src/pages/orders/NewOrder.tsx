@@ -299,7 +299,7 @@ export function NewOrderPage() {
   const nav = useNavigate();
   const [params] = useSearchParams();
 
-  const canClients = can("clients", "view");
+  const canClients = can("clients", "view") || can("orders", "create");
   const canStaff = can("people", "view");
   const catalog = useData<Catalog>("/menu/catalog");
   const clientsQ = useData<{ rows: ClientSummary[] }>(canClients ? "/clients" : null);
@@ -697,7 +697,7 @@ export function NewOrderPage() {
       {/* ---------- step 1: who ---------- */}
       {step === 1 && (
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Choice big active={who === "walkin"} onClick={() => (setWho("walkin"), setClientId(null), setStep(2))}>
               {tr("زبون عابر", "Walk-in")}
             </Choice>
@@ -706,7 +706,7 @@ export function NewOrderPage() {
                 {tr("زبون مسجّل", "Account client")}
               </Choice>
             )}
-            {canClients && (
+            {can("clients", "view") && (
               <Choice big active={who === "trial"} onClick={() => setWho("trial")}>
                 {tr("تجربة مجانية", "Free trial")}
               </Choice>
@@ -716,15 +716,7 @@ export function NewOrderPage() {
                 {tr("شراء موظف", "Staff purchase")}
               </Choice>
             )}
-            <Choice big active={who === "internal"} onClick={() => (setWho("internal"), setClientId(null), setStep(2))}>
-              {tr("تذوّق / داخلي", "Tasting / internal")}
-            </Choice>
           </div>
-          {who === "internal" && (
-            <p className="text-sm text-muted">
-              {tr("بدون فاتورة ولا دفع: البضاعة بتطلع من المخزون وتكلفتها بتنحسب.", "No invoice, no payment: the goods leave stock and their cost is recorded.")}
-            </p>
-          )}
 
           {(who === "client" || who === "trial") && (
             <div className="card">

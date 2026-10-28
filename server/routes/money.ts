@@ -8,7 +8,7 @@ import { can, requireAuth, requirePerm } from "../lib/auth.js";
 import { assertDayOpen, currentRate, localDate } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { addBoxMove, boxBalance, getBox, systemBox } from "../services/money.js";
+import { addBoxMove, boxBalance, getBox, handOverRepCash, systemBox } from "../services/money.js";
 
 export const moneyRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(60), nameEn: z.string().trim().min(1).max(60) };
@@ -115,15 +115,8 @@ moneyRouter.post(
     const out = db.transaction((tx) => {
       const date = localDate();
       assertDayOpen(tx, date);
-      const rep = getBox(tx, body.boxId);
-      if (rep.kind !== "rep") throw new HttpError(400, "not_rep_box", "This is not a delivery person's box.");
-      const amount = boxBalance(tx, rep.id);
-      if (amount <= 0) return { amount: 0 };
-      const main = systemBox(tx, "main_cash");
-      const rate = currentRate();
-      addBoxMove(tx, { boxId: rep.id, type: "handover", amount: -amount, currency: rep.currency, rate, refType: "handover", userId: req.user!.id, date });
-      addBoxMove(tx, { boxId: main.id, type: "handover", amount, currency: rep.currency, rate, refType: "handover", userId: req.user!.id, date });
-      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.handover", entityId: rep.id, after: { amount, currency: rep.currency } });
+      const { amount, currency } = handOverRepCash(tx, body.boxId, req.user!.id, date, currentRate());
+      if (amount > 0) writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.handover", entityId: body.boxId, after: { amount, currency } });
       return { amount };
     });
     res.json(out);

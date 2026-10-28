@@ -81,3 +81,15 @@ export function addClientMove(
     })
     .run();
 }
+
+/** A delivery person hands all the cash they collected to the main box. Returns the amount moved (box currency). */
+export function handOverRepCash(tx: Q, boxId: string, userId: string, date: string, rate: number | null) {
+  const rep = getBox(tx, boxId);
+  if (rep.kind !== "rep") throw new HttpError(400, "not_rep_box", "This is not a delivery person's box.");
+  const amount = boxBalance(tx, rep.id);
+  if (amount <= 0) return { amount: 0, currency: rep.currency };
+  const main = systemBox(tx, "main_cash");
+  addBoxMove(tx, { boxId: rep.id, type: "handover", amount: -amount, currency: rep.currency, rate, refType: "handover", userId, date });
+  addBoxMove(tx, { boxId: main.id, type: "handover", amount, currency: rep.currency, rate, refType: "handover", userId, date });
+  return { amount, currency: rep.currency };
+}

@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"]];
+const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"]];
 let failed = 0;
 let port = 4391;
 for (const files of suites) {

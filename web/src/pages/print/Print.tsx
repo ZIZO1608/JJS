@@ -595,6 +595,309 @@ export function PrintStatement() {
   );
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Branded page frame (client report, clients sheet)                   */
+/* ------------------------------------------------------------------ */
+
+/** A4 page with the shop's logo and name across the top in the brand colour. Save as PDF from the print dialog. */
+function BrandedPage({ lang, s, title, right, children }: { lang: Lang; s: AppSettings | null; title: string; right: ReactNode; children: ReactNode }) {
+  const t = L(lang);
+  return (
+    <div className="mx-auto max-w-[186mm] p-2 text-[12px] text-black" style={{ printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
+      <div className="flex items-center justify-between gap-4 rounded-xl px-4 py-3 text-white" style={{ background: "linear-gradient(135deg, rgb(210 86 26), rgb(171 61 12))" }}>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-white p-1">
+            <Logo s={s} className="h-12 w-auto" />
+          </div>
+          <div>
+            <div className="text-lg font-bold">{s ? pickL(lang)(s.business) : "JJ's"}</div>
+            <div className="text-[13px] opacity-90">{title}</div>
+          </div>
+        </div>
+        <div className="text-end text-[12px]">{right}</div>
+      </div>
+      {children}
+      <div className="mt-6 flex justify-between border-t border-gray-300 pt-2 text-[10px] text-gray-500">
+        <span>{s?.business.phone ? <span className="ltr">{s.business.phone}</span> : null}</span>
+        <span>
+          {t("طُبع", "Printed")} {dateL(lang, new Date().toISOString(), true)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, tone }: { label: string; value: string; tone?: "bad" | "good" }) {
+  return (
+    <div className="rounded-lg border border-gray-300 px-3 py-2">
+      <div className="text-[11px] text-gray-600">{label}</div>
+      <div className={`text-[16px] font-bold num ltr text-start ${tone === "bad" ? "text-[#c0392b]" : tone === "good" ? "text-[#2e7d4f]" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+const thCls = "py-1.5 px-1 text-start font-semibold";
+const headRow = "border-b-2 border-[rgb(210,86,26)] bg-[#fbeee6]";
+
+/* ------------------------------------------------------------------ */
+/* Full client report (branded PDF)                                    */
+/* ------------------------------------------------------------------ */
+
+interface ClientReport extends Statement {
+  orders: (Statement["orders"][number] & { totalUsd: number; paidAmount: number; fxRate: number | null; paymentStatus: string })[];
+  products: { nameAr: string; nameEn: string; qty: number; usd: number }[];
+  summary: { orders: number; items: number; boughtUsd: number; paidOnSpotUsd: number; paymentsUsd: number; returnsUsd: number; returnedQty: number };
+}
+
+/** Everything about one client over a period: what they took, what they paid, what came back, and the balance. */
+export function PrintClientReport() {
+  const { id } = useParams();
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { s } = useAppSettings();
+  const from = sp.get("from") ?? `${today().slice(0, 8)}01`;
+  const to = sp.get("to") ?? today();
+  const d = useData<ClientReport>(`/clients/${id}/statement?from=${from}&to=${to}`);
+  usePrintOnce(!!d.data, "size: A4; margin: 10mm");
+  if (d.error) return <p className="p-6 text-bad">{ui.err(d.error)}</p>;
+  if (!d.data) return <Loading />;
+  const r = d.data;
+  const lang: Lang = ui.lang;
+  const t = L(lang);
+  const pk = pickL(lang);
+  const owes = r.closingUsd < -0.009;
+  const paidOf = (o: ClientReport["orders"][number]) => Math.min(o.totalUsd, o.currency === "USD" ? o.paidAmount : o.fxRate ? o.paidAmount / o.fxRate : 0);
+  return (
+    <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar>
+        <span className="text-sm text-muted">{ui.tr("للحفظ PDF: اطبع ← اختر «حفظ كـ PDF»", "To save a PDF: Print → choose “Save as PDF”")}</span>
+      </Toolbar>
+      <BrandedPage
+        lang={lang}
+        s={s}
+        title={t("تقرير الزبون", "Client report")}
+        right={
+          <>
+            <div className="text-[15px] font-bold">{r.client.name}</div>
+            {r.client.phone && <div className="ltr">{r.client.phone}</div>}
+            <div>
+              {dateL(lang, r.from)} → {dateL(lang, r.to)}
+            </div>
+          </>
+        }
+      >
+        {(r.client.contactPerson || r.client.address) && (
+          <p className="mt-2 text-gray-700">
+            {r.client.contactPerson && `${t("المسؤول", "Manager")}: ${r.client.contactPerson}`}
+            {r.client.contactPerson && r.client.address && " · "}
+            {r.client.address}
+          </p>
+        )}
+
+        <div className="mt-3 grid grid-cols-4 gap-2">
+          <Kpi label={t("الطلبات", "Orders")} value={String(r.summary.orders)} />
+          <Kpi label={t("القطع", "Pieces")} value={fq(r.summary.items)} />
+          <Kpi label={t("اشترى بقيمة", "Bought for")} value={usd(r.summary.boughtUsd)} />
+          <Kpi label={t("دفع", "Paid")} value={usd(r.summary.paidOnSpotUsd + r.summary.paymentsUsd)} tone="good" />
+          <Kpi label={t("رجّع", "Returned")} value={`${fq(r.summary.returnedQty)} · ${usd(r.summary.returnsUsd)}`} />
+          <Kpi label={r.openingUsd < -0.009 ? t("عليه أول الفترة", "Owed at the start") : t("رصيده أول الفترة", "Balance at the start")} value={usd(Math.abs(r.openingUsd))} />
+          <div className="col-span-2">
+            <Kpi label={owes ? t("عليه هلق", "Owes now") : t("رصيده هلق", "Balance now")} value={usd(Math.abs(r.closingUsd))} tone={owes ? "bad" : "good"} />
+          </div>
+        </div>
+
+        <h3 className="mb-1 mt-4 text-[13px] font-bold">{t("شو أخد", "What they took")}</h3>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className={headRow}>
+              <th className={thCls}>{t("المنتج", "Product")}</th>
+              <th className={`${thCls} text-end`}>{t("الكمية", "Qty")}</th>
+              <th className={`${thCls} text-end`}>{t("القيمة", "Value")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.products.length === 0 && (
+              <tr>
+                <td className="py-1 text-gray-500" colSpan={3}>
+                  —
+                </td>
+              </tr>
+            )}
+            {r.products.map((p, i) => (
+              <tr key={i} className="border-b border-gray-200">
+                <td className="px-1 py-1">{pk(p)}</td>
+                <td className="px-1 py-1 text-end num">{fq(p.qty)}</td>
+                <td className="px-1 py-1 text-end num ltr">{usd(p.usd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 text-[13px] font-bold">{t("الفواتير", "Invoices")}</h3>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className={headRow}>
+              <th className={thCls}>#</th>
+              <th className={thCls}>{t("التاريخ", "Date")}</th>
+              <th className={`${thCls} text-end`}>{t("قطع", "Pcs")}</th>
+              <th className={`${thCls} text-end`}>{t("المبلغ", "Amount")}</th>
+              <th className={`${thCls} text-end`}>{t("دفع وقتها", "Paid then")}</th>
+              <th className={`${thCls} text-end`}>{t("الباقي", "Left")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.orders.length === 0 && (
+              <tr>
+                <td className="py-1 text-gray-500" colSpan={6}>
+                  —
+                </td>
+              </tr>
+            )}
+            {r.orders.map((o) => (
+              <tr key={o.id} className="border-b border-gray-200">
+                <td className="px-1 py-1 num">{o.number}</td>
+                <td className="px-1 py-1">{dateL(lang, o.date)}</td>
+                <td className="px-1 py-1 text-end num">{o.itemsCount}</td>
+                <td className="px-1 py-1 text-end num ltr">{money(o.total, o.currency, lang)}</td>
+                <td className="px-1 py-1 text-end num ltr">{usd(paidOf(o))}</td>
+                <td className="px-1 py-1 text-end num ltr">{o.totalUsd - paidOf(o) > 0.009 ? usd(o.totalUsd - paidOf(o)) : "✓"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <h3 className="mb-1 mt-4 text-[13px] font-bold">{t("حركة الحساب (دفعات ومرتجعات)", "Account moves (payments and returns)")}</h3>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className={headRow}>
+              <th className={thCls}>{t("التاريخ", "Date")}</th>
+              <th className={thCls}>{t("البيان", "Details")}</th>
+              <th className={`${thCls} text-end`}>{t("عليه", "Debit")}</th>
+              <th className={`${thCls} text-end`}>{t("له", "Credit")}</th>
+              <th className={`${thCls} text-end`}>{t("الرصيد", "Balance")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.lines.map((l) => (
+              <tr key={l.id} className="border-b border-gray-200">
+                <td className="whitespace-nowrap px-1 py-1">{dateL(lang, l.businessDate)}</td>
+                <td className="px-1 py-1">
+                  {t(...(MOVE_LABEL[l.type] ?? [l.type, l.type]))} {l.note && <span className="text-gray-600">{l.note}</span>}
+                </td>
+                <td className="px-1 py-1 text-end num ltr">{l.amountUsd < 0 ? usd(-l.amountUsd) : ""}</td>
+                <td className="px-1 py-1 text-end num ltr">{l.amountUsd > 0 ? usd(l.amountUsd) : ""}</td>
+                <td className="px-1 py-1 text-end num ltr">{l.balanceUsd < -0.009 ? `${usd(-l.balanceUsd)} ${t("عليه", "due")}` : usd(l.balanceUsd)}</td>
+              </tr>
+            ))}
+            <tr className="border-t-2 border-black font-bold">
+              <td className="px-1 py-1.5" colSpan={4}>
+                {t("الرصيد الختامي", "Closing balance")}
+              </td>
+              <td className="px-1 py-1.5 text-end num ltr">{owes ? `${usd(-r.closingUsd)} ${t("عليه", "due")}` : usd(r.closingUsd)}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="mt-3 text-center text-[11px] text-gray-600">{t("المبالغ بالدولار حسب سعر يوم كل عملية.", "Amounts in USD at each day's rate.")}</p>
+      </BrandedPage>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Clients sheet: who took what between two moments                    */
+/* ------------------------------------------------------------------ */
+
+interface ClientsSheet {
+  from: string;
+  to: string;
+  rate: number | null;
+  rows: { clientId: string | null; name: string | null; orders: number; items: number; products: { nameAr: string; nameEn: string; qty: number }[]; totalUsd: number; paidUsd: number; leftUsd: number }[];
+  totals: { orders: number; items: number; totalUsd: number; paidUsd: number; leftUsd: number };
+}
+
+export function PrintClientsSheet() {
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { s } = useAppSettings();
+  const from = sp.get("from") ?? "";
+  const to = sp.get("to") ?? "";
+  const d = useData<ClientsSheet>(from && to ? `/reports/clients-sheet?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}` : null);
+  usePrintOnce(!!d.data, "size: A4; margin: 10mm");
+  if (d.error) return <p className="p-6 text-bad">{ui.err(d.error)}</p>;
+  if (!d.data) return <Loading />;
+  const r = d.data;
+  const lang = ui.lang;
+  const t = L(lang);
+  const pk = pickL(lang);
+  return (
+    <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar />
+      <BrandedPage
+        lang={lang}
+        s={s}
+        title={t("كشف الزبائن", "Clients sheet")}
+        right={
+          <>
+            <div>{dateL(lang, r.from, true)}</div>
+            <div>→ {dateL(lang, r.to, true)}</div>
+          </>
+        }
+      >
+        <table className="mt-3 w-full border-collapse">
+          <thead>
+            <tr className={headRow}>
+              <th className={thCls}>#</th>
+              <th className={thCls}>{t("الزبون", "Client")}</th>
+              <th className={thCls}>{t("شو أخد", "What they took")}</th>
+              <th className={`${thCls} text-end`}>{t("الكمية", "Qty")}</th>
+              <th className={`${thCls} text-end`}>{t("المبلغ", "Amount")}</th>
+              <th className={`${thCls} text-end`}>{t("دفع", "Paid")}</th>
+              <th className={`${thCls} text-end`}>{t("الباقي", "Left")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {r.rows.length === 0 && (
+              <tr>
+                <td className="py-3 text-center text-gray-500" colSpan={7}>
+                  {t("ما في طلبات بهالوقت", "No orders in this time")}
+                </td>
+              </tr>
+            )}
+            {r.rows.map((x, i) => (
+              <tr key={x.clientId ?? "walkin"} className="border-b border-gray-200 align-top">
+                <td className="px-1 py-1.5 num text-gray-500">{i + 1}</td>
+                <td className="px-1 py-1.5 font-semibold">{x.name ?? t("زبائن عابرين", "Walk-ins")}</td>
+                <td className="px-1 py-1.5 text-[11px]">{x.products.map((p) => `${fq(p.qty)} × ${pk(p)}`).join("، ")}</td>
+                <td className="px-1 py-1.5 text-end num">{fq(x.items)}</td>
+                <td className="px-1 py-1.5 text-end num ltr">{usd(x.totalUsd)}</td>
+                <td className="px-1 py-1.5 text-end num ltr text-[#2e7d4f]">{usd(x.paidUsd)}</td>
+                <td className={`px-1 py-1.5 text-end num ltr ${x.leftUsd > 0.009 ? "font-bold text-[#c0392b]" : ""}`}>{x.leftUsd > 0.009 ? usd(x.leftUsd) : "✓"}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-black text-[13px] font-bold">
+              <td className="px-1 py-2" colSpan={3}>
+                {t("المجموع", "Total")} · {t(`${r.totals.orders} طلب`, `${r.totals.orders} orders`)}
+              </td>
+              <td className="px-1 py-2 text-end num">{fq(r.totals.items)}</td>
+              <td className="px-1 py-2 text-end num ltr">{usd(r.totals.totalUsd)}</td>
+              <td className="px-1 py-2 text-end num ltr text-[#2e7d4f]">{usd(r.totals.paidUsd)}</td>
+              <td className="px-1 py-2 text-end num ltr text-[#c0392b]">{usd(r.totals.leftUsd)}</td>
+            </tr>
+          </tfoot>
+        </table>
+        {r.rate ? (
+          <p className="mt-2 text-[11px] text-gray-600">
+            {t("المجموع بالليرة", "Total in SYP")}: <span className="num">{money(r.totals.totalUsd * r.rate, "SYP", lang)}</span>
+          </p>
+        ) : null}
+      </BrandedPage>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Day / period report                                                 */
 /* ------------------------------------------------------------------ */

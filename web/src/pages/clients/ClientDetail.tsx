@@ -290,6 +290,9 @@ function Statement({ clientId }: { clientId: string }) {
         <button className="btn" onClick={() => openPrint(`/print/statement/${clientId}?from=${range.from}&to=${range.to}`)}>
           {tr("اطبع كشف الحساب", "Print statement")}
         </button>
+        <button className="btn btn-primary" onClick={() => openPrint(`/print/client-report/${clientId}?from=${range.from}&to=${range.to}`)}>
+          📄 {tr("تقرير كامل (PDF)", "Full report (PDF)")}
+        </button>
       </div>
       {!data ? (
         <Spinner />
@@ -915,15 +918,23 @@ export function ClientDetailPage() {
                 {tr("طلب جديد", "New order")}
               </Link>
             )}
-            {can("orders", "create") && (
+            {can("orders", "edit") && (
               <button className="btn" onClick={() => setDialog("return")}>
-                {tr("مرتجع", "Return")}
+                ↩ {tr("رجعت بضاعة", "Goods came back")}
               </button>
             )}
+            <button className="btn" onClick={() => openPrint(`/print/client-report/${c.id}?from=${monthStartOf(today())}&to=${today()}`)}>
+              📄 {tr("تقرير الزبون", "Client report")}
+            </button>
             {can("orders", "create") && c.consignment && (
               <button className="btn" onClick={() => setDialog("consign")}>
                 {tr("بضاعة بالأمانة", "Consignment")}
               </button>
+            )}
+            {c.lat != null && c.lng != null && (
+              <a className="btn btn-ghost" href={`https://www.google.com/maps?q=${c.lat},${c.lng}`} target="_blank" rel="noreferrer">
+                📍 {tr("الموقع", "Location")}
+              </a>
             )}
             {c.phone && (
               <a className="btn btn-ghost" href={waLink(c.phone, waText)} target="_blank" rel="noreferrer">

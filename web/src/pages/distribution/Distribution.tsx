@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { directionsUrl, shortRoute } from "@shared/maps";
+import { LazyMap, type MapPoint } from "../../components/LazyMap";
 import { Tabs } from "../../components/Tabs";
 import { ConfirmDialog, Empty, Field, PageHeader, Select, Spinner, TextInput } from "../../components/ui";
 import { get, post } from "../../lib/api";
@@ -17,6 +19,8 @@ interface Stop {
   name: string;
   phone: string;
   address: string;
+  lat: number | null;
+  lng: number | null;
   areaId: string | null;
   standing: { id: string; lines: { productId: string; qty: number }[]; note: string }[];
   orders: { id: string; number: number; total: number; currency: Currency; paymentStatus: string; status: string; items: number }[];
@@ -28,6 +32,62 @@ export interface RouteSheet {
   date: string;
   rep: { id: string; name: string } | null;
   stops: Stop[];
+}
+
+/** The day's route drawn on the map: numbered pins in driving order, the line between them, and directions for the driver. */
+function RouteMap({ stops, km, pinned }: { stops: Stop[]; km: number; pinned: number }) {
+  const { tr } = useI18n();
+  const [open, setOpen] = useState(true);
+  const points = useMemo<MapPoint[]>(
+    () =>
+      stops.flatMap((s, i) =>
+        s.lat != null && s.lng != null ? [{ id: s.clientId, lat: s.lat, lng: s.lng, label: String(i + 1), title: s.name, done: s.orders.length > 0 && s.orders.every((o) => o.status === "delivered") }] : [],
+      ),
+    [stops],
+  );
+  const missing = stops.length - pinned;
+  const directions = directionsUrl(points);
+  return (
+    <section className="card mb-4 overflow-hidden p-0">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="font-semibold">🗺️ {tr("خط التوزيع على الخريطة", "Route on the map")}</h2>
+          <p className="text-sm text-muted">
+            {pinned > 0
+              ? tr(`${pinned} محل على الخريطة${km > 0 ? ` · حوالي ${km.toFixed(1)} كم` : ""}`, `${pinned} shops on the map${km > 0 ? ` · about ${km.toFixed(1)} km` : ""}`)
+              : tr("ولا محل إلو موقع بعد. افتح الزبون ← تعديل ← الموقع.", "No shop has a location yet. Open the client → Edit → Location.")}
+            {pinned > 0 && missing > 0 && ` · ${tr(`${missing} بدون موقع (آخر الخط)`, `${missing} without a location (end of the list)`)}`}
+          </p>
+        </div>
+        <div className="ms-auto flex gap-2">
+          {directions && points.length > 0 && (
+            <a className="btn btn-primary" href={directions} target="_blank" rel="noreferrer">
+              {tr("ابدأ التوصيل بغوغل ماب", "Start in Google Maps")}
+            </a>
+          )}
+          {pinned > 0 && (
+            <button className="btn" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+              {open ? tr("خبّي الخريطة", "Hide map") : tr("ورجيني الخريطة", "Show map")}
+            </button>
+          )}
+        </div>
+      </div>
+      {open && pinned > 0 && (
+        <div className="px-3 pb-3">
+          <LazyMap points={points} route className="h-[420px]" />
+          <div className="mt-2 flex flex-wrap gap-4 px-1 text-xs text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full bg-brand" /> {tr("لسا", "To visit")}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full bg-good" /> {tr("انوصل", "Delivered")}
+            </span>
+            <span>{tr("الأرقام = ترتيب الزيارة (أقصر طريق)", "Numbers = visiting order (shortest way)")}</span>
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }
 
 /** The delivery person's day: every shop to visit, what to bring, what to collect. */
@@ -59,6 +119,10 @@ function RouteTab() {
     }
   };
   if (!sheet.data) return <Spinner />;
+  const pinned = sheet.data.stops.filter((s) => s.lat != null && s.lng != null).length;
+  const route = shortRoute(sheet.data.stops);
+  const smart = pinned >= 2;
+  const stops = smart ? route.ordered : sheet.data.stops;
   let lastArea: string | null | undefined;
   return (
     <div>
@@ -80,12 +144,13 @@ function RouteTab() {
           {tr("اطبع ورقة التوزيع", "Print route sheet")}
         </button>
       </div>
-      {sheet.data.stops.length === 0 ? (
+      {stops.length > 0 && <RouteMap stops={stops} km={route.km} pinned={pinned} />}
+      {stops.length === 0 ? (
         <Empty text={tr("ما في محلات بهالخط اليوم. المحلات بتظهر هون إذا عندها طلب ثابت لهاليوم، أو فاتورة توصيل، أو بضاعة بالأمانة.", "No stops today. A shop shows here when it has a standing order for this weekday, a delivery invoice, or goods on consignment.")} />
       ) : (
         <div className="grid gap-3">
-          {sheet.data.stops.map((s, i) => {
-            const header = s.areaId !== lastArea;
+          {stops.map((s, i) => {
+            const header = !smart && s.areaId !== lastArea;
             lastArea = s.areaId;
             return (
               <div key={s.clientId}>

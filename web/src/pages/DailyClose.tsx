@@ -32,6 +32,7 @@ interface DayView {
   report: PeriodReport;
   mainBox: { id: string; nameAr: string; nameEn: string; currency: Currency; expected: number };
   reps: { id: string; nameAr: string; nameEn: string; currency: Currency; balance: number }[];
+  leftovers?: { batchId: string; batchCode: string; nameAr: string; nameEn: string; qty: number; expiresAt: string | null; expired: boolean }[];
   cashFlow?: { currency: Currency; opening: number; moves: { type: string; amount: number; n: number }[]; expected: number };
   repSettlement?: {
     employeeId: string;
@@ -283,18 +284,33 @@ export function DailyClosePage() {
     }
   };
 
+  const [taken, setTaken] = useState<Record<string, boolean>>({});
+  const [trash, setTrash] = useState<Record<string, boolean>>({});
   const d = view.data;
   const box = d?.mainBox;
-  const c = num(counted);
-  const diff = box && !Number.isNaN(c) ? Math.round((c - box.expected) * 100) / 100 : null;
   const isToday = date === today();
+  // delivery cash still out: from the per-person settlement, or straight from the rep boxes
+  const repCash = (
+    d?.repSettlement?.length
+      ? d.repSettlement
+          .filter((r) => r.boxId && r.cash > 0.009)
+          .map((r) => ({ boxId: r.boxId!, name: r.name, cash: r.cash, currency: r.currency, sub: tr(`${r.deliveries} توصيلة · ${r.items} قطعة`, `${r.deliveries} deliveries · ${r.items} pcs`) }))
+      : (d?.reps ?? []).filter((r) => r.balance > 0.009).map((r) => ({ boxId: r.id, name: pick(r), cash: r.balance, currency: r.currency, sub: "" }))
+  );
+  const handover = isToday ? repCash.filter((r) => taken[r.boxId] ?? true) : [];
+  const handedTotal = handover.filter((r) => r.currency === box?.currency).reduce((t, r) => t + r.cash, 0);
+  const expected = box ? Math.round((box.expected + handedTotal) * 100) / 100 : 0;
+  const leftovers = d?.leftovers ?? [];
+  const wasteIds = isToday ? leftovers.filter((b) => trash[b.batchId] ?? b.expired).map((b) => b.batchId) : [];
+  const c = num(counted);
+  const diff = box && !Number.isNaN(c) ? Math.round((c - expected) * 100) / 100 : null;
   const big = simple;
 
   return (
     <div>
       <PageHeader
         title={tr("إقفال اليوم", "Close the day")}
-        subtitle={tr("سلّم نقد التوصيل، عدّ الصندوق، واقفل اليوم.", "Receive delivery cash, count the box, and lock the day.")}
+        subtitle={tr("علّم كاش المندوبين، عدّ الصندوق، قرر شو بيضل بالبرّاد — وكبسة وحدة بتقفل كل شي.", "Tick the delivery cash, count the box, decide what stays in the fridge — one button does it all.")}
         actions={
           <div className="flex items-center gap-2">
             {can("daily_close", "edit") && isToday && (
@@ -341,70 +357,33 @@ export function DailyClosePage() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {/* step 1: delivery cash */}
+          {/* part 1: delivery cash — ticked, received with the close */}
           <section className="card">
-            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>1 · {tr("تسوية المندوب", "Settle with the delivery person")}</h2>
-            {d.repSettlement && d.repSettlement.length > 0 ? (
-              <div className="grid gap-2">
-                {d.repSettlement.map((r) => (
-                  <div key={r.employeeId} className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-line p-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold">{r.name}</div>
-                      <div className="text-sm text-muted">
-                        {tr("توصيلات", "Deliveries")} <span className="num">{r.deliveries}</span> ({r.items} {tr("قطعة", "pcs")}) · {tr("مرتجعات", "Returns")}{" "}
-                        <span className="num">{r.returns}</span>
-                        {r.expensesUsd > 0 && (
-                          <>
-                            {" "}
-                            · {tr("مصاريف طريق", "Road expenses")} <span className="num ltr">{usd(r.expensesUsd)}</span>
-                          </>
-                        )}
-                        {r.openConsignments > 0 && ` · ${tr(`${r.openConsignments} بضاعة بالأمانة مفتوحة`, `${r.openConsignments} open consignment(s)`)}`}
-                      </div>
-                    </div>
-                    <div className="ms-auto flex items-center gap-3">
-                      <span className={`num ltr text-lg font-bold ${r.cash > 0.009 ? "" : "text-faint"}`}>{money(r.cash, r.currency, lang)}</span>
-                      {r.cash > 0.009 && r.boxId && can("daily_close", "create") && isToday ? (
-                        <button
-                          className={`btn btn-primary ${big ? "min-h-[52px] px-6 text-lg" : ""}`}
-                          disabled={busy}
-                          onClick={() => run(() => post("/money/handover", { boxId: r.boxId }), tr("تم استلام النقد", "Cash received"))}
-                        >
-                          {tr("استلمت الكاش", "Cash received")}
-                        </button>
-                      ) : (
-                        r.cash <= 0.009 && <span className="text-sm text-good">✓</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : d.reps.filter((r) => r.balance > 0.009).length === 0 ? (
+            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>1 · {tr("كاش المندوبين", "Delivery cash")}</h2>
+            {repCash.length === 0 ? (
               <p className="text-muted">{tr("ما في نقد عند موظفي التوصيل. ✓", "No delivery person is holding cash. ✓")}</p>
             ) : (
-              <ul className="grid gap-2">
-                {d.reps
-                  .filter((r) => r.balance > 0.009)
-                  .map((r) => (
-                    <li key={r.id} className="flex flex-wrap items-center gap-3">
-                      <span className="font-semibold">{pick(r)}</span>
-                      <span className="num ltr text-lg">{money(r.balance, r.currency, lang)}</span>
-                      {can("daily_close", "create") && isToday && (
-                        <button
-                          className={`btn btn-primary ms-auto ${big ? "min-h-[52px] px-6 text-lg" : ""}`}
-                          disabled={busy}
-                          onClick={() => run(() => post("/money/handover", { boxId: r.id }), tr("تم استلام النقد", "Cash received"))}
-                        >
-                          {tr("استلمت المبلغ", "Cash received")}
-                        </button>
-                      )}
-                    </li>
-                  ))}
-              </ul>
+              <div className="grid gap-2">
+                {repCash.map((r) => {
+                  const on = taken[r.boxId] ?? true;
+                  return (
+                    <label key={r.boxId} className={`flex cursor-pointer flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border-2 p-3 transition-colors ${on ? "border-good bg-good/5" : "border-line"}`}>
+                      <input type="checkbox" className="h-5 w-5 accent-[rgb(var(--good))]" checked={on} disabled={!isToday} onChange={(e) => setTaken({ ...taken, [r.boxId]: e.target.checked })} />
+                      <div className="min-w-0">
+                        <div className="font-semibold">{r.name}</div>
+                        {r.sub && <div className="text-sm text-muted">{r.sub}</div>}
+                      </div>
+                      <span className="ms-auto num ltr text-lg font-bold">{money(r.cash, r.currency, lang)}</span>
+                      <span className={`text-sm font-semibold ${on ? "text-good" : "text-faint"}`}>{on ? tr("استلمتها ✓", "Received ✓") : tr("لسا", "Not yet")}</span>
+                    </label>
+                  );
+                })}
+                <p className="text-xs text-muted">{tr("المصاري المعلّمة بتدخل الصندوق الرئيسي لما تقفل اليوم.", "Ticked cash goes into the main box when you close the day.")}</p>
+              </div>
             )}
           </section>
 
-          {/* step 2: count */}
+          {/* part 2: count */}
           <section className="card">
             <h2 className={`mb-1 font-bold ${big ? "text-xl" : "text-lg"}`}>2 · {tr("عدّ الصندوق", "Count the cash box")}</h2>
             <p className="mb-3 text-sm text-muted">
@@ -412,21 +391,27 @@ export function DailyClosePage() {
             </p>
             {d.cashFlow && !simple && <BoxFlow f={d.cashFlow} />}
             <div className="grid items-end gap-4 sm:grid-cols-3">
-              <label className="block">
+              <div>
                 <span className="label">{tr("المعدود", "Counted")}</span>
-                <input
-                  className={`input num ltr ${big ? "py-4 text-3xl" : "text-xl"}`}
-                  inputMode="decimal"
-                  dir="ltr"
-                  value={counted}
-                  onChange={(e) => setCounted(e.target.value)}
-                  placeholder="0"
-                  aria-label={tr("المعدود", "Counted")}
-                />
-              </label>
+                <div className="flex gap-2">
+                  <input
+                    className={`input num ltr ${big ? "py-4 text-3xl" : "text-xl"}`}
+                    inputMode="decimal"
+                    dir="ltr"
+                    value={counted}
+                    onChange={(e) => setCounted(e.target.value)}
+                    placeholder="0"
+                    aria-label={tr("المعدود", "Counted")}
+                  />
+                  <button type="button" className="btn shrink-0 text-good" onClick={() => setCounted(String(expected))} title={tr("المعدود نفس المتوقع", "Counted equals expected")}>
+                    {tr("مطابق ✓", "Matches ✓")}
+                  </button>
+                </div>
+              </div>
               <div>
                 <div className="text-sm text-muted">{tr("المتوقع بالنظام", "Expected by the system")}</div>
-                <div className="num ltr text-2xl font-bold text-start">{money(box.expected, box.currency, lang)}</div>
+                <div className="num ltr text-2xl font-bold text-start">{money(expected, box.currency, lang)}</div>
+                {handedTotal > 0 && <div className="text-xs text-muted">{tr(`مع ${money(handedTotal, box.currency, lang)} من المندوبين`, `incl. ${money(handedTotal, box.currency, lang)} from delivery`)}</div>}
               </div>
               <div>
                 <div className="text-sm text-muted">{tr("الفرق", "Difference")}</div>
@@ -440,30 +425,70 @@ export function DailyClosePage() {
             </div>
           </section>
 
-          {d.production && d.production.length > 0 && <MadeVsSold rows={d.production} />}
+          {/* part 3: what is left in the fridge */}
+          {isToday && leftovers.length > 0 && (
+            <section className="card">
+              <h2 className={`mb-1 font-bold ${big ? "text-xl" : "text-lg"}`}>3 · {tr("شو ضل بالبرّاد؟", "What's left in the fridge?")}</h2>
+              <p className="mb-3 text-sm text-muted">{tr("المنتهي معلّم للزبالة لحالو. غيّر اللي بدك.", "Expired ones are already marked for the trash. Change any you like.")}</p>
+              <div className="grid gap-2">
+                {leftovers.map((b) => {
+                  const toTrash = trash[b.batchId] ?? b.expired;
+                  return (
+                    <div key={b.batchId} className="flex flex-wrap items-center gap-3 rounded-xl border border-line px-3 py-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold">
+                          {pick(b)} · <span className="num">{qty(b.qty)}</span>
+                        </div>
+                        <div className="text-xs text-muted">
+                          <span className="ltr">{b.batchCode}</span>
+                          {b.expiresAt && ` · ${tr("بتخلص", "expires")} ${fmtDate(b.expiresAt, true)}`}
+                          {b.expired && <span className="ms-1 font-semibold text-bad">{tr("منتهي", "expired")}</span>}
+                        </div>
+                      </div>
+                      <div className="ms-auto inline-flex rounded-lg bg-sunken p-0.5" role="radiogroup" aria-label={pick(b)}>
+                        <button type="button" role="radio" aria-checked={!toTrash} onClick={() => setTrash({ ...trash, [b.batchId]: false })} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${!toTrash ? "bg-surface text-good shadow-sm" : "text-muted"}`}>
+                          🧊 {tr("لبكرا", "Keep")}
+                        </button>
+                        <button type="button" role="radio" aria-checked={toTrash} onClick={() => setTrash({ ...trash, [b.batchId]: true })} className={`rounded-md px-3 py-1.5 text-sm font-semibold ${toTrash ? "bg-surface text-bad shadow-sm" : "text-muted"}`}>
+                          🗑️ {tr("للزبالة", "Trash")}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
-          {/* step 3: close */}
-          <section className="card">
-            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>3 · {tr("اقفل اليوم", "Lock the day")}</h2>
-            <p className="mb-3 text-sm text-muted">
-              {tr(
-                "بعد الإقفال ما بينفع تسجيل طلبات أو حركات لهذا اليوم إلا إذا فتحه المدير.",
-                "After closing, no orders or moves can be added for this day unless the admin reopens it.",
-              )}
-            </p>
+          {d.production && d.production.length > 0 && !simple && <MadeVsSold rows={d.production} />}
+
+          {/* last: one button does it all */}
+          <section className="card border-ink/30">
+            <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>{tr("اقفل اليوم", "Lock the day")}</h2>
             <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label={tr("الطلبات", "Orders")} value={String(d.report.orders)} />
               <Stat label={tr("القطع", "Items")} value={qty(d.report.items)} />
               <Stat label={tr("المبيعات", "Sales")} value={usd(d.report.salesUsd)} />
               <Stat label={tr("الخصومات", "Discounts")} value={usd(d.report.discountUsd)} />
             </div>
+            <ul className="mb-3 grid gap-1 text-sm">
+              <li className={handover.length ? "text-good" : "text-muted"}>{handover.length ? `✓ ${tr(`استلام كاش من ${handover.length} مندوب`, `Receive cash from ${handover.length} delivery person(s)`)}` : `· ${tr("ما في كاش مندوبين", "No delivery cash")}`}</li>
+              <li className={counted !== "" && !Number.isNaN(c) ? "text-good" : "text-warn"}>{counted !== "" && !Number.isNaN(c) ? `✓ ${tr("الصندوق معدود", "Cash counted")}` : `• ${tr("لسا ما عدّيت الصندوق", "Cash not counted yet")}`}</li>
+              {wasteIds.length > 0 && <li className="text-bad">🗑️ {tr(`${wasteIds.length} دفعة للزبالة`, `${wasteIds.length} batch(es) to the trash`)}</li>}
+            </ul>
+            <p className="mb-3 text-xs text-muted">
+              {tr(
+                "بعد الإقفال ما بينفع تسجيل طلبات أو حركات لهذا اليوم إلا إذا فتحه المدير.",
+                "After closing, no orders or moves can be added for this day unless the admin reopens it.",
+              )}
+            </p>
             {can("daily_close", "create") ? (
               <button
                 className={`btn btn-primary w-full ${big ? "min-h-[64px] text-xl" : "py-3 text-lg"}`}
                 disabled={busy || counted === "" || Number.isNaN(c) || c < 0}
                 onClick={() => setConfirm("close")}
               >
-                {tr("اقفل اليوم", "Close the day")}
+                🔒 {tr("اقفل اليوم", "Close the day")}
               </button>
             ) : (
               <p className="text-muted">{tr("دورك لا يسمح بإقفال اليوم.", "Your role cannot close the day.")}</p>
@@ -531,7 +556,10 @@ export function DailyClosePage() {
           onClose={() => setConfirm(null)}
           onYes={() => {
             setConfirm(null);
-            void run(() => post(`/days/${date}/close`, { counted: c }), tr("تم إقفال اليوم", "Day closed")).then(() => setCounted(""));
+            void run(
+              () => post(`/days/${date}/close`, { counted: c, handoverBoxIds: handover.map((r) => r.boxId), wasteBatchIds: wasteIds }),
+              tr("تم إقفال اليوم", "Day closed"),
+            ).then(() => (setCounted(""), setTaken({}), setTrash({})));
           }}
         />
       )}

@@ -98,14 +98,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleKey, Permission[]> = {
     perm("expenses", "create"),
     perm("reports", "view"),
   ],
-  member: [
-    perm("home", "view"),
-    perm("orders", "view"),
-    perm("orders", "create"),
-    perm("menu", "view"),
-    perm("warehouse", "view"),
-    perm("warehouse", "create"),
-  ],
+  // Members only take and cancel orders (they pick the client inside the order screen).
+  member: [perm("home", "view"), perm("orders", "view"), perm("orders", "create"), perm("orders", "delete")],
 };
 
 /** "Simple mode" (big buttons, no charts/costs) is for anyone who cannot see costs. */
@@ -118,7 +112,7 @@ export const LOOKUP_LABEL: Record<LookupType, { ar: string; en: string }> = {
   expense_item: { ar: "بنود المصاريف", en: "Expense items" },
   expense_category: { ar: "فئات المصاريف", en: "Expense categories" },
   unit: { ar: "وحدات القياس", en: "Units" },
-  client_tag: { ar: "تصنيفات الزبائن", en: "Client tags" },
+  client_tag: { ar: "أنواع الزبائن (مقهى، ستادي زون…)", en: "Client types (café, study zone…)" },
   waste_reason: { ar: "أسباب الهدر", en: "Waste reasons" },
   area: { ar: "المناطق", en: "Areas" },
   cancel_reason: { ar: "أسباب إلغاء الفواتير", en: "Invoice cancel reasons" },

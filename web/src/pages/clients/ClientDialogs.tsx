@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { parseLatLng, type LatLng } from "@shared/maps";
+import { LazyMap } from "../../components/LazyMap";
 import { LookupSelect } from "../../components/LookupSelect";
 import { Field, Modal, Select, TextInput } from "../../components/ui";
 import { ApiError, post, put } from "../../lib/api";
@@ -45,6 +47,9 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
     priceListId: client?.priceListId ?? "",
     consignment: client?.consignment ?? false,
     repId: client?.repId ?? "",
+    lat: client?.lat ?? (null as number | null),
+    lng: client?.lng ?? (null as number | null),
+    mapUrl: client?.mapUrl ?? "",
   });
   const [portalAccess, setPortalAccess] = useState(true);
   const [opening, setOpening] = useState({ amount: "", currency: (app?.defaultCurrency ?? "USD") as Currency });
@@ -104,84 +109,32 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
       }
     >
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label={tr("النوع", "Type")} htmlFor="c-type">
-          <Select id="c-type" value={f.type} onChange={(e) => set("type", e.target.value as ClientSummary["type"])}>
-            <option value="business">{tr("محل / مقهى / شركة", "Business (shop, café, study zone)")}</option>
-            <option value="individual">{tr("فرد (فريلانسر…)", "Individual (freelancer…)")}</option>
-          </Select>
-        </Field>
         <Field label={tr("الاسم", "Name")} htmlFor="c-name" error={errors.name}>
-          <TextInput id="c-name" value={f.name} onChange={(e) => set("name", e.target.value)} />
+          <TextInput id="c-name" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder={tr("مثلاً: ستادي زون فوكس", "e.g. Focus Study Zone")} />
         </Field>
-        <Field label={tr("الشخص المسؤول", "Contact person")} htmlFor="c-contact" error={errors.contactPerson}>
-          <TextInput id="c-contact" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} />
-        </Field>
-        <Field label={tr("الهاتف", "Phone")} htmlFor="c-phone" error={errors.phone}>
-          <TextInput id="c-phone" dir="ltr" value={f.phone} onChange={(e) => set("phone", e.target.value)} />
-        </Field>
-        <div className="sm:col-span-2">
-          <Field label={tr("العنوان", "Address")} htmlFor="c-addr" error={errors.address}>
-            <TextInput id="c-addr" value={f.address} onChange={(e) => set("address", e.target.value)} />
-          </Field>
-        </div>
-        <Field label={tr("الفئة (خصم)", "Tier (discount)")} htmlFor="c-tier" hint={tr("مثلاً: زبون مميّز يأخذ خصم ١٠٪", "e.g. Favourite gets 10% off")}>
-          <Select id="c-tier" value={f.tierId} onChange={(e) => set("tierId", e.target.value)}>
-            <option value="">—</option>
-            {tiers.data?.rows.map((t) => (
-              <option key={t.id} value={t.id}>
-                {pick(t)} ({t.discountPct}%)
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={tr("التصنيف", "Tag")} htmlFor="c-tag">
+        <Field label={tr("النوع", "Type")} htmlFor="c-tag" hint={tr("مقهى، ستادي زون، محل…", "Café, study zone, shop…")}>
           <LookupSelect id="c-tag" listType="client_tag" value={f.tagId} onChange={(v) => set("tagId", v)} />
         </Field>
-        <Field label={tr("المنطقة", "Area")} htmlFor="c-area">
-          <LookupSelect id="c-area" listType="area" value={f.areaId} onChange={(v) => set("areaId", v)} />
+        <Field label={tr("رقم الهاتف", "Phone number")} htmlFor="c-phone" error={errors.phone}>
+          <TextInput id="c-phone" dir="ltr" inputMode="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="09…" />
         </Field>
-        <Field label={tr("قائمة الأسعار", "Price list")} htmlFor="c-pl" hint={tr("فاضي = سعر المنيو", "Empty = menu price")}>
-          <Select id="c-pl" value={f.priceListId} onChange={(e) => set("priceListId", e.target.value)}>
-            <option value="">—</option>
-            {lists.data?.rows
-              .filter((l) => l.active || l.id === f.priceListId)
-              .map((l) => (
-                <option key={l.id} value={l.id}>
-                  {pick(l)}
-                </option>
-              ))}
-          </Select>
+        <Field label={tr("المدير / المسؤول عن المكان", "Manager of the place")} htmlFor="c-contact" error={errors.contactPerson}>
+          <TextInput id="c-contact" value={f.contactPerson} onChange={(e) => set("contactPerson", e.target.value)} />
         </Field>
-        <Field label={tr("المندوب", "Delivery rep")} htmlFor="c-rep">
-          <Select id="c-rep" value={f.repId} onChange={(e) => set("repId", e.target.value)}>
-            <option value="">—</option>
-            {reps.data?.rows.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label={tr("مدة السداد (أيام)", "Days to pay")} htmlFor="c-terms" error={errors.paymentTermsDays} hint={tr("٠ = الدفع فوراً", "0 = pay on the spot")}>
-          <TextInput id="c-terms" type="number" min={0} step="1" dir="ltr" className="num" value={f.paymentTermsDays} onChange={(e) => set("paymentTermsDays", e.target.value)} />
-        </Field>
-        <Field label={tr("لغة الفاتورة", "Receipt language")} htmlFor="c-lang">
-          <Select id="c-lang" value={f.receiptLanguage} onChange={(e) => set("receiptLanguage", e.target.value as "ar" | "en")}>
-            <option value="ar">عربي</option>
-            <option value="en">English</option>
-          </Select>
-        </Field>
-        <Field label={tr("حد الدين ($)", "Credit limit ($)")} htmlFor="c-limit" error={errors.creditLimitUsd} hint={tr("٠ = بلا حد", "0 = no limit")}>
-          <TextInput id="c-limit" type="number" min={0} step="1" dir="ltr" className="num" value={f.creditLimitUsd} onChange={(e) => set("creditLimitUsd", e.target.value)} />
-        </Field>
-        <label className="inline-flex items-center gap-2 sm:col-span-2">
-          <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.creditBlock} onChange={(e) => set("creditBlock", e.target.checked)} />
-          {tr("امنع الطلب بالدين إذا تجاوز الحد", "Block credit orders above the limit")}
-        </label>
-        <label className="inline-flex items-center gap-2 sm:col-span-2">
-          <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment} onChange={(e) => set("consignment", e.target.checked)} />
-          {tr("محل بالأمانة (بيدفع بس على اللي باعه)", "Consignment shop (pays only for what it sold)")}
-        </label>
+        <div className="sm:col-span-2">
+          <LocationField
+            address={f.address}
+            mapUrl={f.mapUrl}
+            at={f.lat != null && f.lng != null ? { lat: f.lat, lng: f.lng } : null}
+            error={errors.address}
+            onChange={(v) => setF((x) => ({ ...x, ...v }))}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Field label={tr("ملاحظات", "Notes")} htmlFor="c-note" error={errors.note}>
+            <textarea id="c-note" rows={2} className="input" value={f.note} onChange={(e) => set("note", e.target.value)} />
+          </Field>
+        </div>
         {!client && (
           <label className="flex items-start gap-2 rounded-xl border border-line bg-sunken/50 p-3 sm:col-span-2">
             <input type="checkbox" className="mt-1 h-4 w-4 accent-ink" checked={portalAccess} onChange={(e) => setPortalAccess(e.target.checked)} />
@@ -191,40 +144,187 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
             </span>
           </label>
         )}
-        {!client && (
-          <div className="grid grid-cols-[1fr_auto] gap-2 sm:col-span-2">
-            <Field label={tr("رصيد سابق (اختياري)", "Opening balance (optional)")} htmlFor="c-open" hint={tr("موجب = عليه لنا، سالب = دافع سلف", "+ owes us · − prepaid")}>
-              <TextInput
-                id="c-open"
-                inputMode="decimal"
-                dir="ltr"
-                className="num"
-                placeholder="0"
-                value={opening.amount}
-                onChange={(e) => setOpening({ ...opening, amount: e.target.value })}
-              />
-            </Field>
-            <Field label={tr("العملة", "Currency")} htmlFor="c-open-cur">
-              <Select id="c-open-cur" value={opening.currency} onChange={(e) => setOpening({ ...opening, currency: e.target.value as Currency })}>
-                <option value="USD">USD</option>
-                <option value="SYP">SYP</option>
-              </Select>
-            </Field>
-          </div>
-        )}
-        <div className="sm:col-span-2">
-          <Field label={tr("ملاحظة", "Note")} htmlFor="c-note" error={errors.note}>
-            <TextInput id="c-note" value={f.note} onChange={(e) => set("note", e.target.value)} />
+      </div>
+
+      <details className="mt-4 rounded-xl border border-line">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 font-semibold">
+          {tr("خيارات إضافية", "More options")}
+          <span className="text-xs font-normal text-muted">{tr("الخصم، الأسعار، المندوب، الدين…", "Discount, prices, rep, credit…")}</span>
+        </summary>
+        <div className="grid gap-3 border-t border-line p-4 sm:grid-cols-2">
+          <Field label={tr("الفئة (خصم)", "Tier (discount)")} htmlFor="c-tier" hint={tr("مثلاً: زبون مميّز يأخذ خصم ١٠٪", "e.g. Favourite gets 10% off")}>
+            <Select id="c-tier" value={f.tierId} onChange={(e) => set("tierId", e.target.value)}>
+              <option value="">—</option>
+              {tiers.data?.rows.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {pick(t)} ({t.discountPct}%)
+                </option>
+              ))}
+            </Select>
           </Field>
-        </div>
-        {client && (
-          <label className="inline-flex items-center gap-2">
-            <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.active} onChange={(e) => set("active", e.target.checked)} />
-            {tr("فعّال", "Active")}
+          <Field label={tr("المنطقة", "Area")} htmlFor="c-area">
+            <LookupSelect id="c-area" listType="area" value={f.areaId} onChange={(v) => set("areaId", v)} />
+          </Field>
+          <Field label={tr("قائمة الأسعار", "Price list")} htmlFor="c-pl" hint={tr("فاضي = سعر المنيو", "Empty = menu price")}>
+            <Select id="c-pl" value={f.priceListId} onChange={(e) => set("priceListId", e.target.value)}>
+              <option value="">—</option>
+              {lists.data?.rows
+                .filter((l) => l.active || l.id === f.priceListId)
+                .map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {pick(l)}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label={tr("المندوب", "Delivery rep")} htmlFor="c-rep">
+            <Select id="c-rep" value={f.repId} onChange={(e) => set("repId", e.target.value)}>
+              <option value="">—</option>
+              {reps.data?.rows.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={tr("مدة السداد (أيام)", "Days to pay")} htmlFor="c-terms" error={errors.paymentTermsDays} hint={tr("٠ = الدفع فوراً", "0 = pay on the spot")}>
+            <TextInput id="c-terms" type="number" min={0} step="1" dir="ltr" className="num" value={f.paymentTermsDays} onChange={(e) => set("paymentTermsDays", e.target.value)} />
+          </Field>
+          <Field label={tr("لغة الفاتورة", "Receipt language")} htmlFor="c-lang">
+            <Select id="c-lang" value={f.receiptLanguage} onChange={(e) => set("receiptLanguage", e.target.value as "ar" | "en")}>
+              <option value="ar">عربي</option>
+              <option value="en">English</option>
+            </Select>
+          </Field>
+          <Field label={tr("حد الدين ($)", "Credit limit ($)")} htmlFor="c-limit" error={errors.creditLimitUsd} hint={tr("٠ = بلا حد", "0 = no limit")}>
+            <TextInput id="c-limit" type="number" min={0} step="1" dir="ltr" className="num" value={f.creditLimitUsd} onChange={(e) => set("creditLimitUsd", e.target.value)} />
+          </Field>
+          <Field label={tr("مكان أو شخص", "Place or person")} htmlFor="c-type">
+            <Select id="c-type" value={f.type} onChange={(e) => set("type", e.target.value as ClientSummary["type"])}>
+              <option value="business">{tr("مكان (محل، مقهى، شركة)", "A place (shop, café, company)")}</option>
+              <option value="individual">{tr("شخص (فريلانسر…)", "A person (freelancer…)")}</option>
+            </Select>
+          </Field>
+          <label className="inline-flex items-center gap-2 sm:col-span-2">
+            <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.creditBlock} onChange={(e) => set("creditBlock", e.target.checked)} />
+            {tr("امنع الطلب بالدين إذا تجاوز الحد", "Block credit orders above the limit")}
           </label>
+          <label className="inline-flex items-center gap-2 sm:col-span-2">
+            <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment} onChange={(e) => set("consignment", e.target.checked)} />
+            {tr("محل بالأمانة (بيدفع بس على اللي باعه)", "Consignment shop (pays only for what it sold)")}
+          </label>
+          {!client && (
+            <div className="grid grid-cols-[1fr_auto] gap-2 sm:col-span-2">
+              <Field label={tr("رصيد سابق (اختياري)", "Opening balance (optional)")} htmlFor="c-open" hint={tr("موجب = عليه لنا، سالب = دافع سلف", "+ owes us · − prepaid")}>
+                <TextInput
+                  id="c-open"
+                  inputMode="decimal"
+                  dir="ltr"
+                  className="num"
+                  placeholder="0"
+                  value={opening.amount}
+                  onChange={(e) => setOpening({ ...opening, amount: e.target.value })}
+                />
+              </Field>
+              <Field label={tr("العملة", "Currency")} htmlFor="c-open-cur">
+                <Select id="c-open-cur" value={opening.currency} onChange={(e) => setOpening({ ...opening, currency: e.target.value as Currency })}>
+                  <option value="USD">USD</option>
+                  <option value="SYP">SYP</option>
+                </Select>
+              </Field>
+            </div>
+          )}
+          {client && (
+            <label className="inline-flex items-center gap-2">
+              <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.active} onChange={(e) => set("active", e.target.checked)} />
+              {tr("فعّال", "Active")}
+            </label>
+          )}
+        </div>
+      </details>
+    </Modal>
+  );
+}
+
+/** Where the shop is: a written address, a Google Maps link, or a spot tapped on the map. */
+function LocationField({
+  address,
+  mapUrl,
+  at,
+  error,
+  onChange,
+}: {
+  address: string;
+  mapUrl: string;
+  at: LatLng | null;
+  error?: string;
+  onChange: (v: { address?: string; mapUrl?: string; lat?: number | null; lng?: number | null }) => void;
+}) {
+  const { tr, err } = useI18n();
+  const toast = useToast();
+  const [showMap, setShowMap] = useState(false);
+  const [reading, setReading] = useState(false);
+  const readLink = async (url: string) => {
+    if (!url.trim()) return;
+    const local = parseLatLng(url);
+    if (local) return onChange(local);
+    setReading(true);
+    try {
+      onChange(await post<LatLng>("/clients/resolve-map-link", { url }));
+    } catch (e) {
+      toast(err(e), "error");
+    } finally {
+      setReading(false);
+    }
+  };
+  return (
+    <div className="grid gap-2 rounded-xl border border-line p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="label !mb-0">{tr("الموقع", "Location")}</span>
+        {at ? <span className="chip !bg-good/10 !text-good">✓ {tr("محدد على الخريطة", "Pinned on the map")}</span> : <span className="text-xs text-faint">{tr("ما في دبوس بعد", "No pin yet")}</span>}
+      </div>
+      <TextInput
+        aria-label={tr("العنوان بالتفصيل", "Address in words")}
+        value={address}
+        onChange={(e) => onChange({ address: e.target.value })}
+        placeholder={tr("العنوان بالتفصيل: المنطقة، الشارع، جنب…", "Address in words: area, street, next to…")}
+      />
+      {error && <p className="text-sm text-bad">{error}</p>}
+      <div className="flex gap-2">
+        <TextInput
+          aria-label={tr("رابط غوغل ماب", "Google Maps link")}
+          dir="ltr"
+          value={mapUrl}
+          onChange={(e) => onChange({ mapUrl: e.target.value })}
+          onPaste={(e) => void readLink(e.clipboardData.getData("text"))}
+          placeholder={tr("الصق رابط غوغل ماب هون", "Paste a Google Maps link here")}
+        />
+        <button type="button" className="btn shrink-0" onClick={() => void readLink(mapUrl)} disabled={reading || !mapUrl.trim()}>
+          {reading ? "…" : tr("اقرأ", "Read")}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn" onClick={() => setShowMap((v) => !v)}>
+          📍 {showMap ? tr("سكّر الخريطة", "Hide map") : tr("حدد على الخريطة", "Pick on the map")}
+        </button>
+        {at && (
+          <>
+            <a className="btn" href={`https://www.google.com/maps?q=${at.lat},${at.lng}`} target="_blank" rel="noreferrer">
+              {tr("افتح بغوغل ماب", "Open in Google Maps")}
+            </a>
+            <button type="button" className="btn btn-ghost text-bad" onClick={() => onChange({ lat: null, lng: null })}>
+              {tr("امسح الدبوس", "Remove pin")}
+            </button>
+          </>
         )}
       </div>
-    </Modal>
+      {showMap && (
+        <>
+          <p className="text-xs text-muted">{tr("اضغط على مكان المحل بالخريطة.", "Tap the shop's spot on the map.")}</p>
+          <LazyMap className="h-72" picked={at} onPick={(p) => onChange(p)} />
+        </>
+      )}
+    </div>
   );
 }
 

@@ -97,6 +97,15 @@ export const requirePerm = (module: Module, action: Action) => (req: Request, _r
   next();
 };
 
+/** Route guard that passes when the user holds any one of the given permissions. */
+export const requireAnyPerm =
+  (...options: [Module, Action][]) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.user) return next(new HttpError(401, "not_logged_in", "Please log in."));
+    if (!options.some(([m, a]) => can(req.user, m, a))) return next(new HttpError(403, "forbidden", "Your role cannot see this."));
+    next();
+  };
+
 /** Simple brute-force brake: 5 wrong passwords lock that username for 60 seconds. */
 const failures = new Map<string, { count: number; until: number }>();
 export function checkLoginLock(username: string) {

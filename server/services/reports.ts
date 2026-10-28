@@ -574,3 +574,37 @@ export function allMyMoney(tx: Q) {
     totalUsd: round4(cashUsd + clientsOweUsd + goodsAtShopsUsd - weOweUsd - dueExpensesUsd),
   };
 }
+
+/**
+ * Who took what between two moments (ISO times): one row per client with the products, how many,
+ * the invoice total, what they paid on the spot and what is left. Walk-ins share one row. Amounts in USD.
+ */
+export function clientsSheet(tx: Q, fromIso: string, toIso: string) {
+  const rows = tx.all<{ client_id: string | null; name: string | null; orders: number; items: number; total_usd: number; paid_usd: number }>(
+    sql`select o.client_id, c.name, count(*) as orders, coalesce(sum(o.items_count),0) as items, coalesce(sum(o.total_usd),0) as total_usd,
+               coalesce(sum(case when o.currency = 'USD' then o.paid_amount else o.paid_amount / nullif(o.fx_rate,0) end),0) as paid_usd
+        from orders o left join clients c on c.id = o.client_id
+        where o.status != 'cancelled' and o.deleted_at is null and o.type in ('normal','staff') and o.created_at >= ${fromIso} and o.created_at <= ${toIso}
+        group by o.client_id order by total_usd desc`,
+  );
+  const lines = tx.all<{ client_id: string | null; name_ar: string; name_en: string; qty: number }>(
+    sql`select o.client_id, l.name_ar, l.name_en, sum(l.qty) as qty from order_lines l join orders o on o.id = l.order_id
+        where o.status != 'cancelled' and o.deleted_at is null and o.type in ('normal','staff') and o.created_at >= ${fromIso} and o.created_at <= ${toIso}
+        group by o.client_id, l.product_id order by qty desc`,
+  );
+  const out = rows.map((r) => {
+    const paidUsd = round4(Math.min(r.paid_usd, r.total_usd));
+    return {
+      clientId: r.client_id,
+      name: r.name,
+      orders: r.orders,
+      items: r.items,
+      products: lines.filter((l) => l.client_id === r.client_id).map((l) => ({ nameAr: l.name_ar, nameEn: l.name_en, qty: l.qty })),
+      totalUsd: round4(r.total_usd),
+      paidUsd,
+      leftUsd: round4(r.total_usd - paidUsd),
+    };
+  });
+  const sum = (k: "orders" | "items" | "totalUsd" | "paidUsd" | "leftUsd") => round4(out.reduce((s, r) => s + r[k], 0));
+  return { from: fromIso, to: toIso, rate: currentRate(), rows: out, totals: { orders: sum("orders"), items: sum("items"), totalUsd: sum("totalUsd"), paidUsd: sum("paidUsd"), leftUsd: sum("leftUsd") } };
+}

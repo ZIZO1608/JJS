@@ -37,7 +37,7 @@ type Extra = "day" | "distribution" | "production" | "requests";
 type NavKey = Module | Extra;
 const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: string; en: string }> = {
   day: { module: "dashboard", to: "/day", ar: "يومي", en: "My day" },
-  distribution: { module: "orders", to: "/distribution", ar: "التوزيع", en: "Distribution" },
+  distribution: { module: "orders", action: "edit", to: "/distribution", ar: "التوزيع", en: "Distribution" },
   production: { module: "warehouse", to: "/production", ar: "الإنتاج", en: "Production" },
   // answering client requests is for whoever may edit orders (admin, manager)
   requests: { module: "orders", action: "edit", to: "/requests", ar: "طلبات الزبائن", en: "Client requests" },

@@ -10,6 +10,7 @@ import {
   employees,
   items,
   orders,
+  paymentMethods,
   productionRuns,
   recurringOrders,
   returnLines,
@@ -20,7 +21,8 @@ import {
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
 import { localDate } from "../lib/biz.js";
-import { h, notFound, parse } from "../lib/util.js";
+import { h, HttpError, notFound, parse } from "../lib/util.js";
+import { createOrder } from "../services/orders.js";
 import { cancelConsignment, clientAging, createProductionRun, createReturn, deliverConsignment, previewProduction, settleConsignment } from "../services/wholesale.js";
 
 /** Wholesale & distribution: returns, consignment, production runs, route sheets, batch tracing. */
@@ -34,21 +36,42 @@ const returnSchema = z.object({
   clientId: z.string().nullable().optional(),
   orderId: z.string().nullable().optional(),
   repId: z.string().nullable().optional(),
-  lines: z.array(z.object({ productId: z.string(), qty: lineQty, action: z.enum(["restock", "waste"]), expiresAt: z.string().nullable().optional() })).min(1).max(80),
+  // give = goes straight to another client (back to the fridge, then out on a new order for them)
+  lines: z.array(z.object({ productId: z.string(), qty: lineQty, action: z.enum(["restock", "waste", "give"]), expiresAt: z.string().nullable().optional() })).min(1).max(80),
   settlement: z.enum(["credit", "refund", "none"]),
   boxId: z.string().nullable().optional(),
   note: z.string().max(300).optional(),
+  giveTo: z.object({ clientId: z.string(), methodId: z.string().nullable().optional() }).nullable().optional(),
 });
 
 wholesaleRouter.post(
   "/returns",
-  requirePerm("orders", "create"),
+  requirePerm("orders", "edit"),
   h((req, res) => {
-    const body = parse(returnSchema, req.body);
+    const { giveTo, ...body } = parse(returnSchema, req.body);
+    const given = body.lines.filter((l) => l.action === "give");
+    if (given.length && !giveTo) throw new HttpError(400, "give_to_required", "Choose the client who gets the returned goods.");
+    const fromClient = body.clientId ?? (body.orderId ? (db.select({ c: orders.clientId }).from(orders).where(eq(orders.id, body.orderId)).get()?.c ?? null) : null);
+    if (given.length && giveTo!.clientId === fromClient) throw new HttpError(400, "give_to_same", "Choose a different client.");
     const out = db.transaction((tx) => {
-      const r = createReturn(tx, body, req.user!.id);
-      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "return", entityId: r.id, after: { number: r.number, total: r.total, currency: r.currency, settlement: body.settlement } });
-      return r;
+      const r = createReturn(tx, { ...body, lines: body.lines.map((l) => ({ ...l, action: l.action === "give" ? ("restock" as const) : l.action })) }, req.user!.id);
+      let givenOrder: { id: string; number: number } | null = null;
+      if (given.length) {
+        const target = tx.select().from(clients).where(and(eq(clients.id, giveTo!.clientId), isNull(clients.deletedAt))).get();
+        if (!target) throw new HttpError(400, "client_not_found", "Choose a client that exists.");
+        const credit = tx.select().from(paymentMethods).where(and(eq(paymentMethods.systemKey, "credit"), isNull(paymentMethods.deletedAt))).get();
+        const o = createOrder(
+          tx,
+          { clientId: target.id, type: "normal", fulfilment: "delivery", methodId: giveTo!.methodId ?? credit?.id ?? null, paidAmount: giveTo!.methodId ? null : 0, note: `From return R${r.number}`, lines: given.map((l) => ({ productId: l.productId, qty: l.qty, optionIds: [] })) },
+          req.user!.id,
+        );
+        givenOrder = { id: o.id, number: o.number };
+        tx.update(returns).set({ note: [body.note, `→ ${target.name} #${o.number}`].filter(Boolean).join(" · "), givenOrderId: o.id }).where(eq(returns.id, r.id)).run();
+        tx.update(returnLines).set({ action: "give" }).where(and(eq(returnLines.returnId, r.id), inArray(returnLines.productId, given.map((l) => l.productId)))).run();
+        writeAudit(tx, { userId: req.user!.id, action: "create", entity: "order", entityId: o.id, after: { number: o.number, fromReturn: r.number, clientId: target.id } });
+      }
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "return", entityId: r.id, after: { number: r.number, total: r.total, currency: r.currency, settlement: body.settlement, given: given.length } });
+      return { ...r, givenOrder };
     });
     res.status(201).json({ ...out, return: returnOf(out.id) });
   }),
@@ -267,7 +290,8 @@ wholesaleRouter.get(
 /* ---------- route sheet for a delivery rep ---------- */
 wholesaleRouter.get(
   "/route-sheet",
-  requirePerm("orders", "view"),
+  // the delivery side (route, map) is for managers; members only take orders
+  requirePerm("orders", "edit"),
   h((req, res) => {
     const q = parse(z.object({ date: z.string().regex(dateRe).optional(), repId: z.string().optional() }), req.query);
     const date = q.date ?? localDate();
@@ -294,12 +318,12 @@ wholesaleRouter.get(
       .innerJoin(clients, eq(consignments.clientId, clients.id))
       .where(and(eq(consignments.status, "open"), isNull(consignments.deletedAt), q.repId ? eq(consignments.repId, q.repId) : undefined))
       .all();
-    const stops = new Map<string, { clientId: string; name: string; phone: string; address: string; areaId: string | null; standing: unknown[]; orders: unknown[]; consignments: unknown[]; balanceUsd: number; overdueDays: number }>();
+    const stops = new Map<string, { clientId: string; name: string; phone: string; address: string; lat: number | null; lng: number | null; areaId: string | null; standing: unknown[]; orders: unknown[]; consignments: unknown[]; balanceUsd: number; overdueDays: number }>();
     const stop = (c: typeof clients.$inferSelect) => {
       let s = stops.get(c.id);
       if (!s) {
         const ag = clientAging(db, c.id, date);
-        s = { clientId: c.id, name: c.name, phone: c.phone, address: c.address, areaId: c.areaId, standing: [], orders: [], consignments: [], balanceUsd: ag.balanceUsd, overdueDays: ag.overdueDays };
+        s = { clientId: c.id, name: c.name, phone: c.phone, address: c.address, lat: c.lat, lng: c.lng, areaId: c.areaId, standing: [], orders: [], consignments: [], balanceUsd: ag.balanceUsd, overdueDays: ag.overdueDays };
         stops.set(c.id, s);
       }
       return s;

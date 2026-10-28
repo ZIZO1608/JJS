@@ -6,7 +6,7 @@ import { clients, expenses, lookups, orders, paymentMethods } from "../db/schema
 import { requirePerm } from "../lib/auth.js";
 import { localDate } from "../lib/biz.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { allMyMoney, cashFlow, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, unpaidBalances } from "../services/reports.js";
+import { allMyMoney, cashFlow, clientsSheet, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, unpaidBalances } from "../services/reports.js";
 import { boxMoves, cashBoxes, purchases, returns, suppliers } from "../db/schema.js";
 import { desc } from "drizzle-orm";
 import { supplierDue } from "../services/wholesale.js";
@@ -58,6 +58,18 @@ reportsRouter.get(
     const day = myDay(db, date);
     if (req.user!.permissions.has("costing:see_cost")) return res.json(day);
     res.json({ ...day, profit: null, net: null, used: { ...day.used, usd: null, rows: day.used.rows.map(({ usd: _u, ...x }) => x) }, hiddenCosts: true });
+  }),
+);
+
+/** Clients sheet for printing: who took what between two moments, and what they paid. */
+reportsRouter.get(
+  "/clients-sheet",
+  requirePerm("reports", "view"),
+  h((req, res) => {
+    const iso = z.string().datetime();
+    const q = parse(z.object({ from: iso, to: iso }), req.query);
+    if (q.from > q.to) throw new HttpError(400, "bad_range", "The start is after the end.");
+    res.json(clientsSheet(db, q.from, q.to));
   }),
 );
 

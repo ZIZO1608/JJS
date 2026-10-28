@@ -314,8 +314,12 @@ await step("manager (simple mode): can sell and close, cannot see costs or setti
   assert.equal(rep.costUsd, undefined);
   assert.equal((await manager("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] })).status, 201, "manager has orders:edit → may discount");
   assert.equal((await member("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] })).status, 403, "member may not discount");
-  assert.equal((await member("GET", "/clients")).status, 403);
-  assert.equal((await member("POST", "/orders/x/cancel")).status, 403);
+  // members are "orders only": they pick clients inside an order and may cancel orders, nothing else
+  assert.equal((await member("GET", "/clients")).status, 200, "members pick the client in the order screen");
+  assert.equal((await member("POST", "/orders/x/cancel")).status, 404, "members may cancel orders");
+  assert.equal((await member("GET", "/stock/batches")).status, 403, "no warehouse for members");
+  assert.equal((await member("POST", "/returns", { settlement: "none", lines: [{ productId: S.products.LEMON.id, qty: 1, action: "waste" }] })).status, 403, "no returns for members");
+  assert.equal((await member("GET", "/reports/range")).status, 403);
   const boxes = ok(await member("GET", "/money/boxes")).rows;
   assert.equal(boxes[0].balance, null, "members do not see box balances");
 });

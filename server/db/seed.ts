@@ -102,6 +102,19 @@ export function seed() {
       }
       setSetting("seed.version", 2, tx);
     }
+
+    // v3: members became "orders only" — reset the system member role to the new defaults once.
+    if (getSetting("seed.version") < 3) {
+      const member = tx.select().from(roles).where(eq(roles.systemKey, "member")).get();
+      if (member) {
+        tx.delete(permissions).where(eq(permissions.roleId, member.id)).run();
+        for (const p of DEFAULT_ROLE_PERMISSIONS.member) {
+          const [module, action] = p.split(":") as [string, string];
+          tx.insert(permissions).values({ id: newId(), roleId: member.id, module, action }).run();
+        }
+      }
+      setSetting("seed.version", 3, tx);
+    }
   });
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE `returns` ADD `given_order_id` text;

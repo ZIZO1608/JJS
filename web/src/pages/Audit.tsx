@@ -29,7 +29,7 @@ const ENTITY_LABEL: Record<string, { ar: string; en: string }> = {
   "lookup.expense_item": { ar: "قائمة بنود المصاريف", en: "Expense items list" },
   "lookup.expense_category": { ar: "قائمة فئات المصاريف", en: "Expense categories list" },
   "lookup.unit": { ar: "قائمة الوحدات", en: "Units list" },
-  "lookup.client_tag": { ar: "قائمة تصنيفات الزبائن", en: "Client tags list" },
+  "lookup.client_tag": { ar: "قائمة أنواع الزبائن", en: "Client types list" },
   "lookup.waste_reason": { ar: "قائمة أسباب الهدر", en: "Waste reasons list" },
   category: { ar: "فئة", en: "Category" },
   product: { ar: "منتج", en: "Product" },

@@ -60,9 +60,9 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
                 {tr("إلغاء الطلب", "Cancel order")}
               </button>
             )}
-            {o.status !== "cancelled" && o.type === "normal" && can("orders", "create") && (
+            {o.status !== "cancelled" && o.type === "normal" && can("orders", "edit") && (
               <button className="btn" disabled={busy} onClick={() => setReturning(true)}>
-                {tr("مرتجع", "Return")}
+                ↩ {tr("رجعت الطلبية", "Came back")}
               </button>
             )}
             <button className="btn" onClick={onClose}>

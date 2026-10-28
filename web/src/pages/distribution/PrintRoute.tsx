@@ -5,6 +5,7 @@ import { money, today, usd } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { useData } from "../../lib/useData";
 import type { Catalog, Lookup } from "../../lib/types";
+import { shortRoute } from "@shared/maps";
 import type { RouteSheet } from "./Distribution";
 
 /** A4 route sheet the rep carries: shops in order, what to deliver, what to collect, blanks for returns. */
@@ -65,7 +66,7 @@ export function PrintRouteSheet() {
           </tr>
         </thead>
         <tbody>
-          {sheet.data!.stops.map((x, i) => (
+          {(sheet.data!.stops.filter((x) => x.lat != null).length >= 2 ? shortRoute(sheet.data!.stops).ordered : sheet.data!.stops).map((x, i) => (
             <tr key={x.clientId} className="border-b border-gray-400 align-top">
               <td className="py-1.5 num">{i + 1}</td>
               <td className="py-1.5">

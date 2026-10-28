@@ -206,6 +206,58 @@ h3 {
   }
 }
 
+/* ---------- Maps (routes and shop locations) ---------- */
+.map-pin {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: rgb(var(--brand));
+  border: 3px solid #fff;
+  box-shadow: 0 4px 10px rgb(0 0 0 / 0.3);
+  animation: pin-drop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+}
+.map-pin span {
+  transform: rotate(45deg);
+  color: #fff;
+  font: 700 13px/1 "IBM Plex Sans", system-ui, sans-serif;
+}
+.map-pin-done {
+  background: rgb(var(--good));
+}
+.map-pin-pick {
+  background: rgb(var(--ink));
+}
+@keyframes pin-drop {
+  from {
+    opacity: 0;
+    transform: rotate(-45deg) translate(-14px, -14px);
+  }
+}
+.route-ants {
+  animation: route-ants 1.2s linear infinite;
+}
+@keyframes route-ants {
+  to {
+    stroke-dashoffset: -44;
+  }
+}
+.leaflet-container {
+  font: inherit;
+  z-index: 0;
+}
+
+/* ---------- An order comes back ---------- */
+.return-journey {
+  display: grid;
+  gap: 14px;
+}
+.journey-card {
+  animation: day-rise 0.45s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+
 /* ---------- My day ---------- */
 .day-box {
   animation: day-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
