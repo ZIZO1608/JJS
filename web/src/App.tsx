@@ -14,6 +14,7 @@ import { DashboardPage } from "./pages/Dashboard";
 import { ExpensesPage } from "./pages/Expenses";
 import { HomePage } from "./pages/Home";
 import { MenuPage } from "./pages/menu/Menu";
+import { MyDayPage } from "./pages/MyDay";
 import { NewOrderPage } from "./pages/orders/NewOrder";
 import { OrdersPage } from "./pages/orders/Orders";
 import { PeoplePage } from "./pages/People";
@@ -58,6 +59,7 @@ export function App() {
           <Route path="print/route" element={g("orders", <PrintRouteSheet />)} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
+            <Route path="day" element={g("dashboard", <MyDayPage />)} />
             <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
             <Route path="orders" element={g("orders", <OrdersPage />)} />
             <Route path="orders/new" element={g("orders", <NewOrderPage />)} />

@@ -6,7 +6,7 @@ import { clients, expenses, lookups, orders, paymentMethods } from "../db/schema
 import { requirePerm } from "../lib/auth.js";
 import { localDate } from "../lib/biz.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { cashFlow, dashboard, deliveryCost, fiveAnswers, monthsCompare, periodReport, productionVsSales, unpaidBalances } from "../services/reports.js";
+import { allMyMoney, cashFlow, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, unpaidBalances } from "../services/reports.js";
 import { boxMoves, cashBoxes, purchases, returns, suppliers } from "../db/schema.js";
 import { desc } from "drizzle-orm";
 import { supplierDue } from "../services/wholesale.js";
@@ -48,6 +48,28 @@ const rangeOf = (req: { query: Record<string, unknown> }) => {
   if (q.from > q.to) throw new HttpError(400, "bad_range", "The start date is after the end date.");
   return q;
 };
+
+/** "My day": five boxes — profit, net, made, used from the warehouse, cash boxes. Money figures need see_cost. */
+reportsRouter.get(
+  "/day",
+  requirePerm("dashboard", "view"),
+  h((req, res) => {
+    const date = parse(z.string().regex(/^\d{4}-\d{2}-\d{2}$/), req.query.date ?? localDate());
+    const day = myDay(db, date);
+    if (req.user!.permissions.has("costing:see_cost")) return res.json(day);
+    res.json({ ...day, profit: null, net: null, used: { ...day.used, usd: null, rows: day.used.rows.map(({ usd: _u, ...x }) => x) }, hiddenCosts: true });
+  }),
+);
+
+/** The cloud: all the money that is the owner's. Admin only. */
+reportsRouter.get(
+  "/my-money",
+  h((req, res) => {
+    if (!req.user) throw new HttpError(401, "not_logged_in", "Please log in.");
+    if (req.user.role.systemKey !== "admin") throw new HttpError(403, "forbidden", "Only the admin can see this.");
+    res.json(allMyMoney(db));
+  }),
+);
 
 /** "Your day in five answers" — also sent to the phone dashboard. */
 reportsRouter.get(

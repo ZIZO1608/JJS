@@ -1,6 +1,7 @@
 import type { Module } from "@shared/permissions";
 
-const P: Record<Module | "distribution" | "production" | "requests", string> = {
+const P: Record<Module | "distribution" | "production" | "requests" | "day", string> = {
+  day: "M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
   distribution: "M2 7h11v9H2zM13 10h4l3 3v3h-7zM6 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z",
   production: "M4 20h16M6 20V10l4 3V10l4 3V6h4v14",
   requests: "M3 13h5l1.5 3h5L16 13h5M5 5h14l2 8v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z",
@@ -23,7 +24,7 @@ const P: Record<Module | "distribution" | "production" | "requests", string> = {
   audit: "M12 8v4l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",
 };
 
-export function Icon({ name, className = "h-[18px] w-[18px]" }: { name: Module | "distribution" | "production" | "requests"; className?: string }) {
+export function Icon({ name, className = "h-[18px] w-[18px]" }: { name: Module | "distribution" | "production" | "requests" | "day"; className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
       <path d={P[name]} />

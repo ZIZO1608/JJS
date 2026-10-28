@@ -206,6 +206,28 @@ h3 {
   }
 }
 
+/* ---------- My day ---------- */
+.day-box {
+  animation: day-rise 0.4s cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+@keyframes day-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.cloud-float {
+  animation: cloud-float 3s ease-in-out infinite;
+}
+.cloud-btn:hover svg {
+  animation: cloud-float 1.6s ease-in-out infinite;
+}
+@keyframes cloud-float {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

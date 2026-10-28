@@ -499,3 +499,78 @@ export function dashboard(tx: Q) {
     stockValueUsd: round4(tx.all<{ v: number }>(sql`select coalesce(sum(case when q > 0 then q * avg_cost_usd else 0 end),0) as v from (select i.avg_cost_usd, (select coalesce(sum(qty),0) from stock_moves m where m.item_id = i.id and m.deleted_at is null) as q from items i where i.deleted_at is null)`)[0]?.v ?? 0),
   };
 }
+
+/**
+ * "My day" — the five boxes: profit, net, what was made, what came out of the warehouse, and the cash boxes.
+ * Net here is profit minus the day's expenses and waste (salaries and depreciation are monthly — see reports).
+ */
+export function myDay(tx: Q, date: string) {
+  const r = periodReport(tx, date, date);
+  const fromStock = productionVsSales(tx, date, date)
+    .map((x) => ({ productId: x.productId, nameAr: x.nameAr, nameEn: x.nameEn, made: round4(x.made + x.madeFresh), sold: round4(x.soldTotal) }));
+  // Products never kept in the fridge have no stock moves: everything sold was made fresh.
+  for (const p of r.byProduct) if (!fromStock.some((x) => x.productId === p.productId)) fromStock.push({ productId: p.productId, nameAr: p.nameAr, nameEn: p.nameEn, made: round4(p.qty), sold: round4(p.qty) });
+  const made = fromStock.filter((x) => x.made > 0 || x.sold > 0).sort((a, b) => b.made - a.made);
+  const used = tx
+    .all<{ item_id: string; name_ar: string; name_en: string; unit_code: string; qty: number; usd: number }>(
+      sql`select m.item_id, i.name_ar, i.name_en, i.unit_code, -sum(m.qty) as qty, -sum(m.qty * m.unit_cost_usd) as usd from stock_moves m join items i on i.id = m.item_id
+          where m.type = 'use' and i.kind != 'product' and m.deleted_at is null and m.business_date = ${date} group by m.item_id order by usd desc`,
+    )
+    .map((x) => ({ itemId: x.item_id, nameAr: x.name_ar, nameEn: x.name_en, unitCode: x.unit_code, qty: round4(x.qty), usd: round4(x.usd) }));
+  const rate = currentRate();
+  const boxes = tx
+    .select()
+    .from(cashBoxes)
+    .where(and(isNull(cashBoxes.deletedAt), sql`${cashBoxes.systemKey} in ('main_cash', 'sham')`))
+    .all()
+    .map((b) => {
+      const d = tx.get<{ inn: number; out: number; end: number }>(
+        sql`select coalesce(sum(case when business_date = ${date} and amount > 0 then amount end),0) as inn,
+                   coalesce(-sum(case when business_date = ${date} and amount < 0 then amount end),0) as out,
+                   coalesce(sum(amount),0) as end
+            from box_moves where box_id = ${b.id} and deleted_at is null and business_date <= ${date}`,
+      )!;
+      const toUsd = (v: number) => (b.currency === "USD" ? v : rate ? v / rate : 0);
+      return { id: b.id, systemKey: b.systemKey, nameAr: b.nameAr, nameEn: b.nameEn, currency: b.currency, in: round4(d.inn), out: round4(d.out), balance: round4(d.end), balanceUsd: round4(toUsd(d.end)) };
+    })
+    .sort((a) => (a.systemKey === "main_cash" ? -1 : 1));
+  return {
+    date,
+    rate,
+    profit: { usd: r.grossProfitUsd, salesUsd: r.netSalesUsd, costUsd: r.costUsd, marginPct: r.marginPct },
+    net: { usd: round4(r.grossProfitUsd - r.expensesUsd - r.wasteUsd), expensesUsd: r.expensesUsd, wasteUsd: r.wasteUsd },
+    made: { total: round4(made.reduce((s, x) => s + x.made, 0)), sold: r.items, orders: r.orders, rows: made },
+    used: { usd: round4(used.reduce((s, x) => s + x.usd, 0)), count: used.length, rows: used },
+    boxes: { totalUsd: round4(boxes.reduce((s, b) => s + b.balanceUsd, 0)), rows: boxes },
+  };
+}
+
+/** Everything that is the owner's, right now: money in every box, what clients owe, goods at shops — minus what the shop owes. */
+export function allMyMoney(tx: Q) {
+  const rate = currentRate();
+  const boxes = tx
+    .select()
+    .from(cashBoxes)
+    .where(and(isNull(cashBoxes.deletedAt), eq(cashBoxes.active, true)))
+    .all()
+    .map((b) => {
+      const balance = round4(boxBalance(tx, b.id));
+      return { id: b.id, kind: b.kind, nameAr: b.nameAr, nameEn: b.nameEn, currency: b.currency, balance, usd: round4(b.currency === "USD" ? balance : rate ? balance / rate : 0) };
+    })
+    .filter((b) => Math.abs(b.balance) > 0.009);
+  const cashUsd = round4(boxes.reduce((s, b) => s + b.usd, 0));
+  const clientsOweUsd = round4(-unpaidBalances(tx).reduce((s, c) => s + c.balanceUsd, 0));
+  const goodsAtShopsUsd = round4(consignmentOpenValueUsd(tx));
+  const weOweUsd = payables(tx).totalUsd;
+  const dueExpensesUsd = round4(tx.get<{ v: number }>(sql`select coalesce(sum(amount_usd),0) as v from expenses where deleted_at is null and status = 'due'`)?.v ?? 0);
+  return {
+    rate,
+    boxes,
+    cashUsd,
+    clientsOweUsd,
+    goodsAtShopsUsd,
+    weOweUsd,
+    dueExpensesUsd,
+    totalUsd: round4(cashUsd + clientsOweUsd + goodsAtShopsUsd - weOweUsd - dueExpensesUsd),
+  };
+}

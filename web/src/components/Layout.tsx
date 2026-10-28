@@ -8,6 +8,7 @@ import { useToast } from "../lib/toast";
 import { Icon } from "./Icon";
 import { InboxProvider, NotificationBell, useInbox } from "./Inbox";
 import { InstallButton } from "./InstallButton";
+import { MoneyCloud } from "./MoneyCloud";
 import { Field, Modal, TextInput } from "./ui";
 
 export const pathFor = (m: Module) =>
@@ -32,9 +33,10 @@ export const pathFor = (m: Module) =>
   } as Record<Module, string>)[m];
 
 /** Screens that are not a permission module of their own: they follow another module's permission. */
-type Extra = "distribution" | "production" | "requests";
+type Extra = "day" | "distribution" | "production" | "requests";
 type NavKey = Module | Extra;
 const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: string; en: string }> = {
+  day: { module: "dashboard", to: "/day", ar: "يومي", en: "My day" },
   distribution: { module: "orders", to: "/distribution", ar: "التوزيع", en: "Distribution" },
   production: { module: "warehouse", to: "/production", ar: "الإنتاج", en: "Production" },
   // answering client requests is for whoever may edit orders (admin, manager)
@@ -43,13 +45,13 @@ const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: st
 const isExtra = (k: NavKey): k is Extra => k in EXTRA;
 
 const FULL_GROUPS: NavKey[][] = [
-  ["home", "dashboard"],
+  ["home", "day", "dashboard"],
   ["orders", "requests", "distribution", "daily_close", "clients"],
   ["production", "menu", "warehouse", "purchasing", "costing"],
   ["expenses", "assets", "people", "reports"],
   ["users", "roles", "audit", "settings"],
 ];
-const SIMPLE_ITEMS: NavKey[] = ["home", "orders", "requests", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
+const SIMPLE_ITEMS: NavKey[] = ["home", "day", "orders", "requests", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
 
 function RateChip() {
   const { t } = useI18n();
@@ -148,6 +150,7 @@ function LayoutInner() {
         <div className="ms-auto flex items-center gap-3">
           {!simple && <RateChip />}
           <InstallButton compact className="px-2.5 py-1.5 text-sm sm:px-3" />
+          {me.role.systemKey === "admin" && <MoneyCloud />}
           <NotificationBell />
           <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group" aria-label={t("auth.language")}>
             {(["ar", "en"] as const).map((l) => (
