@@ -43,6 +43,13 @@
       "when": 1793218256784,
       "tag": "0005_return_give",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793264752876,
+      "tag": "0006_speed_indexes",
+      "breakpoints": true
     }
   ]
 }

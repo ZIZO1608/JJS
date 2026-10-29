@@ -550,7 +550,13 @@ export const orders = sqliteTable(
     /** staff = typed in the shop; portal = a client's request that staff accepted. */
     source: text("source", { enum: ["staff", "portal"] }).notNull().default("staff"),
   },
-  (t) => [uniqueIndex("orders_number_uq").on(t.number), index("orders_date_idx").on(t.businessDate), index("orders_client_idx").on(t.clientId, t.businessDate)],
+  (t) => [
+    uniqueIndex("orders_number_uq").on(t.number),
+    index("orders_date_idx").on(t.businessDate),
+    index("orders_client_idx").on(t.clientId, t.businessDate),
+    // the clients sheet picks orders by the exact time they were taken
+    index("orders_created_idx").on(t.createdAt),
+  ],
 );
 
 export const orderLines = sqliteTable(
@@ -828,7 +834,7 @@ export const returns = sqliteTable(
     note: text("note").notNull().default(""),
     userId: text("user_id").references(() => users.id),
   },
-  (t) => [uniqueIndex("returns_number_uq").on(t.number), index("returns_date_idx").on(t.businessDate)],
+  (t) => [uniqueIndex("returns_number_uq").on(t.number), index("returns_date_idx").on(t.businessDate), index("returns_client_idx").on(t.clientId, t.businessDate)],
 );
 
 export const returnLines = sqliteTable(

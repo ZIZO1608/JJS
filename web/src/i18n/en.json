@@ -210,7 +210,8 @@
  },
  "errors": {
   "generic": "Something went wrong. Try again.",
-  "network": "Cannot reach the local server. Is the app running?",
+  "network": "Cannot reach the server. Check the internet and try again.",
+  "timeout": "The internet is slow and the request took too long. Try again.",
   "not_logged_in": "Please log in again.",
   "forbidden": "Your role is not allowed to do this.",
   "wrong_credentials": "The username or password is wrong.",

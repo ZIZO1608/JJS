@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { WEB_DIST_DIR } from "./env.js";
@@ -36,6 +37,15 @@ export function createApp() {
   app.disable("x-powered-by");
   // Online, Coolify's proxy ends HTTPS in front of us; trust its X-Forwarded-* headers.
   if (process.env.JJS_TRUST_PROXY === "1") app.set("trust proxy", 1);
+  // Slow connections: gzip every answer (JSON shrinks ~10×), and serve the built files before any session lookup.
+  app.use(compression({ threshold: 1024 }));
+  const hasWeb = fs.existsSync(path.join(WEB_DIST_DIR, "index.html"));
+  if (hasWeb) {
+    // file names carry a content hash, so the browser may keep them for a year
+    app.use("/assets", express.static(path.join(WEB_DIST_DIR, "assets"), { immutable: true, maxAge: "365d" }));
+    // a file from an older version: a plain 404 (the page then reloads itself), never the app page
+    app.use("/assets", (_req, res) => res.status(404).end());
+  }
   app.use(express.json({ limit: "6mb" }));
   app.use(cookieParser());
   app.use(sessionMiddleware);
@@ -73,9 +83,16 @@ export function createApp() {
   app.use("/api", api);
 
   // Built web app (production / desktop). In development Vite serves it and proxies /api here.
-  if (fs.existsSync(path.join(WEB_DIST_DIR, "index.html"))) {
-    app.use(express.static(WEB_DIST_DIR, { index: false, maxAge: "1h" }));
-    app.get("*", (_req, res) => res.sendFile(path.join(WEB_DIST_DIR, "index.html")));
+  if (hasWeb) {
+    app.use(
+      express.static(WEB_DIST_DIR, {
+        index: false,
+        maxAge: "1h",
+        // the page and the service worker must always be checked, or an old version sticks
+        setHeaders: (res, file) => /(index\.html|sw\.js|\.webmanifest)$/.test(file) && res.setHeader("Cache-Control", "no-cache"),
+      }),
+    );
+    app.get("*", (_req, res) => res.setHeader("Cache-Control", "no-cache").sendFile(path.join(WEB_DIST_DIR, "index.html")));
   }
 
   app.use(errorHandler);

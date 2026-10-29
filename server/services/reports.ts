@@ -460,7 +460,8 @@ export function deliveryCost(tx: Q, from: string, to: string) {
   return { rows: rows.map((r) => ({ employeeId: r.employee_id, name: r.name, category: r.cat, usd: round4(r.usd), n: r.n })), totalUsd, deliveries: deliveries?.n ?? 0, perDeliveryUsd: deliveries?.n ? round4(totalUsd / deliveries.n) : null, feesCollectedUsd: round4(deliveries?.fees ?? 0) };
 }
 
-export function dashboard(tx: Q) {
+/** `five` (the phone dashboard's "day in five answers") repeats the day's report; only the cloud sync asks for it. */
+export function dashboard(tx: Q, opts: { five?: boolean } = {}) {
   const today = localDate();
   const week = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6)).map((d) => {
     const r = tx.select({ usd: sql<number>`coalesce(sum(${orders.totalUsd}),0)`, n: count() }).from(orders).where(liveOrders(d, d)).get()!;
@@ -495,7 +496,7 @@ export function dashboard(tx: Q) {
     alerts: alerts(tx),
     boxes: boxes.map((b) => ({ ...b, todayIn: todayMoves.find((m) => m.boxId === b.id)?.sum ?? 0 })),
     unpaid: unpaidBalances(tx).slice(0, 8),
-    five: fiveAnswers(tx, today),
+    ...(opts.five ? { five: fiveAnswers(tx, today) } : {}),
     stockValueUsd: round4(tx.all<{ v: number }>(sql`select coalesce(sum(case when q > 0 then q * avg_cost_usd else 0 end),0) as v from (select i.avg_cost_usd, (select coalesce(sum(qty),0) from stock_moves m where m.item_id = i.id and m.deleted_at is null) as q from items i where i.deleted_at is null)`)[0]?.v ?? 0),
   };
 }

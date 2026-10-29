@@ -1,34 +1,69 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import type { Module } from "@shared/permissions";
 import { Layout } from "./components/Layout";
 import { Spinner } from "./components/ui";
-import { AssetsPage } from "./pages/Assets";
-import { AuditPage } from "./pages/Audit";
 import { LoginPage, SetupPage } from "./pages/Auth";
-import { ClientDetailPage } from "./pages/clients/ClientDetail";
-import { ClientsPage } from "./pages/clients/Clients";
-import { CostingPage } from "./pages/Costing";
-import { DailyClosePage } from "./pages/DailyClose";
-import { DashboardPage } from "./pages/Dashboard";
-import { ExpensesPage } from "./pages/Expenses";
 import { HomePage } from "./pages/Home";
-import { MenuPage } from "./pages/menu/Menu";
-import { MyDayPage } from "./pages/MyDay";
-import { NewOrderPage } from "./pages/orders/NewOrder";
-import { OrdersPage } from "./pages/orders/Orders";
-import { PeoplePage } from "./pages/People";
-import { PrintClientReport, PrintClientsSheet, PrintLabels, PrintReceipt, PrintReport, PrintStatement } from "./pages/print/Print";
-import { PurchasingPage } from "./pages/Purchasing";
-import { ReportsPage } from "./pages/Reports";
-import { RolesPage } from "./pages/Roles";
-import { SettingsPage } from "./pages/settings/Settings";
-import { UsersPage } from "./pages/Users";
-import { WarehousePage } from "./pages/warehouse/Warehouse";
-import { DistributionPage } from "./pages/distribution/Distribution";
-import { PrintRouteSheet } from "./pages/distribution/PrintRoute";
-import { ProductionPage } from "./pages/production/Production";
-import { RequestsPage } from "./pages/requests/Requests";
+
+// Each screen is its own small file, fetched the first time it is opened (fast start on slow internet).
+const loadAssets = () => import("./pages/Assets");
+const AssetsPage = lazy(() => loadAssets().then((m) => ({ default: m.AssetsPage })));
+const loadAudit = () => import("./pages/Audit");
+const AuditPage = lazy(() => loadAudit().then((m) => ({ default: m.AuditPage })));
+const loadClientdetail = () => import("./pages/clients/ClientDetail");
+const ClientDetailPage = lazy(() => loadClientdetail().then((m) => ({ default: m.ClientDetailPage })));
+const loadClients = () => import("./pages/clients/Clients");
+const ClientsPage = lazy(() => loadClients().then((m) => ({ default: m.ClientsPage })));
+const loadCosting = () => import("./pages/Costing");
+const CostingPage = lazy(() => loadCosting().then((m) => ({ default: m.CostingPage })));
+const loadDailyclose = () => import("./pages/DailyClose");
+const DailyClosePage = lazy(() => loadDailyclose().then((m) => ({ default: m.DailyClosePage })));
+const loadDashboard = () => import("./pages/Dashboard");
+const DashboardPage = lazy(() => loadDashboard().then((m) => ({ default: m.DashboardPage })));
+const loadExpenses = () => import("./pages/Expenses");
+const ExpensesPage = lazy(() => loadExpenses().then((m) => ({ default: m.ExpensesPage })));
+const loadMenu = () => import("./pages/menu/Menu");
+const MenuPage = lazy(() => loadMenu().then((m) => ({ default: m.MenuPage })));
+const loadMyday = () => import("./pages/MyDay");
+const MyDayPage = lazy(() => loadMyday().then((m) => ({ default: m.MyDayPage })));
+const loadNeworder = () => import("./pages/orders/NewOrder");
+const NewOrderPage = lazy(() => loadNeworder().then((m) => ({ default: m.NewOrderPage })));
+const loadOrders = () => import("./pages/orders/Orders");
+const OrdersPage = lazy(() => loadOrders().then((m) => ({ default: m.OrdersPage })));
+const loadPeople = () => import("./pages/People");
+const PeoplePage = lazy(() => loadPeople().then((m) => ({ default: m.PeoplePage })));
+const loadPrint = () => import("./pages/print/Print");
+const PrintClientReport = lazy(() => loadPrint().then((m) => ({ default: m.PrintClientReport })));
+const PrintClientsSheet = lazy(() => loadPrint().then((m) => ({ default: m.PrintClientsSheet })));
+const PrintLabels = lazy(() => loadPrint().then((m) => ({ default: m.PrintLabels })));
+const PrintReceipt = lazy(() => loadPrint().then((m) => ({ default: m.PrintReceipt })));
+const PrintReport = lazy(() => loadPrint().then((m) => ({ default: m.PrintReport })));
+const PrintStatement = lazy(() => loadPrint().then((m) => ({ default: m.PrintStatement })));
+const loadPurchasing = () => import("./pages/Purchasing");
+const PurchasingPage = lazy(() => loadPurchasing().then((m) => ({ default: m.PurchasingPage })));
+const loadReports = () => import("./pages/Reports");
+const ReportsPage = lazy(() => loadReports().then((m) => ({ default: m.ReportsPage })));
+const loadRoles = () => import("./pages/Roles");
+const RolesPage = lazy(() => loadRoles().then((m) => ({ default: m.RolesPage })));
+const loadSettings = () => import("./pages/settings/Settings");
+const SettingsPage = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPage })));
+const loadUsers = () => import("./pages/Users");
+const UsersPage = lazy(() => loadUsers().then((m) => ({ default: m.UsersPage })));
+const loadWarehouse = () => import("./pages/warehouse/Warehouse");
+const WarehousePage = lazy(() => loadWarehouse().then((m) => ({ default: m.WarehousePage })));
+const loadDistribution = () => import("./pages/distribution/Distribution");
+const DistributionPage = lazy(() => loadDistribution().then((m) => ({ default: m.DistributionPage })));
+const loadPrintroute = () => import("./pages/distribution/PrintRoute");
+const PrintRouteSheet = lazy(() => loadPrintroute().then((m) => ({ default: m.PrintRouteSheet })));
+const loadProduction = () => import("./pages/production/Production");
+const ProductionPage = lazy(() => loadProduction().then((m) => ({ default: m.ProductionPage })));
+const loadRequests = () => import("./pages/requests/Requests");
+const RequestsPage = lazy(() => loadRequests().then((m) => ({ default: m.RequestsPage })));
+
+/** The screens people open most, fetched quietly after the first screen is up. */
+const PREFETCH = [loadOrders, loadNeworder, loadMyday, loadClients, loadClientdetail, loadDailyclose];
+
 import { AppSettingsProvider } from "./lib/appSettings";
 import { useAuth } from "./lib/auth";
 import { useI18n } from "./lib/i18n";
@@ -44,13 +79,19 @@ const g = (m: Module, el: ReactNode) => <Guard module={m}>{el}</Guard>;
 
 export function App() {
   const { status } = useAuth();
+  useEffect(() => {
+    if (status !== "ready") return;
+    const t = setTimeout(() => PREFETCH.forEach((load) => void load().catch(() => undefined)), 2500);
+    return () => clearTimeout(t);
+  }, [status]);
   if (status === "loading") return <Spinner />;
   if (status === "setup") return <SetupPage />;
   if (status === "login") return <LoginPage />;
   return (
     <AppSettingsProvider>
       <BrowserRouter>
-        <Routes>
+        <Suspense fallback={<Spinner />}>
+          <Routes>
           {/* print views: no menus, sized for the printer */}
           <Route path="print/receipt/:id" element={g("orders", <PrintReceipt />)} />
           <Route path="print/labels" element={g("warehouse", <PrintLabels />)} />
@@ -85,7 +126,8 @@ export function App() {
             <Route path="settings/*" element={g("settings", <SettingsPage />)} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
-        </Routes>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AppSettingsProvider>
   );

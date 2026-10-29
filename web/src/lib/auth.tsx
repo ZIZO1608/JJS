@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { perm, usesSimpleMode, type Action, type Module } from "@shared/permissions";
 import { ApiError, get, post, put } from "./api";
+import { clearDataCache } from "./useData";
 import { useI18n, type Lang } from "./i18n";
 
 export interface Me {
@@ -60,7 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const r = await get<{ user: Me }>("/auth/me");
       accept(r.user);
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setStatus("login");
+      // no line to the server (weak internet): keep the spinner and try again, don't throw the user out to login
+      if (e instanceof ApiError && e.status === 0) setTimeout(() => void boot(), 4000);
       else setStatus("login");
     }
   }, [accept]);
@@ -68,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void boot();
     const onOut = () => {
+      clearDataCache();
       setMe(null);
       setStatus("login");
     };
@@ -83,13 +86,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       business,
       can: (m, a) => set.has(perm(m, a)),
       simple: me ? usesSimpleMode(me.permissions) : false,
-      login: async (username, password) => accept((await post<{ user: Me }>("/auth/login", { username, password })).user, true),
+      login: async (username, password) => {
+        clearDataCache();
+        accept((await post<{ user: Me }>("/auth/login", { username, password })).user, true);
+      },
       setup: async (body) => {
         accept((await post<{ user: Me }>("/auth/setup", body)).user, true);
         await boot();
       },
       logout: async () => {
         await post("/auth/logout").catch(() => undefined);
+        clearDataCache();
         setMe(null);
         setStatus("login");
       },

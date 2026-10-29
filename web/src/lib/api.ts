@@ -18,17 +18,38 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
-  let res: Response;
+/** How long one request may take before we give up (slow connections). Uploads and backups get longer. */
+const TIMEOUT_MS = 25_000;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function send(method: string, path: string, body: unknown, timeoutMs: number) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    res = await fetch(`/api${path}`, {
+    return await fetch(`/api${path}`, {
       method,
       credentials: "same-origin",
       headers: body === undefined ? undefined : { "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctrl.signal,
     });
   } catch {
-    throw new ApiError(0, "network", "Cannot reach the local server.");
+    throw ctrl.signal.aborted ? new ApiError(0, "timeout", "The request took too long.") : new ApiError(0, "network", "Cannot reach the server.");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function api<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const timeoutMs = body !== undefined && JSON.stringify(body).length > 200_000 ? 120_000 : TIMEOUT_MS;
+  let res: Response;
+  try {
+    res = await send(method, path, body, timeoutMs);
+  } catch (e) {
+    // A read that failed on a shaky line is safe to try once more; a write is not (it may have gone through).
+    if (method !== "GET") throw e;
+    await sleep(1200);
+    res = await send(method, path, body, timeoutMs);
   }
   const json = (await res.json().catch(() => ({}))) as { error?: string; message?: string; issues?: ApiError["issues"] };
   if (!res.ok) {

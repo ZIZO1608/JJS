@@ -55,13 +55,14 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   }, [pick, toast]);
 
   useEffect(() => {
+    // Only while the app is on screen: a hidden tab or a phone in a pocket costs the server nothing.
     void refresh();
-    const id = setInterval(() => void refresh(), 15_000);
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
+    const id = setInterval(() => document.visibilityState === "visible" && void refresh(), 30_000);
+    const onShow = () => document.visibilityState === "visible" && void refresh();
+    document.addEventListener("visibilitychange", onShow);
     return () => {
       clearInterval(id);
-      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onShow);
     };
   }, [refresh]);
 

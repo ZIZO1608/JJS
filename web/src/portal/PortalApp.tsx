@@ -88,14 +88,16 @@ function useNotificationWatch() {
       }
     };
     void tick();
-    const id = setInterval(tick, 20_000);
+    // only while the app is on screen
+    const id = setInterval(() => document.visibilityState === "visible" && void tick(), 30_000);
     const onFocus = () => void tick();
-    window.addEventListener("focus", onFocus);
+    const onShow = () => document.visibilityState === "visible" && void tick();
+    document.addEventListener("visibilitychange", onShow);
     window.addEventListener("portal:notifications-read", onFocus);
     return () => {
       alive = false;
       clearInterval(id);
-      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onShow);
       window.removeEventListener("portal:notifications-read", onFocus);
     };
   }, [pick, toast]);

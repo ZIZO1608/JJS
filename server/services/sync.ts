@@ -84,7 +84,7 @@ export async function syncNow(): Promise<{ pushed: number; skipped?: string }> {
       }
     }
     // the phone dashboard reads one JSON row per day
-    const snap = dashboard(db);
+    const snap = dashboard(db, { five: true });
     await upsert(cfg.supabaseUrl, cfg.serviceKey, "daily_snapshots", [{ date: localDate(), data: snap, updated_at: nowIso() }]);
     setSetting("sync.status", { lastRunAt: nowIso(), lastOkAt: nowIso(), lastError: null, pushed: status.pushed + pushed });
     return { pushed };

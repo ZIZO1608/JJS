@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { get, post, put } from "../lib/api";
+import { clearDataCache } from "../lib/useData";
 import { useI18n, type Lang } from "../lib/i18n";
 
 export interface PortalClient {
@@ -54,6 +55,7 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
       .then((r) => accept(r.client))
       .catch(() => setStatus("login"));
     const onOut = () => {
+      clearDataCache();
       setClient(null);
       setStatus("login");
     };
@@ -67,11 +69,13 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
       client,
       business,
       login: async (username, password) => {
+        clearDataCache();
         accept((await post<{ client: PortalClient }>("/portal/login", { username, password })).client);
         window.history.replaceState(null, "", "/portal");
       },
       logout: async () => {
         await post("/portal/logout").catch(() => undefined);
+        clearDataCache();
         setClient(null);
         setStatus("login");
       },
