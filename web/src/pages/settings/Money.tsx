@@ -29,6 +29,7 @@ const MOVE_LABEL: Record<string, { ar: string; en: string }> = {
   transfer: { ar: "تحويل", en: "Transfer" },
   handover: { ar: "تسليم مندوب", en: "Rep handover" },
   count_adjust: { ar: "فرق جرد", en: "Count difference" },
+  deposit: { ar: "إضافة نقد", en: "Cash added" },
   salary: { ar: "رواتب", en: "Salaries" },
   advance: { ar: "سلفة", en: "Advance" },
   opening: { ar: "رصيد افتتاحي", en: "Opening" },
@@ -222,6 +223,26 @@ function OpeningDialog({ box, onClose, onSaved }: { box: CashBox; onClose: () =>
   );
 }
 
+function DepositDialog({ box, onClose, onSaved }: { box: CashBox; onClose: () => void; onSaved: () => void }) {
+  const { tr, pick } = useI18n();
+  const { busy, run } = useSaver();
+  const [f, setF] = useState({ amount: "", note: "" });
+  const save = async () => {
+    if (await run(() => post("/money/deposit", { boxId: box.id, amount: num(f.amount), note: f.note }))) onSaved();
+  };
+  return (
+    <ActionDialog title={tr(`إضافة نقد: ${pick(box)}`, `Add cash: ${pick(box)}`)} onClose={onClose} onSave={save} busy={busy} disabled={!(num(f.amount) > 0)}>
+      <p className="text-sm text-muted">{tr("مصاري انحطت بالصندوق وما إجت من بيع، مثلاً صاحب المحل حط مبلغ ليدفع لمورد.", "Money put in the box that did not come from a sale, e.g. the owner adds cash to pay a supplier.")}</p>
+      <Field label={`${tr("المبلغ", "Amount")} (${box.currency})`} htmlFor="dp-a">
+        <NumInput id="dp-a" value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />
+      </Field>
+      <Field label={tr("ملاحظة", "Note")} htmlFor="dp-n">
+        <TextInput id="dp-n" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+      </Field>
+    </ActionDialog>
+  );
+}
+
 interface Withdrawal {
   id: string;
   amount: number;
@@ -243,6 +264,7 @@ export function MoneyTab() {
   const [methodDlg, setMethodDlg] = useState<PaymentMethod | "new" | null>(null);
   const [moves, setMoves] = useState<CashBox | null>(null);
   const [opening, setOpening] = useState<CashBox | null>(null);
+  const [deposit, setDeposit] = useState<CashBox | null>(null);
   const [transfer, setTransfer] = useState(false);
   const [withdraw, setWithdraw] = useState(false);
   const [delBox, setDelBox] = useState<CashBox | null>(null);
@@ -300,6 +322,11 @@ export function MoneyTab() {
                           <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setMoves(b)}>
                             {tr("الحركات", "Moves")}
                           </button>
+                          {can("settings", "edit") && (
+                            <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setDeposit(b)}>
+                              {tr("+ نقد", "+ Cash")}
+                            </button>
+                          )}
                           {can("settings", "edit") && !(b as CashBox & { hasOpening?: boolean }).hasOpening && (
                             <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setOpening(b)}>
                               {tr("افتتاحي", "Opening")}
@@ -374,6 +401,7 @@ export function MoneyTab() {
       {methodDlg && <MethodDialog m={methodDlg === "new" ? null : methodDlg} boxes={activeBoxes} onClose={() => setMethodDlg(null)} onSaved={() => (setMethodDlg(null), reload())} />}
       {moves && <MovesDialog box={moves} onClose={() => setMoves(null)} />}
       {opening && <OpeningDialog box={opening} onClose={() => setOpening(null)} onSaved={() => (setOpening(null), reload())} />}
+      {deposit && <DepositDialog box={deposit} onClose={() => setDeposit(null)} onSaved={() => (setDeposit(null), reload())} />}
       {transfer && <TransferDialog boxes={activeBoxes} onClose={() => setTransfer(false)} onSaved={() => (setTransfer(false), reload())} />}
       {withdraw && <WithdrawDialog onClose={() => setWithdraw(false)} onDone={() => (setWithdraw(false), reload())} />}
       {delBox && <DeleteConfirm name={pick(delBox)} path={`/money/boxes/${delBox.id}`} onClose={() => setDelBox(null)} onDone={reload} />}

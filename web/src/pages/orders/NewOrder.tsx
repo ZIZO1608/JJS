@@ -795,7 +795,7 @@ export function NewOrderPage() {
 
       {/* ---------- step 2: items ---------- */}
       {step === 2 && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+        <div className={`grid gap-4 lg:grid-cols-[1fr_22rem] ${cart.length ? "pb-20 lg:pb-0" : ""}`}>
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap gap-2">
               <Choice big={big} active={cat === "all"} onClick={() => setCat("all")}>
@@ -820,8 +820,8 @@ export function NewOrderPage() {
                 ref={scanRef}
                 className="input"
                 id="scan"
-                dir="ltr"
-                placeholder={tr("امسح الباركود أو اكتب كود المنتج ثم Enter", "Scan a barcode or type a product code, then Enter")}
+                dir={scan ? "ltr" : undefined}
+                placeholder={tr("امسح الباركود أو اكتب الكود", "Scan a barcode or type a code")}
                 value={scan}
                 onChange={(e) => setScan(e.target.value)}
               />
@@ -841,7 +841,7 @@ export function NewOrderPage() {
                         className={`relative flex flex-col items-start gap-1 rounded-xl border bg-surface p-3 text-start transition hover:border-ink active:scale-[.98] ${big ? "min-h-[110px]" : "min-h-[88px]"} ${inCart ? "border-ink" : "border-line"}`}
                       >
                         {p.photo && <img src={p.photo} alt="" className="mb-1 h-14 w-full rounded-lg object-cover" />}
-                        <span className={`font-semibold leading-tight ${big ? "text-lg" : ""}`}>{pick(p)}</span>
+                        <span className={`font-semibold leading-tight ${big ? "text-lg" : ""} ${p.photo ? "" : "pe-8"}`}>{pick(p)}</span>
                         <span className="num ltr text-sm text-muted">{money(p.price, p.currency, lang)}</span>
                         {groupsFor(p).length > 0 && <span className="text-xs text-faint">{tr("+ إضافات", "+ add-ons")}</span>}
                         {inCart > 0 && (
@@ -862,6 +862,20 @@ export function NewOrderPage() {
               </button>
             </div>
           </div>
+          {/* phones: the total and the way forward stay in view while scrolling a long menu */}
+          {cart.length > 0 && (
+            <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t border-line bg-surface p-3 lg:hidden">
+              <div className="min-w-0 leading-tight">
+                <div className="text-xs text-muted">
+                  <span className="num">{cart.reduce((s, l) => s + l.qty, 0)}</span> {tr("قطعة", "items")}
+                </div>
+                {quote && !quote.empty && <div className="num ltr text-start font-bold">{money(quote.total, quote.currency, lang)}</div>}
+              </div>
+              <button className="btn btn-primary ms-auto py-3" onClick={() => setStep(3)}>
+                {tr("التالي: الدفع", "Next: payment")}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

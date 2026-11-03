@@ -333,6 +333,16 @@ function NewTab() {
   const total = Math.max(0, sub - (num(f.discount) || 0) + (num(f.transport) || 0));
   const valid = lines.filter((l) => l.itemId && num(l.qty) > 0 && l.unitPrice !== "" && l.locationId);
   const setLine = (i: number, p: Partial<Line>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
+  const fx = useData<{ rate: number | null }>("/fx/current");
+  /** The material's current cost as a starting price, per unit or per pack, in this invoice's currency. */
+  const costPrice = (it: Item | undefined, inPacks: boolean) => {
+    const cost = (it?.avgCostUsd ?? 0) * (inPacks ? (it?.packSize ?? 1) : 1);
+    if (!(cost > 0)) return "";
+    if (f.currency === "USD") return String(+cost.toFixed(4));
+    return fx.data?.rate ? String(Math.round(cost * fx.data.rate)) : "";
+  };
+  /** Fills the price while it is still empty or still our own suggestion, never over what was typed. */
+  const repriced = (l: Line, it: Item | undefined, inPacks: boolean) => (l.unitPrice === "" || l.unitPrice === costPrice(byId.get(l.itemId), l.inPacks) ? costPrice(it, inPacks) : l.unitPrice);
   const supplier = suppliers.data?.rows.find((x) => x.id === f.supplierId);
   const save = async () => {
     setBusy(true);
@@ -390,7 +400,7 @@ function NewTab() {
           return (
             <div key={i} className="grid gap-2 rounded-xl border border-line p-3 md:grid-cols-[2fr_1fr_1fr_1.4fr_1fr_auto] md:items-end">
               <Field label={tr("المادة", "Item")} htmlFor={`np-i${i}`}>
-                <Select id={`np-i${i}`} value={l.itemId} onChange={(e) => setLine(i, { itemId: e.target.value, inPacks: false })}>
+                <Select id={`np-i${i}`} value={l.itemId} onChange={(e) => setLine(i, { itemId: e.target.value, inPacks: false, unitPrice: repriced(l, byId.get(e.target.value), false) })}>
                   <option value="">—</option>
                   {itemList.map((x) => (
                     <option key={x.id} value={x.id}>
@@ -423,7 +433,7 @@ function NewTab() {
               </button>
               {pack && (
                 <div className="md:col-span-6">
-                  <Check checked={l.inPacks} onChange={(v) => setLine(i, { inPacks: v })}>
+                  <Check checked={l.inPacks} onChange={(v) => setLine(i, { inPacks: v, unitPrice: repriced(l, it, v) })}>
                     {tr(`بالـ${pack.packUnit || "عبوة"} (1 = ${pack.packSize} ${unitOf(pack.unitCode, lang)})`, `In ${pack.packUnit || "packs"} (1 = ${pack.packSize} ${unitOf(pack.unitCode, lang)})`)}
                     {l.inPacks && num(l.qty) > 0 && <span className="text-faint"> → {fq(num(l.qty) * (pack.packSize ?? 1))} {unitOf(pack.unitCode, lang)}</span>}
                   </Check>

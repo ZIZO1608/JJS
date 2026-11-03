@@ -12,6 +12,7 @@ import {
   orderLines,
   orders,
   paymentMethods,
+  payments,
   payrollRuns,
   payslips,
   products,
@@ -78,12 +79,13 @@ export function periodReport(tx: Q, from: string, to: string) {
   const extra = tx.select({ discountUsd: usd(orders.discount), taxUsd: usd(orders.taxTotal), deliveryUsd: usd(orders.deliveryFee), grossUsd: usd(orders.subtotal) }).from(orders).where(w).get()!;
 
   const byStatus = tx.select({ status: orders.paymentStatus, n: count(), usd: sql<number>`coalesce(sum(${orders.totalUsd}),0)` }).from(orders).where(w).groupBy(orders.paymentStatus).all();
+  // Money really received, by how it came in: paid-now on orders plus later client payments and top-ups.
   const byMethod = tx
-    .select({ methodId: orders.methodId, nameAr: paymentMethods.nameAr, nameEn: paymentMethods.nameEn, n: count(), usd: sql<number>`coalesce(sum(${orders.totalUsd}),0)` })
-    .from(orders)
-    .leftJoin(paymentMethods, eq(orders.methodId, paymentMethods.id))
-    .where(w)
-    .groupBy(orders.methodId)
+    .select({ methodId: payments.methodId, nameAr: paymentMethods.nameAr, nameEn: paymentMethods.nameEn, n: count(), usd: sql<number>`coalesce(sum(${payments.amountUsd}),0)` })
+    .from(payments)
+    .leftJoin(paymentMethods, eq(payments.methodId, paymentMethods.id))
+    .where(and(gte(payments.businessDate, from), lte(payments.businessDate, to), isNull(payments.deletedAt)))
+    .groupBy(payments.methodId)
     .all();
   const byType = tx.select({ type: orders.type, n: count(), items: sql<number>`coalesce(sum(${orders.itemsCount}),0)` }).from(orders).where(w).groupBy(orders.type).all();
 

@@ -145,7 +145,6 @@ function LayoutInner() {
         <img src={business?.logo || "/logo.png"} alt="" className="h-8 w-auto" />
         <div className="min-w-0 leading-tight">
           <div className="truncate font-bold">{business ? pick(business) : t("app.name")}</div>
-          <div className="text-xs text-faint">{t("app.offline")}</div>
         </div>
         <div className="ms-auto flex items-center gap-3">
           {!simple && <RateChip />}

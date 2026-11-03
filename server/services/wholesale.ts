@@ -20,7 +20,7 @@ import {
 import { assertDayOpen, currentRate, localDate, nextNumber, rateFor, roundMoney, round4, toUsd, type Q } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { HttpError, newId, nowIso } from "../lib/util.js";
-import { addBoxMove, addClientMove, clientBalanceUsd } from "./money.js";
+import { addClientMove, clientBalanceUsd, payFromBox } from "./money.js";
 import { createOrder, priceOrder } from "./orders.js";
 import { ensureProductItem, itemQty, produceBatch, recipeCostUsd, recipeOf, returnProductStock, reverseStock, takeProductStock } from "./stock.js";
 
@@ -146,7 +146,7 @@ export function createReturn(tx: Q, input: ReturnInput, userId: string) {
     .run();
   for (const r of rows) tx.insert(returnLines).values(r).run();
   if (input.settlement === "credit" && clientId && total > 0) addClientMove(tx, { clientId, type: "return", amount: total, currency, rate, orderId: input.orderId ?? undefined, note: `Return R${number}`, userId, date });
-  if (input.settlement === "refund" && input.boxId && total > 0) addBoxMove(tx, { boxId: input.boxId, type: "refund", amount: -total, currency, rate, refType: "return", refId: id, note: `Return R${number}`, userId, date });
+  if (input.settlement === "refund" && input.boxId && total > 0) payFromBox(tx, { boxId: input.boxId, type: "refund", amount: -total, currency, rate, refType: "return", refId: id, note: `Return R${number}`, userId, date });
   return { id, number, total, totalUsd, currency };
 }
 
@@ -324,7 +324,7 @@ export function paySupplier(tx: Q, supplierId: string, p: { amount: number; curr
     tx.update(purchases).set({ paid: round4(pr.paid + inCcy), updatedAt: nowIso(), syncedAt: null }).where(eq(purchases.id, o.id)).run();
     leftUsd -= useUsd;
   }
-  addBoxMove(tx, { boxId: p.boxId, type: "purchase", amount: -p.amount, currency: p.currency, rate, refType: "supplier", refId: supplierId, note: p.note || `Payment to ${s.name}`, userId, date });
+  payFromBox(tx, { boxId: p.boxId, type: "purchase", amount: -p.amount, currency: p.currency, rate, refType: "supplier", refId: supplierId, note: p.note || `Payment to ${s.name}`, userId, date });
   return supplierDue(tx, supplierId);
 }
 

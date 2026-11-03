@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { clients, employees, orderLines, orders, paymentMethods, payments, recurringOrders, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { requirePerm } from "../lib/auth.js";
+import { can, requirePerm } from "../lib/auth.js";
 import { localDate, round4 } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
@@ -112,6 +112,9 @@ ordersRouter.post(
     const id = String(req.params.id);
     const body = parse(z.object({ reason: z.string().trim().max(200).default("") }), req.body ?? {});
     db.transaction((tx) => {
+      // Cancelling hands cash back out of the box, so an order with money on it needs someone who may edit orders.
+      const paid = tx.select({ paidAmount: orders.paidAmount }).from(orders).where(eq(orders.id, id)).get()?.paidAmount ?? 0;
+      if (paid > 0 && !can(req.user, "orders", "edit")) throw new HttpError(403, "cancel_needs_manager", "An order that was paid can only be cancelled by a manager.");
       const o = cancelOrder(tx, id, req.user!.id, body.reason);
       writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "order", entityId: id, before: { number: o.number, total: o.total }, after: { reason: body.reason } });
       notifyOrderStatus(tx, id, "cancelled", body.reason);

@@ -482,7 +482,7 @@ export const boxMoves = sqliteTable(
   {
     ...base,
     boxId: text("box_id").notNull().references(() => cashBoxes.id),
-    type: text("type", { enum: ["sale", "client_payment", "topup", "expense", "purchase", "transfer", "handover", "count_adjust", "salary", "advance", "opening", "withdrawal", "refund"] }).notNull(),
+    type: text("type", { enum: ["sale", "client_payment", "topup", "expense", "purchase", "transfer", "handover", "count_adjust", "salary", "advance", "opening", "withdrawal", "refund", "deposit"] }).notNull(),
     amount: real("amount").notNull(),
     currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
     fxRate: real("fx_rate"),

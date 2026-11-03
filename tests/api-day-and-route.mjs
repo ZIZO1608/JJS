@@ -153,7 +153,8 @@ await step("member is orders only", async () => {
   const me = ok(await member("GET", "/auth/me"));
   assert.deepEqual([...me.user.permissions].sort(), ["home:view", "orders:create", "orders:delete", "orders:view"]);
   const o = ok(await member("POST", "/orders", { clientId: S.bean.id, methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 1, optionIds: [] }] }), 201);
-  ok(await member("POST", `/orders/${o.id}/cancel`, { reason: "typo" }));
+  // a paid order needs a manager; unpaid ones are covered in api-money-rules.mjs
+  assert.equal((await member("POST", `/orders/${o.id}/cancel`, { reason: "typo" })).status, 403);
   for (const path of ["/stock/batches", "/reports/day", "/reports/my-money", "/route-sheet", `/clients/${S.bean.id}/statement?from=${TODAY}&to=${TODAY}`]) {
     assert.equal((await member("GET", path)).status, 403, path);
   }

@@ -5,8 +5,7 @@
   "comingStage": "Stage {n}",
   "comingTitle": "Coming in Stage {n}",
   "comingBody": "This part of the system is built in a later stage. Everything you set up now (users, roles, lists, settings) will be used there.",
-  "back": "Back to home",
-  "offline": "Works without internet"
+  "back": "Back to home"
  },
  "common": {
   "save": "Save",
@@ -47,7 +46,7 @@
  },
  "auth": {
   "setupTitle": "Set up JJ's ERP",
-  "setupBody": "First run on this laptop. Enter the business name and create the Admin account. You can add the manager and members after.",
+  "setupBody": "First run of the system. Enter the business name and create the Admin account. You can add the manager and members after.",
   "businessAr": "Business name (Arabic)",
   "businessEn": "Business name (English)",
   "adminName": "Your name",
@@ -82,7 +81,7 @@
  },
  "users": {
   "title": "Users",
-  "subtitle": "Who can log in on this laptop, and with which role.",
+  "subtitle": "Who can log in to the system, and with which role.",
   "new": "New user",
   "editTitle": "Edit user",
   "newTitle": "New user",
@@ -214,6 +213,8 @@
   "timeout": "The internet is slow and the request took too long. Try again.",
   "not_logged_in": "Please log in again.",
   "forbidden": "Your role is not allowed to do this.",
+  "not_enough": "The box does not hold that much. An admin can add an opening balance or cash under Settings → Money.",
+  "cancel_needs_manager": "This order was paid. Only a manager can cancel it.",
   "wrong_credentials": "The username or password is wrong.",
   "user_inactive": "This user is deactivated. Ask the admin.",
   "locked": "Too many wrong passwords. Wait a minute.",

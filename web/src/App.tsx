@@ -69,13 +69,13 @@ import { useAuth } from "./lib/auth";
 import { useI18n } from "./lib/i18n";
 
 /** The UI hides what a role cannot use; the server refuses it anyway. */
-function Guard({ module, children }: { module: Module; children: ReactNode }) {
+function Guard({ module, action = "view", children }: { module: Module; action?: "view" | "edit"; children: ReactNode }) {
   const { can } = useAuth();
   const { t } = useI18n();
-  if (!can(module, "view")) return <p className="py-10 text-center text-muted">{t("errors.forbidden")}</p>;
+  if (!can(module, action)) return <p className="py-10 text-center text-muted">{t("errors.forbidden")}</p>;
   return <>{children}</>;
 }
-const g = (m: Module, el: ReactNode) => <Guard module={m}>{el}</Guard>;
+const g = (m: Module, el: ReactNode, action?: "edit") => <Guard module={m} action={action}>{el}</Guard>;
 
 export function App() {
   const { status } = useAuth();
@@ -106,9 +106,9 @@ export function App() {
             <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
             <Route path="orders" element={g("orders", <OrdersPage />)} />
             <Route path="orders/new" element={g("orders", <NewOrderPage />)} />
-            <Route path="requests" element={g("orders", <RequestsPage />)} />
+            <Route path="requests" element={g("orders", <RequestsPage />, "edit")} />
             <Route path="close" element={g("daily_close", <DailyClosePage />)} />
-            <Route path="distribution/*" element={g("orders", <DistributionPage />)} />
+            <Route path="distribution/*" element={g("orders", <DistributionPage />, "edit")} />
             <Route path="production/*" element={g("warehouse", <ProductionPage />)} />
             <Route path="clients" element={g("clients", <ClientsPage />)} />
             <Route path="clients/:id" element={g("clients", <ClientDetailPage />)} />

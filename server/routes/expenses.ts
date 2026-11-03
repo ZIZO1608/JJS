@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
@@ -8,7 +8,7 @@ import { requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, monthOf, rateFor, round4, toUsd } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
-import { addBoxMove } from "../services/money.js";
+import { payFromBox } from "../services/money.js";
 
 export const expensesRouter = Router();
 export const assetsRouter = Router();
@@ -85,6 +85,24 @@ const listSelect = () =>
 
 const itemName = (id: string | null) => (id ? (db.select({ ar: lookups.nameAr, en: lookups.nameEn }).from(lookups).where(eq(lookups.id, id)).get() ?? null) : null);
 
+/** The usual category of the seeded items, until the shop's own history says otherwise. */
+const ITEM_DEFAULT_CATEGORY: [string, string][] = [["Tomatoes", "Food supplies"], ["Lettuce", "Food supplies"], ["Scooter fuel", "Fuel"], ["Wrap paper", "Packaging"]];
+
+/** Which category to suggest for each expense item: the one it was last filed under. */
+expensesRouter.get(
+  "/item-categories",
+  requirePerm("expenses", "view"),
+  h((_req, res) => {
+    const map: Record<string, string> = {};
+    for (const [itemEn, catEn] of ITEM_DEFAULT_CATEGORY) {
+      const r = db.get<{ item: string; cat: string } | undefined>(sql`select i.id as item, c.id as cat from lookups i join lookups c on c.list_type = 'expense_category' and c.name_en = ${catEn} and c.deleted_at is null where i.list_type = 'expense_item' and i.name_en = ${itemEn} and i.deleted_at is null`);
+      if (r) map[r.item] = r.cat;
+    }
+    for (const r of db.all<{ item_id: string; category_id: string }>(sql`select item_id, category_id, max(created_at) from expenses where deleted_at is null and item_id is not null and category_id is not null group by item_id`)) map[r.item_id] = r.category_id;
+    res.json({ map });
+  }),
+);
+
 expensesRouter.get(
   "/",
   requirePerm("expenses", "view"),
@@ -123,7 +141,7 @@ expensesRouter.post(
           status: body.status, dueDate: paid ? null : (body.dueDate ?? date), paidDate: paid ? date : null, paidBy: body.paidBy, beneficiary: body.beneficiary, photo: body.photo, employeeId: body.employeeId ?? null,
         })
         .run();
-      if (paid && body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "expense", amount: -body.amount, currency: body.currency, rate, refType: "expense", refId: id, note: body.note, userId: req.user!.id, date });
+      if (paid && body.boxId) payFromBox(tx, { boxId: body.boxId, type: "expense", amount: -body.amount, currency: body.currency, rate, refType: "expense", refId: id, note: body.note, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "expense", entityId: id, after: body });
     });
     res.status(201).json({ id });
@@ -151,7 +169,7 @@ expensesRouter.post(
       const date = localDate();
       assertDayOpen(tx, date);
       tx.update(expenses).set({ status: "paid", paidDate: date, boxId: body.boxId ?? null, paidBy: body.paidBy || e.paidBy, updatedAt: nowIso(), syncedAt: null }).where(eq(expenses.id, id)).run();
-      if (body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "expense", amount: -e.amount, currency: e.currency, rate: rateFor(e.currency), refType: "expense", refId: id, note: e.note, userId: req.user!.id, date });
+      if (body.boxId) payFromBox(tx, { boxId: body.boxId, type: "expense", amount: -e.amount, currency: e.currency, rate: rateFor(e.currency), refType: "expense", refId: id, note: e.note, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "expense.payment", entityId: id, after: body });
     });
     res.json({ ok: true });

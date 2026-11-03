@@ -75,6 +75,7 @@ export const MOVE_TYPE: Record<string, [string, string]> = {
   transfer: ["تحويلات بين الصناديق", "Transfers between boxes"],
   handover: ["كاش من المندوب", "Cash from delivery"],
   count_adjust: ["فرق جرد سابق", "Earlier count difference"],
+  deposit: ["نقد انضاف للصندوق", "Cash added to the box"],
   salary: ["رواتب", "Salaries"],
   advance: ["سلف", "Advances"],
   opening: ["رصيد افتتاحي", "Opening balance"],
@@ -187,7 +188,7 @@ function DaySummary({ r, cash }: { r: PeriodReport; cash?: DayTotals["cash"] | n
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         <div className="card">
-          <h3 className="mb-2 font-semibold">{tr("حسب طريقة الدفع", "By payment method")}</h3>
+          <h3 className="mb-2 font-semibold">{tr("المقبوض حسب طريقة الدفع", "Received, by payment method")}</h3>
           {r.byMethod.length === 0 ? (
             <Empty text={tr("لا شيء", "Nothing")} />
           ) : (
@@ -403,8 +404,8 @@ export function DailyClosePage() {
                     placeholder="0"
                     aria-label={tr("المعدود", "Counted")}
                   />
-                  <button type="button" className="btn shrink-0 text-good" onClick={() => setCounted(String(expected))} title={tr("المعدود نفس المتوقع", "Counted equals expected")}>
-                    {tr("مطابق ✓", "Matches ✓")}
+                  <button type="button" className="btn shrink-0 text-good" onClick={() => setCounted(String(expected))} title={tr("عبّي المعدود بنفس المبلغ المتوقع", "Fill in the expected amount as counted")}>
+                    {tr("نفس المتوقع", "Same as expected")}
                   </button>
                 </div>
               </div>

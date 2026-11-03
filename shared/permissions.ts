@@ -69,6 +69,13 @@ export const MODULE_LABEL: Record<Module, { ar: string; en: string }> = {
   audit: { ar: "سجل العمليات", en: "Audit log" },
 };
 
+/** Sections with no row of their own: the permission that opens them. */
+export const MODULE_ALSO: Partial<Record<Module, { ar: string; en: string }>> = {
+  dashboard: { ar: "العرض يفتح كمان «يومي»", en: "View also opens My day" },
+  orders: { ar: "التعديل يفتح كمان «طلبات الزبائن» و«التوزيع»", en: "Edit also opens Client requests and Distribution" },
+  warehouse: { ar: "العرض يفتح كمان «الإنتاج»", en: "View also opens Production" },
+};
+
 export const ACTION_LABEL: Record<Action, { ar: string; en: string }> = {
   view: { ar: "عرض", en: "View" },
   create: { ar: "إضافة", en: "Create" },
@@ -98,7 +105,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleKey, Permission[]> = {
     perm("expenses", "create"),
     perm("reports", "view"),
   ],
-  // Members only take and cancel orders (they pick the client inside the order screen).
+  // Members only take orders and cancel unpaid ones (they pick the client inside the order screen).
   member: [perm("home", "view"), perm("orders", "view"), perm("orders", "create"), perm("orders", "delete")],
 };
 

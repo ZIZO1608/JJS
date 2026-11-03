@@ -55,11 +55,13 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
       footer={
         o && (
           <>
-            {o.status !== "cancelled" && !o.consignmentId && can("orders", "delete") && (
+            {o.status !== "cancelled" && !o.consignmentId && can("orders", "delete") && ((o.paidAmount ?? 0) > 0 && !can("orders", "edit") ? (
+              <span className="me-auto self-center text-sm text-muted">{tr("الطلب مدفوع: إلغاؤه عند المدير", "Paid order: ask a manager to cancel")}</span>
+            ) : (
               <button className="btn btn-ghost btn-danger me-auto" disabled={busy} onClick={() => setConfirmCancel(true)}>
                 {tr("إلغاء الطلب", "Cancel order")}
               </button>
-            )}
+            ))}
             {o.status !== "cancelled" && o.type === "normal" && can("orders", "edit") && (
               <button className="btn" disabled={busy} onClick={() => setReturning(true)}>
                 ↩ {tr("رجعت الطلبية", "Came back")}

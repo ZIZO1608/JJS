@@ -60,6 +60,14 @@ export function addBoxMove(
   return { id, amount, box };
 }
 
+/** Money physically leaving a box: refused when the box does not hold that much. */
+export function payFromBox(tx: Q, p: Parameters<typeof addBoxMove>[1]) {
+  const box = getBox(tx, p.boxId);
+  const out = roundMoney(convert(-p.amount, p.currency, box.currency, p.rate), box.currency);
+  if (out > boxBalance(tx, box.id) + 0.001) throw new HttpError(409, "not_enough", "There is not that much money in the box.");
+  return addBoxMove(tx, p);
+}
+
 export function addClientMove(
   tx: Q,
   p: { clientId: string; type: (typeof clientMoves.$inferInsert)["type"]; amount: number; currency: Currency; rate: number | null; orderId?: string; paymentId?: string; note?: string; userId: string | null; date: string },

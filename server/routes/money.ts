@@ -8,7 +8,7 @@ import { can, requireAuth, requirePerm } from "../lib/auth.js";
 import { assertDayOpen, currentRate, localDate } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { addBoxMove, boxBalance, getBox, handOverRepCash, systemBox } from "../services/money.js";
+import { addBoxMove, boxBalance, getBox, handOverRepCash, payFromBox, systemBox } from "../services/money.js";
 
 export const moneyRouter = Router();
 const names = { nameAr: z.string().trim().min(1).max(60), nameEn: z.string().trim().min(1).max(60) };
@@ -97,8 +97,7 @@ moneyRouter.post(
       assertDayOpen(tx, date);
       const from = getBox(tx, body.fromBoxId);
       const rate = currentRate();
-      if (body.amount > boxBalance(tx, from.id) + 0.001) throw new HttpError(409, "not_enough", "There is not that much money in the box.");
-      addBoxMove(tx, { boxId: from.id, type: "transfer", amount: -body.amount, currency: from.currency, rate, refType: "transfer", note: body.note, userId: req.user!.id, date });
+      payFromBox(tx, { boxId: from.id, type: "transfer", amount: -body.amount, currency: from.currency, rate, refType: "transfer", note: body.note, userId: req.user!.id, date });
       addBoxMove(tx, { boxId: body.toBoxId, type: "transfer", amount: body.amount, currency: from.currency, rate, refType: "transfer", note: body.note, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.transfer", after: body });
     });
@@ -140,6 +139,23 @@ moneyRouter.post(
   }),
 );
 
+/** Cash put into a box after the opening balance, e.g. the owner adds money to pay a supplier. Not a sale. */
+moneyRouter.post(
+  "/deposit",
+  requirePerm("settings", "edit"),
+  h((req, res) => {
+    const body = parse(z.object({ boxId: z.string(), amount: z.number().positive(), note: z.string().max(200).default("") }), req.body);
+    db.transaction((tx) => {
+      const box = getBox(tx, body.boxId);
+      const date = localDate();
+      assertDayOpen(tx, date);
+      addBoxMove(tx, { boxId: box.id, type: "deposit", amount: body.amount, currency: box.currency, rate: currentRate(), refType: "deposit", note: body.note, userId: req.user!.id, date });
+      writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.deposit", entityId: box.id, after: body });
+    });
+    res.status(201).json({ ok: true });
+  }),
+);
+
 /** The owner takes money out of a box for personal use (kept apart from expenses). */
 moneyRouter.post(
   "/withdraw",
@@ -150,7 +166,7 @@ moneyRouter.post(
       const box = getBox(tx, body.boxId);
       const date = localDate();
       assertDayOpen(tx, date);
-      const m = addBoxMove(tx, { boxId: box.id, type: "withdrawal", amount: -body.amount, currency: box.currency, rate: currentRate(), refType: "withdrawal", note: [body.person, body.note].filter(Boolean).join(" · "), userId: req.user!.id, date });
+      const m = payFromBox(tx, { boxId: box.id, type: "withdrawal", amount: -body.amount, currency: box.currency, rate: currentRate(), refType: "withdrawal", note: [body.person, body.note].filter(Boolean).join(" · "), userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "money.withdrawal", entityId: m.id, after: body });
       return m;
     });

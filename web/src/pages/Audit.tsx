@@ -65,6 +65,7 @@ const ENTITY_LABEL: Record<string, { ar: string; en: string }> = {
   payment_method: { ar: "طريقة دفع", en: "Payment method" },
   "money.transfer": { ar: "تحويل بين الصناديق", en: "Box transfer" },
   "money.handover": { ar: "تسليم كاش المندوب", en: "Cash handover" },
+  "money.deposit": { ar: "إضافة نقد للصندوق", en: "Cash added to a box" },
   "money.opening": { ar: "رصيد افتتاحي", en: "Opening balance" },
   expense: { ar: "مصروف", en: "Expense" },
   asset: { ar: "أصل", en: "Asset" },

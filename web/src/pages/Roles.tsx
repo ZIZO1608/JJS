@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ACTIONS, ACTION_LABEL, MODULES, MODULE_LABEL, perm, usesSimpleMode } from "@shared/permissions";
+import { ACTIONS, ACTION_LABEL, MODULES, MODULE_ALSO, MODULE_LABEL, perm, usesSimpleMode } from "@shared/permissions";
 import { ConfirmDialog, Field, PageHeader, Spinner, TextInput } from "../components/ui";
 import { ApiError, del, get, post, put } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -172,6 +172,7 @@ export function RolesPage() {
                     <tr key={m}>
                       <td className="td whitespace-nowrap">
                         {pick(MODULE_LABEL[m])}
+                        {MODULE_ALSO[m] && <div className="text-xs text-faint">{pick(MODULE_ALSO[m])}</div>}
                       </td>
                       <td className="td text-center">
                         <input type="checkbox" className="h-4 w-4 accent-ink" checked={all} disabled={locked || !editable} onChange={() => toggleRow(m)} aria-label={`${pick(MODULE_LABEL[m])} — ${t("roles.selectAll")}`} />

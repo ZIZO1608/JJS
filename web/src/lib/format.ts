@@ -3,9 +3,9 @@ export type Currency = "USD" | "SYP";
 /** 1,234.50 $ / 120,000 ل.س — SYP has no decimals. */
 export function money(v: number | null | undefined, currency: Currency = "USD", lang: "ar" | "en" = "en") {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
-  const n = currency === "SYP" ? Math.round(v).toLocaleString("en-US") : v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const n = currency === "SYP" ? Math.round(v).toLocaleString("en-US") : Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   if (currency === "SYP") return lang === "ar" ? `${n} ل.س` : `SYP ${n}`;
-  return `$${n}`;
+  return `${v < 0 ? "-" : ""}$${n}`;
 }
 export const usd = (v: number | null | undefined) => money(v, "USD");
 

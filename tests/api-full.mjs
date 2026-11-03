@@ -232,6 +232,7 @@ await step("purchase: stock in, weighted average cost, paid from main box", asyn
   const sup = ok(await admin("GET", "/purchases/suppliers")).rows[1];
   const before = ok(await admin("GET", "/stock/items")).rows.find((i) => i.id === S.turkeyItem.id);
   const locs = ok(await admin("GET", "/stock/locations")).rows;
+  ok(await admin("POST", "/money/deposit", { boxId: S.main.id, amount: before.qty * 11 }), 201);
   const r = ok(await admin("POST", "/purchases", { supplierId: sup.id, currency: "USD", lines: [{ itemId: S.turkeyItem.id, qty: before.qty, unitPrice: 11, locationId: locs[0].id }], paid: before.qty * 11, boxId: S.main.id }), 201);
   assert.equal(r.purchase.due, 0);
   const after = ok(await admin("GET", "/stock/items")).rows.find((i) => i.id === S.turkeyItem.id);

@@ -280,7 +280,7 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
         )}
 
         {(t.byMethod.length > 0 || t.trials.given > 0) && (
-          <Section title={tr("طرق الدفع اليوم", "Payment today")}>
+          <Section title={tr("المقبوض اليوم حسب طريقة الدفع", "Received today, by method")}>
             <table className="w-full text-sm">
               <tbody>
                 {t.byMethod.map((m, i) => (
@@ -294,6 +294,11 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
                 ))}
               </tbody>
             </table>
+            {data.unpaid.length > 0 && (
+              <p className="mt-2 text-sm text-muted">
+                {tr("لسا على الزبائن", "Clients still owe")}: <span className="num ltr font-semibold">{usd(-data.unpaid.reduce((s, c) => s + c.balanceUsd, 0))}</span>
+              </p>
+            )}
             {t.trials.given > 0 && (
               <p className="mt-2 text-sm text-muted">
                 {tr("تجارب مجانية", "Free trials")}: <span className="num">{t.trials.given}</span> · {tr("صاروا زبائن", "became clients")}:{" "}

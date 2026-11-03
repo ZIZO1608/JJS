@@ -9,7 +9,7 @@ import { assertDayOpen, currentRate, localDate, monthEnd, rateFor, round4, toUsd
 import { getSetting } from "../lib/settings.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
-import { addBoxMove } from "../services/money.js";
+import { payFromBox } from "../services/money.js";
 
 export const peopleRouter = Router();
 
@@ -78,7 +78,7 @@ peopleRouter.post(
       const rate = rateFor(body.currency);
       const usd = round4(toUsd(body.amount, body.currency, rate));
       tx.insert(advances).values({ id, employeeId: body.employeeId, date, amount: body.amount, currency: body.currency, fxRate: rate, amountUsd: usd, remainingUsd: usd, boxId: body.boxId ?? null, note: body.note }).run();
-      if (body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "advance", amount: -body.amount, currency: body.currency, rate, refType: "advance", refId: id, note: body.note, userId: req.user!.id, date });
+      if (body.boxId) payFromBox(tx, { boxId: body.boxId, type: "advance", amount: -body.amount, currency: body.currency, rate, refType: "advance", refId: id, note: body.note, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "advance", entityId: id, after: body });
     });
     res.status(201).json({ id });
@@ -179,7 +179,7 @@ peopleRouter.post(
           tx.update(advances).set({ remainingUsd: round4(a.remainingUsd - take), updatedAt: nowIso(), syncedAt: null }).where(eq(advances.id, a.id)).run();
           left -= take;
         }
-        if (r.netUsd > 0) addBoxMove(tx, { boxId: body.boxId, type: "salary", amount: -r.netUsd, currency: "USD", rate, refType: "payroll", refId: runId, note: `${r.name} ${month}`, userId: req.user!.id, date });
+        if (r.netUsd > 0) payFromBox(tx, { boxId: body.boxId, type: "salary", amount: -r.netUsd, currency: "USD", rate, refType: "payroll", refId: runId, note: `${r.name} ${month}`, userId: req.user!.id, date });
       }
       tx.update(payrollRuns).set({ status: "paid", paidAt: nowIso(), boxId: body.boxId, updatedAt: nowIso(), syncedAt: null }).where(eq(payrollRuns.id, runId)).run();
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "payroll", entityId: runId, after: { month } });

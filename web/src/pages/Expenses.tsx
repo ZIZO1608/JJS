@@ -79,6 +79,7 @@ function ExpenseForm({ onSaved, big }: { onSaved: () => void; big?: boolean }) {
   const toast = useToast();
   const { s } = useAppSettings();
   const boxes = useData<{ rows: CashBox[] }>("/money/boxes");
+  const itemCats = useData<{ map: Record<string, string> }>("/expenses/item-categories");
   const assets = useData<{ rows: (Named & { active: boolean })[] }>(can("assets", "view") ? "/assets" : null);
   const mainBox = boxes.data?.rows.find((b) => b.systemKey === "main_cash");
   const reps = useReps();
@@ -121,6 +122,7 @@ function ExpenseForm({ onSaved, big }: { onSaved: () => void; big?: boolean }) {
       });
       toast(tr("تم تسجيل المصروف", "Expense saved"));
       setF({ ...blank(), currency: f.currency, categoryId: f.categoryId });
+      itemCats.reload();
       onSaved();
     } catch (e) {
       if (e instanceof ApiError && e.issues) setErrors(fieldErrors(e));
@@ -150,7 +152,7 @@ function ExpenseForm({ onSaved, big }: { onSaved: () => void; big?: boolean }) {
       </div>
       <div className={`grid gap-3 ${big ? "sm:grid-cols-2" : "sm:grid-cols-2 lg:grid-cols-4"}`}>
         <Field label={tr("البند", "What for")} htmlFor="x-item" hint={tr("آخر خيار «+ إضافة جديد» يضيف بند للقائمة", "The last option “+ Add new” adds to the list")}>
-          <LookupSelect id="x-item" listType="expense_item" value={f.itemId} onChange={(v) => setF({ ...f, itemId: v })} />
+          <LookupSelect id="x-item" listType="expense_item" value={f.itemId} onChange={(v) => setF({ ...f, itemId: v, categoryId: itemCats.data?.map[v] ?? f.categoryId })} />
         </Field>
         <Field label={tr("الفئة", "Category")} htmlFor="x-cat">
           <LookupSelect id="x-cat" listType="expense_category" value={f.categoryId} onChange={(v) => setF({ ...f, categoryId: v })} />
@@ -365,7 +367,7 @@ function MonthlyTab() {
   const toast = useToast();
   const { s } = useAppSettings();
   const { data, reload } = useData<{ rows: Recurring[] }>("/expenses/recurring");
-  const cats = useData<{ items: (Named & { id: string })[] }>("/lookups?type=expense_category");
+  const cats = useData<{ items: (Named & { id: string })[] }>("/lookups?type=expense_category&includeInactive=1");
   const items = useData<{ items: (Named & { id: string })[] }>("/lookups?type=expense_item");
   const [editing, setEditing] = useState<Recurring | "new" | null>(null);
   const [deleting, setDeleting] = useState<Recurring | null>(null);

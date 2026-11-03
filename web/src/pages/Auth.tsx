@@ -90,7 +90,7 @@ export function SetupPage() {
 }
 
 export function LoginPage() {
-  const { t, err, fieldErrors } = useI18n();
+  const { t, tr, err, fieldErrors } = useI18n();
   const { login } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -124,6 +124,7 @@ export function LoginPage() {
         <button className="btn btn-primary mt-2 py-3 text-base" disabled={busy}>
           {busy ? t("app.loading") : t("auth.login")}
         </button>
+        <p className="text-center text-sm text-faint">{tr("نسيت كلمة المرور؟ تواصل مع إدارة المحل.", "Forgot your password? Ask the shop's admin.")}</p>
       </form>
     </Shell>
   );

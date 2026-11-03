@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { DataTable } from "../../components/DataTable";
 import { Tabs } from "../../components/Tabs";
 import { Empty, Field, PageHeader, Select, Spinner, StatusDot, TextInput } from "../../components/ui";
@@ -277,11 +277,16 @@ function ProductsTab() {
                 </option>
               ))}
             </Select>
-            {can("menu", "create") && (
-              <button className="btn btn-primary" onClick={() => setEditing("new")} disabled={!cats.data.rows.length}>
-                {tr("+ منتج", "+ Product")}
-              </button>
-            )}
+            {can("menu", "create") &&
+              (cats.data.rows.length ? (
+                <button className="btn btn-primary" onClick={() => setEditing("new")}>
+                  {tr("+ منتج", "+ Product")}
+                </button>
+              ) : (
+                <Link className="btn" to="/menu/categories">
+                  {tr("أضف صنف أولاً", "Add a category first")}
+                </Link>
+              ))}
           </>
         }
         columns={[

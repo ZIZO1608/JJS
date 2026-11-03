@@ -8,7 +8,7 @@ import { requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, nextNumber, rateFor, roundMoney, round4, toUsd } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
-import { addBoxMove } from "../services/money.js";
+import { payFromBox } from "../services/money.js";
 import { addStock } from "../services/stock.js";
 import { paySupplier, supplierDue } from "../services/wholesale.js";
 import { getSetting } from "../lib/settings.js";
@@ -238,7 +238,7 @@ purchasingRouter.post(
         tx.insert(purchaseLines).values({ id: newId(), purchaseId: id, itemId: l.itemId, qty, unitPrice: round4(l.unitPrice / perPack), locationId: l.locationId, expiresAt: l.expiresAt ?? null, batchId: b.batchId }).run();
         if (body.supplierId && !item.supplierId) tx.update(items).set({ supplierId: body.supplierId }).where(eq(items.id, item.id)).run();
       }
-      if (body.paid > 0 && body.boxId) addBoxMove(tx, { boxId: body.boxId, type: "purchase", amount: -body.paid, currency: body.currency, rate, refType: "purchase", refId: id, note: `Purchase #${number}`, userId: req.user!.id, date });
+      if (body.paid > 0 && body.boxId) payFromBox(tx, { boxId: body.boxId, type: "purchase", amount: -body.paid, currency: body.currency, rate, refType: "purchase", refId: id, note: `Purchase #${number}`, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "purchase", entityId: id, after: { number, total, currency: body.currency, lines: body.lines.length, paid: body.paid } });
     });
     res.status(201).json({ purchase: outOf(id) });
@@ -259,7 +259,7 @@ purchasingRouter.post(
       assertDayOpen(tx, date);
       const rate = rateFor(p.currency);
       tx.update(purchases).set({ paid: round4(p.paid + body.amount), updatedAt: nowIso(), syncedAt: null }).where(eq(purchases.id, id)).run();
-      addBoxMove(tx, { boxId: body.boxId, type: "purchase", amount: -body.amount, currency: p.currency, rate, refType: "purchase", refId: id, note: `Purchase #${p.number}`, userId: req.user!.id, date });
+      payFromBox(tx, { boxId: body.boxId, type: "purchase", amount: -body.amount, currency: p.currency, rate, refType: "purchase", refId: id, note: `Purchase #${p.number}`, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "purchase.payment", entityId: id, after: body });
     });
     res.json({ purchase: outOf(id) });

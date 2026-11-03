@@ -1,4 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, inArray } from "drizzle-orm";
 import { DEFAULT_ROLE_PERMISSIONS, type SystemRoleKey } from "../../shared/permissions.js";
 import { hashPassword } from "../lib/auth.js";
 import { newId } from "../lib/util.js";
@@ -114,6 +114,12 @@ export function seed() {
         }
       }
       setSetting("seed.version", 3, tx);
+    }
+
+    // v4: two early expense categories overlap the fuller list. Hidden, not deleted: old expenses keep their names.
+    if (getSetting("seed.version") < 4) {
+      tx.update(lookups).set({ active: false }).where(and(eq(lookups.listType, "expense_category"), inArray(lookups.nameEn, ["Rent & bills", "Delivery & scooter"]))).run();
+      setSetting("seed.version", 4, tx);
     }
   });
 }
