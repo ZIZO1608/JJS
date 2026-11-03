@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { categories, clientAccounts, clientMoves, clientSessions, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { MAP_HOSTS, parseLatLng } from "../../shared/maps.js";
-import { hashPassword, requireAnyPerm, requirePerm } from "../lib/auth.js";
+import { can, hashPassword, requireAnyPerm, requirePerm } from "../lib/auth.js";
 import { generatePassword, suggestUsername } from "../lib/clientAuth.js";
 import { addMonths, assertDayOpen, localDate, monthStart, rateFor, round4, toUsd, type Q } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
@@ -167,6 +167,12 @@ function summary(c: typeof clients.$inferSelect) {
   };
 }
 
+/** What the order screen's client picker needs, for whoever takes orders without seeing the clients section. */
+function pickerRow(c: typeof clients.$inferSelect) {
+  const { id, name, contactPerson, phone, active, consignment } = c;
+  return { id, name, contactPerson, phone, active, consignment, balanceUsd: clientBalanceUsd(db, id), subscription: subscriptionStatus(db, id, localDate()) ? true : null };
+}
+
 /** Follow a short Google Maps link (maps.app.goo.gl/…) to the coordinates inside it. Only Google hosts are fetched. */
 clientsRouter.post(
   "/resolve-map-link",
@@ -203,9 +209,9 @@ clientsRouter.get(
   "/",
   // order takers pick the client inside the order screen
   requireAnyPerm(["clients", "view"], ["orders", "create"]),
-  h((_req, res) => {
+  h((req, res) => {
     const rows = db.select().from(clients).where(isNull(clients.deletedAt)).orderBy(asc(clients.name)).all();
-    res.json({ rows: rows.map(summary) });
+    res.json({ rows: can(req.user, "clients", "view") ? rows.map(summary) : rows.map(pickerRow) });
   }),
 );
 

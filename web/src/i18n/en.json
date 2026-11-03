@@ -214,7 +214,7 @@
   "not_logged_in": "Please log in again.",
   "forbidden": "Your role is not allowed to do this.",
   "not_enough": "The box does not hold that much. An admin can add an opening balance or cash under Settings → Money.",
-  "cancel_needs_manager": "This order was paid. Only a manager can cancel it.",
+  "cancel_needs_manager": "Only a manager can cancel this order.",
   "wrong_credentials": "The username or password is wrong.",
   "user_inactive": "This user is deactivated. Ask the admin.",
   "locked": "Too many wrong passwords. Wait a minute.",

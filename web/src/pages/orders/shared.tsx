@@ -68,6 +68,7 @@ export interface AppliedTax {
   amount: number;
 }
 export interface OrderDetail extends OrderRow {
+  canCancel: boolean;
   lines: OrderLine[];
   payments: { id: string; amount: number; currency: Currency; amountUsd: number; methodId: string; boxId: string }[];
   taxes: AppliedTax[];

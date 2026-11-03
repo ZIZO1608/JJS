@@ -84,7 +84,7 @@ function useAgo() {
 
 export function NotificationBell() {
   const { tr, pick } = useI18n();
-  const { me } = useAuth();
+  const { me, can } = useAuth();
   const { unread, refresh } = useInbox();
   const navigate = useNavigate();
   const ago = useAgo();
@@ -114,15 +114,17 @@ export function NotificationBell() {
           <div className="absolute end-0 z-40 mt-1 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-line bg-surface shadow-xl">
             <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
               <span className="font-bold">{tr("الإشعارات", "Notifications")}</span>
-              <button
-                className="text-sm font-semibold text-brand"
-                onClick={() => {
-                  setOpen(false);
-                  navigate("/requests");
-                }}
-              >
-                {tr("طلبات الزبائن", "Client requests")}
-              </button>
+              {can("orders", "edit") && (
+                <button
+                  className="text-sm font-semibold text-brand"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/requests");
+                  }}
+                >
+                  {tr("طلبات الزبائن", "Client requests")}
+                </button>
+              )}
             </div>
             <ul className="max-h-[60vh] overflow-y-auto p-1">
               {rows === null && <li className="px-3 py-6 text-center text-faint">…</li>}

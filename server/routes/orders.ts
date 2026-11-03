@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { clients, employees, orderLines, orders, paymentMethods, payments, recurringOrders, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { can, requirePerm } from "../lib/auth.js";
+import { can, requirePerm, type AuthUser } from "../lib/auth.js";
 import { localDate, round4 } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
@@ -87,6 +87,16 @@ ordersRouter.post(
   }),
 );
 
+/** How long whoever cannot edit orders may still take back their own mistake. */
+const OWN_CANCEL_MINUTES = 30;
+
+/** Cancelling puts stock back and wipes cash or debt, so without orders:edit it covers only your own unpaid, undelivered order, right after taking it. */
+function mayCancel(user: AuthUser | undefined, o: typeof orders.$inferSelect) {
+  if (!can(user, "orders", "delete")) return false;
+  if (can(user, "orders", "edit")) return true;
+  return o.userId === user?.id && o.status === "confirmed" && o.paidAmount <= 0 && Date.now() - Date.parse(o.createdAt) < OWN_CANCEL_MINUTES * 60_000;
+}
+
 ordersRouter.get(
   "/:id",
   requirePerm("orders", "view"),
@@ -95,7 +105,7 @@ ordersRouter.get(
     if (!r) throw notFound("order");
     const lines = db.select().from(orderLines).where(eq(orderLines.orderId, r.o.id)).all();
     const pays = db.select().from(payments).where(and(eq(payments.orderId, r.o.id), isNull(payments.deletedAt))).all();
-    res.json({ order: { ...listOut(r), lines: lines.map((l) => ({ ...l, options: JSON.parse(l.optionsJson) })), payments: pays, taxes: JSON.parse(r.o.taxesJson) } });
+    res.json({ order: { ...listOut(r), lines: lines.map((l) => ({ ...l, options: JSON.parse(l.optionsJson) })), payments: pays, taxes: JSON.parse(r.o.taxesJson), canCancel: mayCancel(req.user, r.o) } });
   }),
 );
 
@@ -112,9 +122,8 @@ ordersRouter.post(
     const id = String(req.params.id);
     const body = parse(z.object({ reason: z.string().trim().max(200).default("") }), req.body ?? {});
     db.transaction((tx) => {
-      // Cancelling hands cash back out of the box, so an order with money on it needs someone who may edit orders.
-      const paid = tx.select({ paidAmount: orders.paidAmount }).from(orders).where(eq(orders.id, id)).get()?.paidAmount ?? 0;
-      if (paid > 0 && !can(req.user, "orders", "edit")) throw new HttpError(403, "cancel_needs_manager", "An order that was paid can only be cancelled by a manager.");
+      const order = tx.select().from(orders).where(eq(orders.id, id)).get();
+      if (order && !mayCancel(req.user, order)) throw new HttpError(403, "cancel_needs_manager", "Only a manager can cancel this order.");
       const o = cancelOrder(tx, id, req.user!.id, body.reason);
       writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "order", entityId: id, before: { number: o.number, total: o.total }, after: { reason: body.reason } });
       notifyOrderStatus(tx, id, "cancelled", body.reason);

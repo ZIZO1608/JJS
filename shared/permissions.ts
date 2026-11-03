@@ -105,7 +105,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<SystemRoleKey, Permission[]> = {
     perm("expenses", "create"),
     perm("reports", "view"),
   ],
-  // Members only take orders and cancel unpaid ones (they pick the client inside the order screen).
+  // Members only take orders and cancel their own unpaid ones right after taking them (they pick the client inside the order screen).
   member: [perm("home", "view"), perm("orders", "view"), perm("orders", "create"), perm("orders", "delete")],
 };
 

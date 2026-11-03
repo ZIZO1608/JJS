@@ -27,7 +27,7 @@ requestsRouter.get(
 
 requestsRouter.get(
   "/orders",
-  requirePerm("orders", "view"),
+  requirePerm("orders", "edit"),
   h((req, res) => {
     const q = parse(statusQuery, req.query);
     const rows = db

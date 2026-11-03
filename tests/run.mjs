@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"]];
+const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"], ["api-member-rules.mjs"]];
 let failed = 0;
 let port = 4391;
 for (const files of suites) {
@@ -22,7 +22,7 @@ for (const files of suites) {
     await new Promise((r) => setTimeout(r, 250));
   }
   for (const f of files) {
-    const code = await new Promise((r) => spawn(process.execPath, [path.join("tests", f)], { env: { ...process.env, BASE: base }, stdio: "inherit" }).on("exit", r));
+    const code = await new Promise((r) => spawn(process.execPath, [path.join("tests", f)], { env: { ...process.env, BASE: base, JJS_DATA_DIR: dir }, stdio: "inherit" }).on("exit", r));
     if (code) failed++;
   }
   // Wait for the server to exit before deleting: on Windows the open database file blocks removal.

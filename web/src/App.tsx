@@ -99,7 +99,7 @@ export function App() {
           <Route path="print/report" element={g("reports", <PrintReport />)} />
           <Route path="print/client-report/:id" element={g("clients", <PrintClientReport />)} />
           <Route path="print/clients-sheet" element={g("reports", <PrintClientsSheet />)} />
-          <Route path="print/route" element={g("orders", <PrintRouteSheet />)} />
+          <Route path="print/route" element={g("orders", <PrintRouteSheet />, "edit")} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="day" element={g("dashboard", <MyDayPage />)} />
