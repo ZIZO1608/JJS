@@ -242,7 +242,7 @@
   "option_unavailable": "One of the add-ons is no longer available.",
   "credit_limit": "This order goes over the credit limit.",
   "day_closed": "The day is closed. Ask the admin to reopen it.",
-  "no_rate": "Set the USD exchange rate first.",
+  "no_rate": "The USD exchange rate is not set yet. An admin needs to set it under Settings → Currency & rate.",
   "not_found": "Not found."
  }
 }

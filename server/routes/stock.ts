@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { batches, items, locations, lookups, products, stockMoves, warehouses } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { requirePerm } from "../lib/auth.js";
+import { can, requirePerm } from "../lib/auth.js";
 import { assertDayOpen, localDate, round4 } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
@@ -79,6 +79,7 @@ stockRouter.post(
   requirePerm("warehouse", "create"),
   h((req, res) => {
     const body = parse(itemSchema, req.body);
+    if (!can(req.user, "costing", "see_cost")) body.avgCostUsd = 0;
     const id = crypto.randomUUID();
     db.transaction((tx) => {
       tx.insert(items).values({ id, ...body }).run();
@@ -97,6 +98,8 @@ stockRouter.put(
     if (!before) throw notFound("item");
     // Finished-product items are renamed from the menu; only their minimum level is edited here.
     const body = before.kind === "product" ? parse(z.object({ minLevel: z.number().min(0) }), req.body) : parse(itemSchema, req.body);
+    // Only a role that sees costs may change one: the others are never sent it, so theirs would overwrite it with 0.
+    if ("avgCostUsd" in body && !can(req.user, "costing", "see_cost")) body.avgCostUsd = before.avgCostUsd;
     db.transaction((tx) => {
       tx.update(items).set({ ...body, updatedAt: nowIso(), syncedAt: null }).where(eq(items.id, id)).run();
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "item", entityId: id, before, after: body });
@@ -209,7 +212,7 @@ stockRouter.post(
     if (!item) throw notFound("item");
     const out = db.transaction((tx) => {
       assertDayOpen(tx, localDate());
-      const r = addStock(tx, { itemId: body.itemId, locationId: body.locationId, qty: body.qty, unitCostUsd: body.unitCostUsd ?? item.avgCostUsd, type: "adjust", expiresAt: body.expiresAt ?? null }, ctxOf(req, "receive", body.note));
+      const r = addStock(tx, { itemId: body.itemId, locationId: body.locationId, qty: body.qty, unitCostUsd: (can(req.user, "costing", "see_cost") ? body.unitCostUsd : undefined) ?? item.avgCostUsd, type: "adjust", expiresAt: body.expiresAt ?? null }, ctxOf(req, "receive", body.note));
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.receive", entityId: r.batchId, after: body });
       return r;
     });

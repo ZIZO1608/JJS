@@ -6,7 +6,7 @@ import { clients, expenses, lookups, orders, paymentMethods } from "../db/schema
 import { requirePerm } from "../lib/auth.js";
 import { localDate } from "../lib/biz.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { allMyMoney, cashFlow, clientsSheet, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, unpaidBalances } from "../services/reports.js";
+import { allMyMoney, cashFlow, clientsSheet, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, reportFor, unpaidBalances } from "../services/reports.js";
 import { boxMoves, cashBoxes, purchases, returns, suppliers } from "../db/schema.js";
 import { desc } from "drizzle-orm";
 import { supplierDue } from "../services/wholesale.js";
@@ -26,20 +26,7 @@ reportsRouter.get(
   h((req, res) => {
     const q = parse(range, { from: req.query.from ?? localDate(), to: req.query.to ?? localDate() });
     if (q.from > q.to) throw new HttpError(400, "bad_range", "The start date is after the end date.");
-    const report = periodReport(db, q.from, q.to);
-    // Costs and profit are hidden from roles that cannot see costs.
-    if (!req.user!.permissions.has("costing:see_cost")) {
-      const { costUsd: _c, grossProfitUsd: _g, marginPct: _m, netUsd: _n, operatingProfitUsd: _o, internalUse: _i, withdrawalsUsd: _w, ...rest } = report;
-      return res.json({
-        ...rest,
-        byProduct: report.byProduct.map(({ costUsd: _x, marginPct: _y, ...p }) => p),
-        byCategory: report.byCategory.map(({ costUsd: _x, marginPct: _y, ...p }) => p),
-        byClient: report.byClient.map(({ costUsd: _x, marginPct: _y, profitUsd: _z, ...p }) => p),
-        hiddenCosts: true,
-        unpaid: unpaidBalances(db),
-      });
-    }
-    res.json({ ...report, unpaid: unpaidBalances(db) });
+    res.json({ ...reportFor(req.user, periodReport(db, q.from, q.to)), unpaid: unpaidBalances(db) });
   }),
 );
 

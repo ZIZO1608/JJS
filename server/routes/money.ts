@@ -20,8 +20,8 @@ moneyRouter.get(
   requireAuth,
   h((req, res) => {
     const rows = db.select().from(cashBoxes).where(isNull(cashBoxes.deletedAt)).orderBy(asc(cashBoxes.createdAt)).all();
-    // Balances are money information: only roles that close the day or manage settings see them.
-    const seeBalances = can(req.user, "daily_close", "view") || can(req.user, "settings", "view");
+    // Balances are money information, and the main box's is the answer to a blind count: only roles that reopen days or manage settings see them.
+    const seeBalances = can(req.user, "daily_close", "edit") || can(req.user, "settings", "view");
     res.json({ rows: rows.map((b) => (seeBalances ? boxOut(b) : { ...b, balance: null })) });
   }),
 );
@@ -70,7 +70,7 @@ moneyRouter.use(
 
 moneyRouter.get(
   "/boxes/:id/moves",
-  requirePerm("daily_close", "view"),
+  requirePerm("daily_close", "edit"),
   h((req, res) => {
     const q = parse(z.object({ from: z.string().optional(), to: z.string().optional() }), req.query);
     const box = getBox(db, String(req.params.id));

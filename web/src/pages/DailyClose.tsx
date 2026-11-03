@@ -30,7 +30,7 @@ interface DayRow {
 interface DayView {
   day: DayRow;
   report: PeriodReport;
-  mainBox: { id: string; nameAr: string; nameEn: string; currency: Currency; expected: number };
+  mainBox: { id: string; nameAr: string; nameEn: string; currency: Currency; expected: number | null };
   reps: { id: string; nameAr: string; nameEn: string; currency: Currency; balance: number }[];
   leftovers?: { batchId: string; batchCode: string; nameAr: string; nameEn: string; qty: number; expiresAt: string | null; expired: boolean }[];
   cashFlow?: { currency: Currency; opening: number; moves: { type: string; amount: number; n: number }[]; expected: number };
@@ -300,11 +300,13 @@ export function DailyClosePage() {
   );
   const handover = isToday ? repCash.filter((r) => taken[r.boxId] ?? true) : [];
   const handedTotal = handover.filter((r) => r.currency === box?.currency).reduce((t, r) => t + r.cash, 0);
-  const expected = box ? Math.round((box.expected + handedTotal) * 100) / 100 : 0;
+  // the server leaves the expected amount out for whoever counts blind; it shows once the day is closed
+  const blind = box?.expected === null;
+  const expected = box?.expected != null ? Math.round((box.expected + handedTotal) * 100) / 100 : 0;
   const leftovers = d?.leftovers ?? [];
   const wasteIds = isToday ? leftovers.filter((b) => trash[b.batchId] ?? b.expired).map((b) => b.batchId) : [];
   const c = num(counted);
-  const diff = box && !Number.isNaN(c) ? Math.round((c - expected) * 100) / 100 : null;
+  const diff = box && !blind && !Number.isNaN(c) ? Math.round((c - expected) * 100) / 100 : null;
   const big = simple;
 
   return (
@@ -391,7 +393,7 @@ export function DailyClosePage() {
               {pick(box)} — {tr("عدّ كل النقد الموجود واكتب المجموع.", "Count all the cash in it and type the total.")}
             </p>
             {d.cashFlow && !simple && <BoxFlow f={d.cashFlow} />}
-            <div className="grid items-end gap-4 sm:grid-cols-3">
+            <div className={`grid items-end gap-4 ${blind ? "" : "sm:grid-cols-3"}`}>
               <div>
                 <span className="label">{tr("المعدود", "Counted")}</span>
                 <div className="flex gap-2">
@@ -404,25 +406,32 @@ export function DailyClosePage() {
                     placeholder="0"
                     aria-label={tr("المعدود", "Counted")}
                   />
-                  <button type="button" className="btn shrink-0 text-good" onClick={() => setCounted(String(expected))} title={tr("عبّي المعدود بنفس المبلغ المتوقع", "Fill in the expected amount as counted")}>
-                    {tr("نفس المتوقع", "Same as expected")}
-                  </button>
+                  {!blind && (
+                    <button type="button" className="btn shrink-0 text-good" onClick={() => setCounted(String(expected))} title={tr("عبّي المعدود بنفس المبلغ المتوقع", "Fill in the expected amount as counted")}>
+                      {tr("نفس المتوقع", "Same as expected")}
+                    </button>
+                  )}
                 </div>
+                {blind && <p className="mt-2 text-sm text-muted">{tr("المبلغ المتوقع والفرق بيبينو بعد ما تقفل اليوم.", "The expected amount and the difference show after you close the day.")}</p>}
               </div>
-              <div>
-                <div className="text-sm text-muted">{tr("المتوقع بالنظام", "Expected by the system")}</div>
-                <div className="num ltr text-2xl font-bold text-start">{money(expected, box.currency, lang)}</div>
-                {handedTotal > 0 && <div className="text-xs text-muted">{tr(`مع ${money(handedTotal, box.currency, lang)} من المندوبين`, `incl. ${money(handedTotal, box.currency, lang)} from delivery`)}</div>}
-              </div>
-              <div>
-                <div className="text-sm text-muted">{tr("الفرق", "Difference")}</div>
-                <div
-                  className={`num ltr text-2xl font-bold text-start ${diff === null ? "text-faint" : Math.abs(diff) < 0.005 ? "text-good" : diff < 0 ? "text-bad" : "text-warn"}`}
-                >
-                  {diff === null ? "—" : `${diff > 0 ? "+" : ""}${money(diff, box.currency, lang)}`}
-                </div>
-                {diff !== null && Math.abs(diff) >= 0.005 && <div className="text-xs text-muted">{diff < 0 ? tr("ناقص من الصندوق", "Short") : tr("زيادة بالصندوق", "Over")}</div>}
-              </div>
+              {!blind && (
+                <>
+                  <div>
+                    <div className="text-sm text-muted">{tr("المتوقع بالنظام", "Expected by the system")}</div>
+                    <div className="num ltr text-2xl font-bold text-start">{money(expected, box.currency, lang)}</div>
+                    {handedTotal > 0 && <div className="text-xs text-muted">{tr(`مع ${money(handedTotal, box.currency, lang)} من المندوبين`, `incl. ${money(handedTotal, box.currency, lang)} from delivery`)}</div>}
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted">{tr("الفرق", "Difference")}</div>
+                    <div
+                      className={`num ltr text-2xl font-bold text-start ${diff === null ? "text-faint" : Math.abs(diff) < 0.005 ? "text-good" : diff < 0 ? "text-bad" : "text-warn"}`}
+                    >
+                      {diff === null ? "—" : `${diff > 0 ? "+" : ""}${money(diff, box.currency, lang)}`}
+                    </div>
+                    {diff !== null && Math.abs(diff) >= 0.005 && <div className="text-xs text-muted">{diff < 0 ? tr("ناقص من الصندوق", "Short") : tr("زيادة بالصندوق", "Over")}</div>}
+                  </div>
+                </>
+              )}
             </div>
           </section>
 

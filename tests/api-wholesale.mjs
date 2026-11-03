@@ -257,7 +257,7 @@ await step("personal withdrawal from the box (owner only)", async () => {
 });
 
 await step("daily close view: box flow, rep settlement, made vs sold", async () => {
-  const dv = ok(await manager("GET", `/days/${TODAY}`));
+  const dv = ok(await admin("GET", `/days/${TODAY}`));
   assert.ok(near(dv.cashFlow.expected, dv.mainBox.expected));
   assert.ok(dv.cashFlow.moves.some((m) => m.type === "withdrawal"));
   const rep = dv.repSettlement.find((r) => r.employeeId === S.rep.id);

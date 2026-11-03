@@ -328,7 +328,7 @@ await step("manager (simple mode): can sell and close, cannot see costs or setti
 await step("daily close: count, record difference, lock the day", async () => {
   ok(await admin("POST", "/money/opening", { boxId: S.main.id, amount: 300 }));
   assert.equal((await admin("POST", "/money/opening", { boxId: S.main.id, amount: 300 })).status, 409);
-  const d = ok(await manager("GET", `/days/${TODAY}`));
+  const d = ok(await admin("GET", `/days/${TODAY}`));
   assert.equal(d.day.status, "open");
   const expected = d.mainBox.expected;
   const closed = ok(await manager("POST", `/days/${TODAY}/close`, { counted: expected - 0.5 }));

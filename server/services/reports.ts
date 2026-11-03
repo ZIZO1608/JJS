@@ -22,6 +22,7 @@ import {
   stockMoves,
   suppliers,
 } from "../db/schema.js";
+import { can, type AuthUser } from "../lib/auth.js";
 import { addDays, addMonths, currentRate, localDate, monthEnd, monthOf, round4, type Q } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { boxBalance, clientBalanceUsd } from "./money.js";
@@ -252,6 +253,17 @@ export function periodReport(tx: Q, from: string, to: string) {
     depreciation: dep.perAsset,
     trials: { given: trialsGiven, converted, rate: trialsGiven ? round4((converted / trialsGiven) * 100) : 0 },
   };
+}
+
+const REPORT_COST_FIELDS = ["netUsd", "internalUse", "withdrawalsUsd", "salariesUsd", "depreciationUsd", "depreciation"];
+const REPORT_PURCHASE_FIELDS = ["purchasesUsd", "purchasesCount"];
+
+/** A period report as this role may read it: profit figures need see_cost, purchases need the purchasing view. */
+export function reportFor<T extends object>(user: AuthUser | undefined, report: T): Partial<T> & { hiddenCosts?: true } {
+  const seeCost = can(user, "costing", "see_cost");
+  const hide = [...(seeCost ? [] : REPORT_COST_FIELDS), ...(can(user, "purchasing", "view") ? [] : REPORT_PURCHASE_FIELDS)];
+  const out = Object.fromEntries(Object.entries(report).filter(([k]) => !hide.includes(k)));
+  return { ...out, ...(seeCost ? {} : { hiddenCosts: true as const }) } as Partial<T> & { hiddenCosts?: true };
 }
 
 /** Clients who owe money, biggest first. */

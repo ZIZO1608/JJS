@@ -15,6 +15,8 @@ const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution"; to?: stri
   { m: "warehouse", ar: "البرّاد، الهدر والجرد", en: "Fridge, waste and counts" },
   { m: "clients", ar: "سجّل دفعة من زبون وشوف رصيده", en: "Record a client's payment and see the balance" },
   { m: "orders", ar: "طلبات اليوم والتوصيل", en: "Today's orders and deliveries" },
+  { m: "expenses", ar: "سجّل مصروف انصرف اليوم", en: "Record money spent today" },
+  { m: "reports", ar: "مبيعات الفترة والمقبوض", en: "Sales and money collected" },
   { m: "daily_close", ar: "عدّ الصندوق واقفل اليوم", en: "Count the cash and lock the day" },
 ];
 
@@ -23,18 +25,19 @@ function SimpleHome() {
   const { can } = useAuth();
   const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.icon === "distribution" ? "edit" : x.to && !x.icon ? "create" : "view"));
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-3">
       {tiles.map((x, i) => (
         <Link
           key={i}
           to={x.to ?? pathFor(x.m)}
-          className={`flex min-h-[132px] flex-col gap-1.5 rounded-2xl border p-5 transition active:scale-[.98] ${
-            i === 0 ? "border-ink bg-ink text-bg sm:col-span-2" : "border-line bg-surface hover:border-ink"
-          }`}
+          className={`flex min-h-[92px] flex-col gap-1 rounded-2xl border p-4 transition active:scale-[.98] sm:min-h-[132px] sm:gap-1.5 sm:p-5 ${
+            i === 0 ? "border-ink bg-ink text-bg" : "border-line bg-surface hover:border-ink"
+          } ${i === 0 || (i === tiles.length - 1 && tiles.length % 2 === 0) ? "col-span-2" : ""}`}
         >
-          <Icon name={x.icon ?? x.m} className="mb-1 h-7 w-7" />
-          <span className="text-xl font-bold">{x.titleAr ? tr(x.titleAr, x.titleEn!) : pick(MODULE_LABEL[x.m])}</span>
-          <span className={`text-sm ${i === 0 ? "opacity-75" : "text-muted"}`}>{pick(x)}</span>
+          <Icon name={x.icon ?? x.m} className="mb-1 h-6 w-6 sm:h-7 sm:w-7" />
+          <span className="text-lg font-bold leading-tight sm:text-xl">{x.titleAr ? tr(x.titleAr, x.titleEn!) : pick(MODULE_LABEL[x.m])}</span>
+          {/* phones: the titles say enough, and every button fits on one screen */}
+          <span className={`text-sm ${i === 0 ? "opacity-75" : "hidden text-muted sm:block"}`}>{pick(x)}</span>
         </Link>
       ))}
     </div>

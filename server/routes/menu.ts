@@ -223,6 +223,7 @@ menuRouter.put(
     const body = parse(productSchema, req.body);
     db.transaction((tx) => {
       saveProduct(tx, id, body, false);
+      if (!can(req.user, "costing", "see_cost")) tx.update(products).set({ extraCostUsd: before.extraCostUsd }).where(eq(products.id, id)).run();
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "product", entityId: id, before: { ...before, photo: "" }, after: { ...body, photo: body.photo ? "(image)" : "" } });
     });
     res.json({ row: productOut(db.select().from(products).where(eq(products.id, id)).get()!) });

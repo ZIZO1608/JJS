@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseLatLng, type LatLng } from "@shared/maps";
 import { LazyMap } from "../../components/LazyMap";
 import { LookupSelect } from "../../components/LookupSelect";
@@ -330,34 +330,42 @@ function LocationField({
 
 /** Money from the client into a box (cash, Sham Cash…): pays debt or tops up the client's box. */
 export function PaymentDialog({ client, onClose, onSaved }: { client: { id: string; name: string; balanceUsd: number }; onClose: () => void; onSaved: () => void }) {
-  const { tr, pick, err, fieldErrors } = useI18n();
+  const { t, tr, pick, err, fieldErrors } = useI18n();
   const toast = useToast();
   const { s } = useAppSettings();
   const methods = useData<{ rows: PaymentMethod[] }>("/money/methods");
+  const fx = useData<{ rate: number | null }>("/fx/current");
+  // The row that opened this dialog can be older than the screen behind it, so ask for the balance again.
+  const fresh = useData<{ client: { balanceUsd: number } }>(`/clients/${client.id}`);
+  const balanceUsd = !fresh.loading && fresh.data ? fresh.data.client.balanceUsd : client.balanceUsd;
   const boxMethods = (methods.data?.rows ?? []).filter((m) => m.kind === "box" && m.active);
-  const owes = client.balanceUsd < -0.009;
-  const [f, setF] = useState({
-    amount: owes ? String(Math.round(-client.balanceUsd * 100) / 100) : "",
-    currency: (s?.defaultCurrency ?? "USD") as Currency,
-    methodId: "",
-    kind: (owes ? "client_payment" : "topup") as "client_payment" | "topup",
-    note: "",
+  const suggested = (usd: number) => ({
+    amount: usd < -0.009 ? String(Math.round(-usd * 100) / 100) : "",
+    kind: (usd < -0.009 ? "client_payment" : "topup") as "client_payment" | "topup",
   });
+  const [f, setF] = useState({ ...suggested(client.balanceUsd), currency: (s?.defaultCurrency ?? "USD") as Currency, methodId: "", note: "" });
+  const edited = useRef(false);
+  useEffect(() => {
+    if (!edited.current) setF((x) => ({ ...x, ...suggested(balanceUsd) }));
+  }, [balanceUsd]);
   const methodId = f.methodId || boxMethods[0]?.id || "";
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const amount = num(f.amount);
+  const noRate = f.currency === "SYP" && !!fx.data && !fx.data.rate;
 
   const save = async () => {
     setSaving(true);
     setErrors({});
+    setFormError("");
     try {
       await post(`/clients/${client.id}/payments`, { ...f, methodId, amount });
       toast(tr("تم تسجيل الدفعة", "Payment recorded"));
       onSaved();
     } catch (e) {
       if (e instanceof ApiError && e.issues) setErrors(fieldErrors(e));
-      else toast(err(e), "error");
+      else setFormError(err(e));
     } finally {
       setSaving(false);
     }
@@ -372,7 +380,7 @@ export function PaymentDialog({ client, onClose, onSaved }: { client: { id: stri
           <button className="btn" onClick={onClose}>
             {tr("إلغاء", "Cancel")}
           </button>
-          <button className="btn btn-primary" onClick={save} disabled={saving || !(amount > 0) || !methodId}>
+          <button className="btn btn-primary" onClick={save} disabled={saving || !(amount > 0) || !methodId || noRate}>
             {saving ? tr("جارٍ الحفظ…", "Saving…") : tr("سجّل الدفعة", "Record payment")}
           </button>
         </>
@@ -380,14 +388,19 @@ export function PaymentDialog({ client, onClose, onSaved }: { client: { id: stri
     >
       <div className="grid gap-3">
         <p className="text-sm text-muted">
-          {tr("الرصيد الحالي:", "Current balance:")} <BalanceText usd={client.balanceUsd} />
+          {tr("الرصيد الحالي:", "Current balance:")} {fresh.loading ? "…" : <BalanceText usd={balanceUsd} />}
         </p>
+        {(noRate || formError) && (
+          <p role="alert" className="rounded-lg bg-bad/10 px-3 py-2 text-sm text-bad">
+            {noRate ? t("errors.no_rate") : formError}
+          </p>
+        )}
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <Field label={tr("المبلغ", "Amount")} htmlFor="p-amount" error={errors.amount}>
-            <TextInput id="p-amount" inputMode="decimal" dir="ltr" className="num text-lg" value={f.amount} onChange={(e) => setF({ ...f, amount: e.target.value })} />
+            <TextInput id="p-amount" inputMode="decimal" dir="ltr" className="num text-lg" value={f.amount} onChange={(e) => ((edited.current = true), setF({ ...f, amount: e.target.value }))} />
           </Field>
           <Field label={tr("العملة", "Currency")} htmlFor="p-cur">
-            <Select id="p-cur" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value as Currency })}>
+            <Select id="p-cur" value={f.currency} onChange={(e) => (setFormError(""), setF({ ...f, currency: e.target.value as Currency }))}>
               <option value="USD">USD $</option>
               <option value="SYP">SYP ل.س</option>
             </Select>
@@ -409,7 +422,7 @@ export function PaymentDialog({ client, onClose, onSaved }: { client: { id: stri
           </div>
         </Field>
         <Field label={tr("نوع الدفعة", "This money is")} htmlFor="p-kind">
-          <Select id="p-kind" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value as "client_payment" | "topup" })}>
+          <Select id="p-kind" value={f.kind} onChange={(e) => ((edited.current = true), setF({ ...f, kind: e.target.value as "client_payment" | "topup" }))}>
             <option value="client_payment">{tr("سداد دين", "Paying their debt")}</option>
             <option value="topup">{tr("شحن رصيد مسبق", "Prepaid top-up")}</option>
           </Select>

@@ -121,7 +121,7 @@ function ExpenseForm({ onSaved, big }: { onSaved: () => void; big?: boolean }) {
         employeeId: f.employeeId || null,
       });
       toast(tr("تم تسجيل المصروف", "Expense saved"));
-      setF({ ...blank(), currency: f.currency, categoryId: f.categoryId });
+      setF({ ...blank(), currency: f.currency });
       itemCats.reload();
       onSaved();
     } catch (e) {

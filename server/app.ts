@@ -4,7 +4,7 @@ import compression from "compression";
 import cookieParser from "cookie-parser";
 import express from "express";
 import { WEB_DIST_DIR } from "./env.js";
-import { sessionMiddleware } from "./lib/auth.js";
+import { hideCosts, sessionMiddleware } from "./lib/auth.js";
 import { clientSessionMiddleware } from "./lib/clientAuth.js";
 import { errorHandler, HttpError } from "./lib/util.js";
 import { auditRouter } from "./routes/audit.js";
@@ -52,6 +52,7 @@ export function createApp() {
   app.use(clientSessionMiddleware);
 
   const api = express.Router();
+  api.use(hideCosts);
   api.get("/health", (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
   api.use("/auth", authRouter);
   api.use("/users", usersRouter);

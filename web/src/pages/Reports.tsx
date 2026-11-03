@@ -481,7 +481,7 @@ export function ReportsPage() {
                 rows={[
                   [tr("المقبوض فعلياً", "Collected"), U(r.collectedUsd ?? 0)],
                   ...(r.unpaid?.length ? ([[tr("لسا على الزبائن (هلق)", "Clients still owe (now)"), U(-r.unpaid.reduce((s, c) => s + c.balanceUsd, 0))]] as [ReactNode, ReactNode][]) : []),
-                  [`${tr("المشتريات", "Purchases")} (${r.purchasesCount ?? 0})`, U(r.purchasesUsd ?? 0)],
+                  ...(r.purchasesUsd !== undefined ? ([[`${tr("المشتريات", "Purchases")} (${r.purchasesCount ?? 0})`, U(r.purchasesUsd)]] as [ReactNode, ReactNode][]) : []),
                   ...((r.dueExpensesUsd ?? 0) > 0 ? ([[tr("مصاريف مستحقة لسا ما اندفعت", "Expenses still due"), U(r.dueExpensesUsd)]] as [ReactNode, ReactNode][]) : []),
                   ...(r.withdrawalsUsd !== undefined ? ([[tr("سحوبات شخصية", "Personal withdrawals"), U(r.withdrawalsUsd)]] as [ReactNode, ReactNode][]) : []),
                   ...(r.internalUse && r.internalUse.costUsd > 0

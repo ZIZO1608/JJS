@@ -134,3 +134,24 @@ export const publicUser = (u: AuthUser) => ({
   role: u.role,
   permissions: [...u.permissions],
 });
+
+/** Fields that reveal what things cost us. A report's wider figures (net profit…) go in reportFor: payslips use the same names. */
+const COST_FIELDS = new Set(["costUsd", "unitCostUsd", "avgCostUsd", "valueUsd", "extraCostUsd", "extraCost", "oldCostUsd", "newCostUsd", "stockValueUsd", "profitUsd", "grossProfitUsd", "operatingProfitUsd", "marginPct"]);
+
+function withoutCosts(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(withoutCosts);
+  if (v === null || typeof v !== "object" || Object.getPrototypeOf(v) !== Object.prototype) return v;
+  return Object.fromEntries(
+    Object.entries(v)
+      .filter(([k]) => !COST_FIELDS.has(k))
+      .map(([k, x]) => [k, withoutCosts(x)]),
+  );
+}
+
+/** Every JSON answer loses its cost fields unless the role may see costs, so a new endpoint cannot leak them by accident. */
+export function hideCosts(req: Request, res: Response, next: NextFunction) {
+  if (can(req.user, "costing", "see_cost")) return next();
+  const json = res.json.bind(res);
+  res.json = (body) => json(withoutCosts(body));
+  next();
+}
