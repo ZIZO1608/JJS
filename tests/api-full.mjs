@@ -74,13 +74,13 @@ await step("payment methods, boxes, tiers and staff exist", async () => {
 
 await step("SYP order is refused until an exchange rate is set", async () => {
   ok(await admin("PUT", "/settings/currency", { defaultCurrency: "SYP" }));
-  const r = await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 1 }] });
+  const r = await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 5 }] });
   assert.equal(r.status, 409);
   assert.equal(r.json.error, "no_rate");
   ok(await admin("PUT", "/fx/manual", { rate: 115 }));
-  const q = ok(await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 1 }] }));
+  const q = ok(await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 5 }] }));
   assert.equal(q.currency, "SYP");
-  assert.equal(q.total, 288); // 2.50 × 115 = 287.5 → rounded to whole pounds
+  assert.equal(q.total, 1440); // 2.50 × 115 = 287.5 → 288 in whole pounds, × 5
   ok(await admin("PUT", "/settings/currency", { defaultCurrency: "USD" }));
 });
 
@@ -100,7 +100,7 @@ await step("make 10 Turkey & Cheddar: ingredients out, fridge batch in", async (
   assert.equal(scan.batch.status === "fresh" || scan.batch.status === "soon" || scan.batch.status === "today", true);
 });
 
-await step("order 1: Focus (favourite 10%), 8 TC + 2 TC double filling, cash, delivered by rep", async () => {
+await step("order 1: Focus (favourite 10%), 5 TC + 5 TC double filling, cash, delivered by rep", async () => {
   const r = ok(
     await admin("POST", "/orders", {
       clientId: S.clients["Focus Study Zone"].id,
@@ -108,31 +108,31 @@ await step("order 1: Focus (favourite 10%), 8 TC + 2 TC double filling, cash, de
       assignedTo: S.reps[0].id,
       methodId: S.methods.cash.id,
       lines: [
-        { productId: S.products.TC.id, qty: 8, optionIds: [] },
-        { productId: S.products.TC.id, qty: 2, optionIds: [S.double.id] },
+        { productId: S.products.TC.id, qty: 5, optionIds: [] },
+        { productId: S.products.TC.id, qty: 5, optionIds: [S.double.id] },
       ],
     }),
     201,
   );
-  // subtotal 8×2.5 + 2×3.5 = 27; tier 10% → 24.30
-  assert.equal(r.receipt.order.subtotal, 27);
-  assert.equal(r.receipt.order.total, 24.3);
+  // subtotal 5×2.5 + 5×3.5 = 30; tier 10% → 27
+  assert.equal(r.receipt.order.subtotal, 30);
+  assert.equal(r.receipt.order.total, 27);
   assert.match(r.receipt.order.discountReason, /tier:10%/);
   S.order1 = r;
   const scan = ok(await admin("GET", `/stock/scan/${S.tcBatch.batchCode}`));
   assert.equal(scan.batch.qtyLeft, 0, "all 10 came from the fridge batch first (FIFO)");
   const rep = ok(await admin("GET", "/money/boxes")).rows.find((b) => b.id === S.repBox.id);
-  assert.ok(near(rep.balance, 24.3), "cash on delivery is held by the delivery person");
+  assert.ok(near(rep.balance, 27), "cash on delivery is held by the delivery person");
 });
 
 await step("order 2: Bean & Book on credit (no fridge stock → made fresh)", async () => {
   const before = ok(await admin("GET", "/stock/items")).rows.find((i) => i.id === S.breadItem.id).qty;
-  const r = ok(await admin("POST", "/orders", { clientId: S.clients["Bean & Book Café"].id, methodId: S.methods.credit.id, lines: [{ productId: S.products.CLUB.id, qty: 6, optionIds: [] }, { productId: S.products.LEMON.id, qty: 2, optionIds: [] }] }), 201);
-  assert.equal(r.receipt.order.total, 20); // 6×3 + 2×1
+  const r = ok(await admin("POST", "/orders", { clientId: S.clients["Bean & Book Café"].id, methodId: S.methods.credit.id, lines: [{ productId: S.products.CLUB.id, qty: 5, optionIds: [] }, { productId: S.products.LEMON.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal(r.receipt.order.total, 20); // 5×3 + 5×1
   assert.equal(r.receipt.order.paymentStatus, "credit");
   assert.ok(near(r.receipt.client.balanceUsd, -20));
   const after = ok(await admin("GET", "/stock/items")).rows.find((i) => i.id === S.breadItem.id).qty;
-  assert.equal(before - after, 6, "6 breads used for 6 fresh clubs");
+  assert.equal(before - after, 5, "5 breads used for 5 fresh clubs");
   S.order2 = r;
 });
 
@@ -143,16 +143,16 @@ await step("credit limit blocks Bean & Book (limit $100, block on)", async () =>
 });
 
 await step("credit needs a client; walk-in pays Sham Cash", async () => {
-  const bad = await admin("POST", "/orders", { methodId: S.methods.credit.id, lines: [{ productId: S.products.HAL.id, qty: 1, optionIds: [] }] });
+  const bad = await admin("POST", "/orders", { methodId: S.methods.credit.id, lines: [{ productId: S.products.HAL.id, qty: 5, optionIds: [] }] });
   assert.equal(bad.status, 400);
-  const r = ok(await admin("POST", "/orders", { methodId: S.methods.sham.id, lines: [{ productId: S.products.HAL.id, qty: 1, optionIds: [] }] }), 201);
-  assert.equal(r.receipt.order.total, 2.25);
+  const r = ok(await admin("POST", "/orders", { methodId: S.methods.sham.id, lines: [{ productId: S.products.HAL.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal(r.receipt.order.total, 11.25);
 });
 
 await step("free trial for a new prospect, then conversion on first paid order", async () => {
   const c = ok(await admin("POST", "/clients", { type: "business", name: "New Coworking", creditLimitUsd: 50 }), 201).row;
   S.newClient = c;
-  const t = ok(await admin("POST", "/orders", { clientId: c.id, type: "trial", fulfilment: "delivery", assignedTo: S.reps[0].id, lines: [{ productId: S.products.PESTO.id, qty: 3, optionIds: [] }] }), 201);
+  const t = ok(await admin("POST", "/orders", { clientId: c.id, type: "trial", fulfilment: "delivery", assignedTo: S.reps[0].id, lines: [{ productId: S.products.PESTO.id, qty: 5, optionIds: [] }] }), 201);
   assert.equal(t.receipt.order.total, 0);
   assert.equal(t.receipt.order.paymentStatus, "free");
   ok(await admin("POST", "/orders", { clientId: c.id, methodId: S.methods.cash.id, lines: [{ productId: S.products.PESTO.id, qty: 5, optionIds: [] }] }), 201);
@@ -163,7 +163,7 @@ await step("free trial for a new prospect, then conversion on first paid order",
 
 await step("add-on rules: an add-on from another category is refused", async () => {
   const ice = S.groups.flatMap((g) => g.options).find((o) => o.nameEn === "Extra ice");
-  const r = await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 1, optionIds: [ice.id] }] });
+  const r = await admin("POST", "/orders/quote", { lines: [{ productId: S.products.TC.id, qty: 5, optionIds: [ice.id] }] });
   assert.equal(r.status, 400);
 });
 
@@ -173,11 +173,11 @@ await step("subscription: plan charged to the box, included items free", async (
   ok(await admin("POST", `/clients/${lina.id}/subscribe`, { planId: plan.id }), 201);
   let d = ok(await admin("GET", `/clients/${lina.id}`));
   assert.ok(near(d.client.balanceUsd, -45), "monthly fee charged");
-  const r = ok(await admin("POST", "/orders", { clientId: lina.id, methodId: S.methods.credit.id, lines: [{ productId: S.products.GREEK.id, qty: 2, optionIds: [] }] }), 201);
-  assert.equal(r.receipt.order.total, 0, "2 included items are free");
-  assert.equal(r.receipt.order.subFree, 2);
+  const r = ok(await admin("POST", "/orders", { clientId: lina.id, methodId: S.methods.credit.id, lines: [{ productId: S.products.GREEK.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal(r.receipt.order.total, 0, "5 included items are free");
+  assert.equal(r.receipt.order.subFree, 5);
   d = ok(await admin("GET", `/clients/${lina.id}`));
-  assert.equal(d.client.subscription.availableIncluded, 18);
+  assert.equal(d.client.subscription.availableIncluded, 15);
   ok(await admin("POST", `/clients/${lina.id}/payments`, { amount: 45, currency: "USD", methodId: S.methods.sham.id }), 201);
   d = ok(await admin("GET", `/clients/${lina.id}`));
   assert.ok(near(d.client.balanceUsd, 0));
@@ -187,10 +187,10 @@ await step("loyalty: buy 100 in a month → 5 free on the next order", async () 
   ok(await admin("PUT", "/system/settings/loyalty", { enabled: true, buyQty: 10, freeQty: 1 }));
   const corner = S.clients["Corner Market"];
   ok(await admin("POST", "/orders", { clientId: corner.id, methodId: S.methods.cash.id, useLoyalty: false, lines: [{ productId: S.products.HAL.id, qty: 10, optionIds: [] }] }), 201);
-  const q = ok(await admin("POST", "/orders/quote", { clientId: corner.id, methodId: S.methods.cash.id, lines: [{ productId: S.products.HAL.id, qty: 2, optionIds: [] }] }));
+  const q = ok(await admin("POST", "/orders/quote", { clientId: corner.id, methodId: S.methods.cash.id, lines: [{ productId: S.products.HAL.id, qty: 5, optionIds: [] }] }));
   assert.equal(q.loyaltyFree, 1);
-  assert.equal(q.total, 2.25);
-  const r = ok(await admin("POST", "/orders", { clientId: corner.id, methodId: S.methods.cash.id, lines: [{ productId: S.products.HAL.id, qty: 2, optionIds: [] }] }), 201);
+  assert.equal(q.total, 9);
+  const r = ok(await admin("POST", "/orders", { clientId: corner.id, methodId: S.methods.cash.id, lines: [{ productId: S.products.HAL.id, qty: 5, optionIds: [] }] }), 201);
   assert.equal(r.receipt.loyalty.redeemed, 1);
   assert.equal(r.receipt.loyalty.available, 0);
   ok(await admin("PUT", "/system/settings/loyalty", { enabled: true, buyQty: 100, freeQty: 5 }));
@@ -198,17 +198,17 @@ await step("loyalty: buy 100 in a month → 5 free on the next order", async () 
 
 await step("taxes: 5% added after discount", async () => {
   const t = ok(await admin("POST", "/taxes", { nameAr: "ضريبة", nameEn: "Tax", kind: "percent", value: 5 }), 201).tax;
-  const q = ok(await admin("POST", "/orders/quote", { clientId: S.clients["Focus Study Zone"].id, methodId: S.methods.cash.id, lines: [{ productId: S.products.TC.id, qty: 4, optionIds: [] }] }));
-  // 10 − 10% = 9 ; tax 0.45 ; total 9.45
-  assert.equal(q.taxTotal, 0.45);
-  assert.equal(q.total, 9.45);
+  const q = ok(await admin("POST", "/orders/quote", { clientId: S.clients["Focus Study Zone"].id, methodId: S.methods.cash.id, lines: [{ productId: S.products.TC.id, qty: 5, optionIds: [] }] }));
+  // 12.50 − 10% = 11.25 ; tax 0.56 ; total 11.81
+  assert.equal(q.taxTotal, 0.56);
+  assert.equal(q.total, 11.81);
   ok(await admin("DELETE", `/taxes/${t.id}`));
 });
 
 await step("staff purchase with 30% off, deducted from salary", async () => {
   const emp = S.employees[0];
-  const r = ok(await admin("POST", "/orders", { type: "staff", employeeId: emp.id, methodId: S.methods.salary.id, lines: [{ productId: S.products.BEEF.id, qty: 1, optionIds: [] }] }), 201);
-  assert.equal(r.receipt.order.total, 2.27); // discount 0.975 → 0.98, so 3.25 − 0.98
+  const r = ok(await admin("POST", "/orders", { type: "staff", employeeId: emp.id, methodId: S.methods.salary.id, lines: [{ productId: S.products.BEEF.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal(r.receipt.order.total, 11.37); // discount 4.875 → 4.88, so 16.25 − 4.88
   assert.equal(r.receipt.order.paymentStatus, "salary");
 });
 
@@ -288,16 +288,16 @@ await step("advance and payroll preview: base + commission − advance − staff
   const row = p.rows.find((r) => r.employeeId === emp.id);
   assert.equal(row.baseUsd, 150);
   assert.equal(row.convertedClients, 1);
-  // commission: 3% of delivered sales (24.30, the trial is excluded) + $5 per converted client
-  assert.ok(near(row.commissionUsd, 24.3 * 0.03 + 5), `commission ${row.commissionUsd}`);
-  assert.equal(row.staffPurchasesUsd, 2.27);
+  // commission: 3% of delivered sales (27, the trial is excluded) + $5 per converted client
+  assert.ok(near(row.commissionUsd, 27 * 0.03 + 5), `commission ${row.commissionUsd}`);
+  assert.equal(row.staffPurchasesUsd, 11.37);
   assert.equal(row.advancesUsd, 20);
-  assert.ok(near(row.netUsd, 150 + 24.3 * 0.03 + 5 - 2.27 - 20));
+  assert.ok(near(row.netUsd, 150 + 27 * 0.03 + 5 - 11.37 - 20));
 });
 
 await step("delivery person hands over cash", async () => {
   const r = ok(await admin("POST", "/money/handover", { boxId: S.repBox.id }));
-  assert.ok(near(r.amount, 24.3 + 0)); // order 1 cash; trial was free
+  assert.ok(near(r.amount, 27 + 0)); // order 1 cash; trial was free
 });
 
 await step("manager (simple mode): can sell and close, cannot see costs or settings", async () => {
@@ -309,12 +309,12 @@ await step("manager (simple mode): can sell and close, cannot see costs or setti
   assert.equal((await manager("GET", "/costing/products")).status, 403);
   assert.equal((await manager("GET", "/reports/dashboard")).status, 403);
   assert.equal((await manager("PUT", "/system/settings/loyalty", { enabled: false, buyQty: 1, freeQty: 1 })).status, 403);
-  ok(await manager("POST", "/orders", { methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] }), 201);
+  ok(await manager("POST", "/orders", { methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 5, optionIds: [] }] }), 201);
   const rep = ok(await manager("GET", "/reports/range"));
   assert.equal(rep.hiddenCosts, true);
   assert.equal(rep.costUsd, undefined);
-  assert.equal((await manager("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] })).status, 201, "manager has orders:edit → may discount");
-  assert.equal((await member("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] })).status, 403, "member may not discount");
+  assert.equal((await manager("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 5, optionIds: [] }] })).status, 201, "manager has orders:edit → may discount");
+  assert.equal((await member("POST", "/orders", { manualDiscountPct: 50, methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 5, optionIds: [] }] })).status, 403, "member may not discount");
   // members are "orders only": they pick clients inside an order and may cancel orders, nothing else
   assert.equal((await member("GET", "/clients")).status, 200, "members pick the client in the order screen");
   assert.equal((await member("POST", "/orders/x/cancel")).status, 404, "members may cancel orders");
@@ -334,7 +334,7 @@ await step("daily close: count, record difference, lock the day", async () => {
   const closed = ok(await manager("POST", `/days/${TODAY}/close`, { counted: expected - 0.5 }));
   assert.equal(closed.day.status, "closed");
   assert.ok(near(closed.day.totals.cash.difference, -0.5));
-  const blocked = await manager("POST", "/orders", { methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 1, optionIds: [] }] });
+  const blocked = await manager("POST", "/orders", { methodId: S.methods.cash.id, lines: [{ productId: S.products.LEMON.id, qty: 5, optionIds: [] }] });
   assert.equal(blocked.status, 409);
   assert.equal(blocked.json.error, "day_closed");
   assert.equal((await manager("POST", `/days/${TODAY}/reopen`)).status, 403, "only admin reopens");

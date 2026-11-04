@@ -1,7 +1,8 @@
+import { toOrderQty } from "@shared/orderQty";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Stat, Tabs } from "../../components/Tabs";
-import { ConfirmDialog, Empty, Field, Modal, PageHeader, Select, Spinner, TextInput } from "../../components/ui";
+import { ConfirmDialog, Empty, Field, Modal, PageHeader, QtySelect, Select, Spinner, TextInput } from "../../components/ui";
 import { del, get, post, put } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
 import { money, monthStartOf, num, today, type Currency } from "../../lib/format";
@@ -635,7 +636,7 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
   const products = catalog.products.filter((p) => p.active);
   const [days, setDays] = useState<number[]>(rec ? rec.days.split(",").map(Number) : [0, 1, 2, 3, 4]);
   const [lines, setLines] = useState<{ productId: string; qty: string; optionIds: string[] }[]>(
-    rec ? rec.lines.map((l) => ({ ...l, qty: String(l.qty) })) : [{ productId: products[0]?.id ?? "", qty: "10", optionIds: [] }],
+    rec ? rec.lines.map((l) => ({ ...l, qty: String(toOrderQty(l.qty)) })) : [{ productId: products[0]?.id ?? "", qty: "10", optionIds: [] }],
   );
   const [note, setNote] = useState(rec?.note ?? "");
   const [active, setActive] = useState(rec?.active ?? true);
@@ -701,14 +702,7 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
                     </option>
                   ))}
                 </Select>
-                <input
-                  className="input w-24 num"
-                  dir="ltr"
-                  inputMode="numeric"
-                  value={l.qty}
-                  onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
-                  aria-label={tr("الكمية", "Quantity")}
-                />
+                <QtySelect value={Number(l.qty)} onChange={(q) => setLines(lines.map((x, j) => (j === i ? { ...x, qty: String(q) } : x)))} className="!w-24 shrink-0" />
                 <button
                   className="btn btn-ghost btn-danger px-2"
                   onClick={() => setLines(lines.filter((_, j) => j !== i))}
@@ -720,7 +714,7 @@ function RecurringDialog({ clientId, rec, catalog, onClose, onSaved }: { clientI
               </div>
             ))}
           </div>
-          <button className="btn btn-ghost mt-2 text-sm" onClick={() => setLines([...lines, { productId: products[0]?.id ?? "", qty: "1", optionIds: [] }])}>
+          <button className="btn btn-ghost mt-2 text-sm" onClick={() => setLines([...lines, { productId: products[0]?.id ?? "", qty: "5", optionIds: [] }])}>
             {tr("+ صنف", "+ Item")}
           </button>
         </div>

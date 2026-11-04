@@ -172,7 +172,7 @@ await step("return on an invoice: 2 back to the fridge, the shop is credited", a
 });
 
 await step("walk-in return: refund from the cash box", async () => {
-  const o = ok(await admin("POST", "/orders", { methodId: S.m.cash.id, lines: [{ productId: S.p.HAL.id, qty: 2, optionIds: [] }] }), 201);
+  const o = ok(await admin("POST", "/orders", { methodId: S.m.cash.id, lines: [{ productId: S.p.HAL.id, qty: 5, optionIds: [] }] }), 201);
   const before = ok(await admin("GET", "/money/boxes")).rows.find((b) => b.id === S.main.id).balance;
   ok(await admin("POST", "/returns", { orderId: o.id, settlement: "refund", boxId: S.main.id, lines: [{ productId: S.p.HAL.id, qty: 1, action: "waste" }] }), 201);
   const after = ok(await admin("GET", "/money/boxes")).rows.find((b) => b.id === S.main.id).balance;
@@ -180,7 +180,7 @@ await step("walk-in return: refund from the cash box", async () => {
 });
 
 await step("tasting / internal use: no money, cost recorded", async () => {
-  const r = ok(await admin("POST", "/orders", { type: "internal", note: "tasting new sauce", lines: [{ productId: S.p.PESTO.id, qty: 2, optionIds: [] }] }), 201);
+  const r = ok(await admin("POST", "/orders", { type: "internal", note: "tasting new sauce", lines: [{ productId: S.p.PESTO.id, qty: 5, optionIds: [] }] }), 201);
   assert.equal(r.receipt.order.total, 0);
   assert.equal(r.receipt.order.paymentStatus, "free");
   ok(await admin("POST", "/stock/use", { itemId: S.items["Cucumber"].id, qty: 0.2, note: "staff salad" }));

@@ -36,8 +36,18 @@ const daysBetween = (a: string, b: string) => Math.round((new Date(`${b}T12:00:0
  */
 export function clientAging(tx: Q, clientId: string, today = localDate()) {
   const c = tx.select().from(clients).where(eq(clients.id, clientId)).get();
+  const open = openClientCharges(tx, clientId);
+  const balanceUsd = clientBalanceUsd(tx, clientId);
+  const oldest = open[0]?.date ?? null;
+  const days = oldest ? daysBetween(oldest, today) : 0;
+  const terms = c?.paymentTermsDays ?? 0;
+  return { balanceUsd, oldestUnpaidDate: oldest, daysOutstanding: days, termsDays: terms, overdueDays: oldest && balanceUsd < -0.009 ? Math.max(0, days - terms) : 0 };
+}
+
+/** The charges a client has not paid yet, oldest first, with what is left of each. They add up to what the client owes. */
+export function openClientCharges(tx: Q, clientId: string) {
   const moves = tx.select().from(clientMoves).where(and(eq(clientMoves.clientId, clientId), isNull(clientMoves.deletedAt))).orderBy(asc(clientMoves.createdAt)).all();
-  const open: { date: string; usd: number }[] = [];
+  const open: { id: string; date: string; at: string; type: string; orderId: string | null; note: string; usd: number }[] = [];
   let credit = 0;
   for (const m of moves) {
     if (m.amountUsd < 0) {
@@ -45,7 +55,7 @@ export function clientAging(tx: Q, clientId: string, today = localDate()) {
       const use = Math.min(credit, owed);
       credit -= use;
       owed -= use;
-      if (owed > 0.0001) open.push({ date: m.businessDate, usd: owed });
+      if (owed > 0.0001) open.push({ id: m.id, date: m.businessDate, at: m.createdAt, type: m.type, orderId: m.orderId, note: m.note, usd: owed });
     } else {
       let pay = m.amountUsd;
       while (pay > 0.0001 && open.length) {
@@ -58,11 +68,7 @@ export function clientAging(tx: Q, clientId: string, today = localDate()) {
       credit += pay;
     }
   }
-  const balanceUsd = clientBalanceUsd(tx, clientId);
-  const oldest = open[0]?.date ?? null;
-  const days = oldest ? daysBetween(oldest, today) : 0;
-  const terms = c?.paymentTermsDays ?? 0;
-  return { balanceUsd, oldestUnpaidDate: oldest, daysOutstanding: days, termsDays: terms, overdueDays: oldest && balanceUsd < -0.009 ? Math.max(0, days - terms) : 0 };
+  return open;
 }
 
 /* =====================================================================
@@ -290,7 +296,7 @@ export function supplierDue(tx: Q, supplierId: string, today = localDate()) {
       const dueDate = p.dueDate ?? (s?.paymentTermsDays ? addDaysStr(p.date, s.paymentTermsDays) : p.date);
       const late = dueDate < today;
       if (late) overdueUsd += dueUsd;
-      return { id: p.id, number: p.number, date: p.date, supplierRef: p.supplierRef, currency: p.currency, total: p.total, paid: p.paid, due: round4(p.total - p.paid), dueUsd, dueDate, late };
+      return { id: p.id, number: p.number, date: p.date, createdAt: p.createdAt, supplierRef: p.supplierRef, currency: p.currency, total: p.total, paid: p.paid, due: round4(p.total - p.paid), dueUsd, dueDate, late };
     });
   return { openingDueUsd, purchasesDueUsd: round4(purchasesDueUsd), totalDueUsd: round4(openingDueUsd + purchasesDueUsd), overdueUsd: round4(overdueUsd), open };
 }

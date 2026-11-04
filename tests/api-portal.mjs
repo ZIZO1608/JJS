@@ -102,11 +102,11 @@ await step("home and menu show the client's data, never costs", async () => {
 
 await step("quote, then send a request: staff are notified, no stock or money moves", async () => {
   S.balanceBefore = ok(await admin("GET", `/clients/${S.sara.id}`)).client.balanceUsd;
-  const q = ok(await sara("POST", "/portal/quote", { fulfilment: "pickup", lines: [{ productId: S.p.TC.id, qty: 2, optionIds: [] }] }));
+  const q = ok(await sara("POST", "/portal/quote", { fulfilment: "pickup", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }));
   assert.ok(q.total > 0);
   assert.equal(q.costUsd, undefined);
   const before = ok(await admin("GET", "/notifications/unread-count")).unread;
-  const r = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "بدون بصل", lines: [{ productId: S.p.TC.id, qty: 2, optionIds: [] }] }), 201);
+  const r = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "بدون بصل", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   S.req1 = r;
   assert.equal(r.number, 1);
   assert.equal(ok(await admin("GET", "/notifications/unread-count")).unread, before + 1);
@@ -119,6 +119,25 @@ await step("quote, then send a request: staff are notified, no stock or money mo
   assert.equal(ok(await admin("GET", `/orders?clientId=${S.sara.id}`)).rows.length, 0);
 });
 
+await step("orders come in fives: 6 is refused for clients and staff, standing orders too", async () => {
+  const line = (qty) => [{ productId: S.p.TC.id, qty, optionIds: [] }];
+  const requests = ok(await admin("GET", "/requests/counts")).orders;
+  for (const qty of [1, 4, 6, 12, 1005]) {
+    for (const r of [
+      await sara("POST", "/portal/quote", { fulfilment: "pickup", lines: line(qty) }),
+      await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: line(qty) }),
+      await admin("POST", "/orders/quote", { lines: line(qty) }),
+      await admin("POST", "/orders", { lines: line(qty) }),
+      await admin("POST", `/clients/${S.sara.id}/recurring`, { days: [1], lines: line(qty) }),
+    ]) {
+      assert.equal(r.status, 400, `qty ${qty}`);
+      if (qty <= 1000) assert.equal(r.json.error, "invalid_qty");
+    }
+  }
+  assert.equal(ok(await admin("GET", "/requests/counts")).orders, requests, "nothing was sent");
+  for (const qty of [5, 10, 1000]) ok(await sara("POST", "/portal/quote", { fulfilment: "pickup", lines: line(qty) }));
+});
+
 await step("another client cannot read or cancel Sara's request", async () => {
   assert.equal((await other("GET", `/portal/order-requests/${S.req1.id}`)).status, 404);
   assert.equal((await other("POST", `/portal/order-requests/${S.req1.id}/cancel`)).status, 404);
@@ -128,7 +147,7 @@ await step("another client cannot read or cancel Sara's request", async () => {
 await step("manager accepts: a real portal order on the client's account, client notified", async () => {
   const list = ok(await manager("GET", "/requests/orders?status=pending")).rows;
   assert.equal(list.length, 1);
-  assert.equal(list[0].lines[0].qty, 2);
+  assert.equal(list[0].lines[0].qty, 5);
   const r = ok(await manager("POST", `/requests/orders/${S.req1.id}/accept`));
   S.order1 = r.orderId;
   const o = ok(await admin("GET", `/orders/${r.orderId}`)).order;
@@ -163,33 +182,33 @@ await step("delivered → client notified", async () => {
 });
 
 await step("pay on delivery: noted on the order; decline with a reason; client cancels a waiting one", async () => {
-  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "delivery", paymentChoice: "on_delivery", lines: [{ productId: S.p.TC.id, qty: 1, optionIds: [] }] }), 201);
+  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "delivery", paymentChoice: "on_delivery", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   const r = ok(await admin("POST", `/requests/orders/${a.id}/accept`));
   const o = ok(await admin("GET", `/orders/${r.orderId}`)).order;
   assert.match(o.note, /Pay on delivery/);
   assert.equal(o.fulfilment, "delivery");
 
-  const b = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 3, optionIds: [] }] }), 201);
+  const b = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   assert.equal((await manager("POST", `/requests/orders/${b.id}/decline`, { reason: "x" })).status, 400);
   ok(await manager("POST", `/requests/orders/${b.id}/decline`, { reason: "Sold out today" }));
   const n = ok(await sara("GET", "/portal/notifications")).rows.find((x) => x.kind === "order_declined");
   assert.equal(n.bodyEn, "Sold out today");
   assert.equal(ok(await sara("GET", `/portal/order-requests/${b.id}`)).request.declineReason, "Sold out today");
 
-  const c = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 1, optionIds: [] }] }), 201);
+  const c = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   ok(await sara("POST", `/portal/order-requests/${c.id}/cancel`));
   assert.equal((await admin("POST", `/requests/orders/${c.id}/accept`)).status, 409);
 });
 
 await step("member cannot accept or decline", async () => {
-  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 1, optionIds: [] }] }), 201);
+  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   assert.equal((await member("POST", `/requests/orders/${a.id}/accept`)).status, 403);
   assert.equal((await member("POST", `/requests/orders/${a.id}/decline`, { reason: "nope" })).status, 403);
   ok(await admin("POST", `/requests/orders/${a.id}/decline`, { reason: "Test cleanup" }));
 });
 
 await step("staff cancel of a portal order → client notified", async () => {
-  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 1, optionIds: [] }] }), 201);
+  const a = ok(await sara("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   const r = ok(await admin("POST", `/requests/orders/${a.id}/accept`));
   ok(await admin("POST", `/orders/${r.orderId}/cancel`, { reason: "Kitchen closed" }));
   assert.ok(ok(await sara("GET", "/portal/notifications")).rows.some((x) => x.kind === "order_cancelled" && x.bodyEn === "Kitchen closed"));

@@ -64,7 +64,7 @@ await step("a payment in SYP without a rate is refused with a code the screen ca
 await step("the manager's answers carry no cost field, the admin's still do", async () => {
   ok(await admin("PUT", "/fx/manual", { rate: 13000 }));
   ok(await admin("POST", "/money/opening", { boxId: S.main.id, amount: 100 }));
-  const order = ok(await manager("POST", "/orders", { clientId: S.client.id, methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 2, optionIds: [] }] }), 201);
+  const order = ok(await manager("POST", "/orders", { clientId: S.client.id, methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 5, optionIds: [] }] }), 201);
   S.order = order;
   assert.deepEqual(costKeys(order), [], "the new order's receipt");
   const made = ok(await manager("POST", "/stock/produce", { productId: S.p.LEMON.id, qty: 1 }), 201);

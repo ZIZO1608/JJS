@@ -10,7 +10,7 @@ import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
-import { cancelOrder, createOrder, priceOrder } from "../services/orders.js";
+import { assertOrderQtys, cancelOrder, createOrder, priceOrder } from "../services/orders.js";
 import { notifyOrderStatus } from "../services/portal.js";
 
 export const ordersRouter = Router();
@@ -68,6 +68,7 @@ ordersRouter.post(
   h((req, res) => {
     const body = parse(inputSchema, req.body);
     if (!body.lines.length) return res.json({ empty: true });
+    assertOrderQtys(body.lines);
     res.json(db.transaction((tx) => priceOrder(tx, body)));
   }),
 );
@@ -77,6 +78,7 @@ ordersRouter.post(
   requirePerm("orders", "create"),
   h((req, res) => {
     const body = parse(inputSchema, req.body);
+    assertOrderQtys(body.lines);
     if (body.manualDiscountPct && !req.user!.permissions.has("orders:edit")) throw new HttpError(403, "forbidden", "Your role cannot give a manual discount.");
     const out = db.transaction((tx) => {
       const r = createOrder(tx, body, req.user!.id);

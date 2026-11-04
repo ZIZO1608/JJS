@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, isNull, lte, ne, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte, ne, sql } from "drizzle-orm";
 import {
   assets,
   batches,
@@ -27,7 +27,7 @@ import { addDays, addMonths, currentRate, localDate, monthEnd, monthOf, round4, 
 import { getSetting } from "../lib/settings.js";
 import { boxBalance, clientBalanceUsd } from "./money.js";
 import { itemQty, recipeOf } from "./stock.js";
-import { clientAging, consignmentOpenValueUsd, supplierDue } from "./wholesale.js";
+import { clientAging, consignmentOpenValueUsd, openClientCharges, supplierDue } from "./wholesale.js";
 
 const liveOrders = (from: string, to: string) => and(gte(orders.businessDate, from), lte(orders.businessDate, to), ne(orders.status, "cancelled"), isNull(orders.deletedAt));
 
@@ -588,6 +588,116 @@ export function allMyMoney(tx: Q) {
     dueExpensesUsd,
     totalUsd: round4(cashUsd + clientsOweUsd + goodsAtShopsUsd - weOweUsd - dueExpensesUsd),
   };
+}
+
+export const MONEY_SECTIONS = ["boxes", "clients", "goods", "suppliers", "expenses"] as const;
+export type MoneySection = (typeof MONEY_SECTIONS)[number];
+const BOX_DETAIL_ROWS = 50;
+
+type MoneyDetail = {
+  id: string;
+  who: string | null;
+  kind: string;
+  number: number | null;
+  note: string;
+  at: string | null;
+  amount: number;
+  currency: "USD" | "SYP";
+  nameAr?: string | null;
+  nameEn?: string | null;
+  by?: string | null;
+};
+
+/** Newest money moves of the boxes shown in the cloud, each with the person it came from or went to. */
+function boxMoneyDetails(tx: Q) {
+  const liveBox = sql`b.deleted_at is null and b.active = 1 and m.deleted_at is null`;
+  const total = tx.get<{ n: number }>(sql`select count(*) as n from box_moves m join cash_boxes b on b.id = m.box_id where ${liveBox}`)?.n ?? 0;
+  const rows = tx.all<{ id: string; type: string; ref_type: string | null; note: string; created_at: string; amount: number; currency: "USD" | "SYP"; name_ar: string; name_en: string; by_name: string | null; who: string | null; number: number | null; payment_note: string | null }>(
+    sql`select m.id, m.type, m.ref_type, m.note, m.created_at, m.amount, m.currency, b.name_ar, b.name_en, u.name as by_name,
+               coalesce(oc.name, pc.name, rc.name, s.name, nullif(e.beneficiary,'')) as who,
+               coalesce(o.number, pu.number, r.number) as number, p.note as payment_note
+        from box_moves m
+        join cash_boxes b on b.id = m.box_id
+        left join users u on u.id = m.user_id
+        left join orders o on m.ref_type in ('order','order_cancel') and o.id = m.ref_id
+        left join clients oc on oc.id = o.client_id
+        left join payments p on m.ref_type = 'payment' and p.id = m.ref_id
+        left join clients pc on pc.id = p.client_id
+        left join returns r on m.ref_type = 'return' and r.id = m.ref_id
+        left join clients rc on rc.id = r.client_id
+        left join expenses e on m.ref_type = 'expense' and e.id = m.ref_id
+        left join purchases pu on m.ref_type = 'purchase' and pu.id = m.ref_id
+        left join suppliers s on s.id = case when m.ref_type = 'supplier' then m.ref_id else pu.supplier_id end
+        where ${liveBox}
+        order by m.created_at desc, m.id desc
+        limit ${BOX_DETAIL_ROWS}`,
+  );
+  const details = rows.map((m): MoneyDetail => {
+    // These notes only repeat the order number or the name that the row already shows.
+    const repeats = m.ref_type === "order" || m.ref_type === "order_cancel" || m.ref_type === "purchase" || m.note === `Payment to ${m.who}`;
+    const note = m.ref_type === "payment" ? (m.payment_note ?? "") : repeats ? "" : m.note;
+    const isSale = m.ref_type === "order" || m.ref_type === "order_cancel";
+    // No client on a sale means a walk-in; otherwise the note names the person, or whoever recorded it was there.
+    const who = m.who ?? (isSale ? null : note || m.by_name);
+    return { id: m.id, who, kind: m.ref_type === "order_cancel" ? "order_cancel" : m.type, number: m.number, note: who === note ? "" : note, at: m.created_at, amount: m.amount, currency: m.currency, nameAr: m.name_ar, nameEn: m.name_en, by: m.by_name };
+  });
+  return { rows: details, total };
+}
+
+function clientMoneyDetails(tx: Q) {
+  const debts = unpaidBalances(tx).flatMap((c) => openClientCharges(tx, c.id).map((m) => ({ ...m, who: c.name })));
+  const orderIds = debts.flatMap((m) => (m.orderId ? [m.orderId] : []));
+  const numbers = new Map(orderIds.length ? tx.select({ id: orders.id, number: orders.number }).from(orders).where(inArray(orders.id, orderIds)).all().map((o) => [o.id, o.number]) : []);
+  return debts.map((m): MoneyDetail => {
+    const number = numbers.get(m.orderId ?? "") ?? null;
+    return { id: m.id, who: m.who, kind: m.type, number, note: m.note === `#${number}` ? "" : m.note, at: m.at, amount: round4(m.usd), currency: "USD" };
+  });
+}
+
+function goodsMoneyDetails(tx: Q) {
+  return tx
+    .all<{ id: string; number: number; created_at: string; note: string; who: string; usd: number }>(
+      sql`select c.id, c.number, c.created_at, c.note, cl.name as who,
+                 coalesce(sum(case when c.currency = 'USD' then l.unit_price * l.qty else l.unit_price * l.qty / c.fx_rate end),0) as usd
+          from consignments c
+          join clients cl on cl.id = c.client_id
+          join consignment_lines l on l.consignment_id = c.id
+          where c.status = 'open' and c.deleted_at is null
+          group by c.id
+          order by c.created_at desc`,
+    )
+    .map((c): MoneyDetail => ({ id: c.id, who: c.who, kind: "consignment", number: c.number, note: c.note, at: c.created_at, amount: round4(c.usd), currency: "USD" }));
+}
+
+function supplierMoneyDetails(tx: Q) {
+  return tx
+    .select({ id: suppliers.id, name: suppliers.name })
+    .from(suppliers)
+    .where(isNull(suppliers.deletedAt))
+    .all()
+    .flatMap((s) => {
+      const due = supplierDue(tx, s.id);
+      const opening: MoneyDetail[] = due.openingDueUsd > 0 ? [{ id: `opening-${s.id}`, who: s.name, kind: "opening", number: null, note: "", at: null, amount: due.openingDueUsd, currency: "USD" }] : [];
+      return [...opening, ...due.open.map((p): MoneyDetail => ({ id: p.id, who: s.name, kind: "purchase", number: p.number, note: p.supplierRef, at: p.createdAt, amount: p.dueUsd, currency: "USD" }))];
+    });
+}
+
+function expenseMoneyDetails(tx: Q) {
+  return tx
+    .select({ e: expenses, nameAr: lookups.nameAr, nameEn: lookups.nameEn })
+    .from(expenses)
+    .leftJoin(lookups, eq(expenses.categoryId, lookups.id))
+    .where(and(isNull(expenses.deletedAt), eq(expenses.status, "due")))
+    .orderBy(desc(expenses.createdAt))
+    .all()
+    .map(({ e, nameAr, nameEn }): MoneyDetail => ({ id: e.id, who: e.beneficiary || null, kind: "expense", number: null, note: e.note, at: e.createdAt, amount: round4(e.amountUsd), currency: "USD", nameAr, nameEn }));
+}
+
+/** What is behind one line of the cloud: who, when and how much. Apart from the boxes, the rows add up to that line. */
+export function myMoneyDetails(tx: Q, section: MoneySection): { rows: MoneyDetail[]; total: number } {
+  if (section === "boxes") return boxMoneyDetails(tx);
+  const rows = section === "clients" ? clientMoneyDetails(tx) : section === "goods" ? goodsMoneyDetails(tx) : section === "suppliers" ? supplierMoneyDetails(tx) : expenseMoneyDetails(tx);
+  return { rows, total: rows.length };
 }
 
 /**

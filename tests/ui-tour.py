@@ -49,9 +49,9 @@ methods = {m["systemKey"]: m for m in api("GET", "/money/methods")["rows"]}
 clients = {c["name"]: c for c in api("GET", "/clients")["rows"]}
 reps = api("GET", "/money/reps")["rows"]
 made = api("POST", "/stock/produce", {"productId": prods["TC"]["id"], "qty": 12})
-api("POST", "/orders", {"clientId": clients["Focus Study Zone"]["id"], "fulfilment": "delivery", "assignedTo": reps[0]["id"], "methodId": methods["cash"]["id"], "lines": [{"productId": prods["TC"]["id"], "qty": 6, "optionIds": []}]})
-api("POST", "/orders", {"clientId": clients["Bean & Book Café"]["id"], "methodId": methods["credit"]["id"], "lines": [{"productId": prods["CLUB"]["id"], "qty": 4, "optionIds": []}, {"productId": prods["LEMON"]["id"], "qty": 4, "optionIds": []}]})
-api("POST", "/orders", {"methodId": methods["sham"]["id"], "lines": [{"productId": prods["HAL"]["id"], "qty": 2, "optionIds": []}]})
+api("POST", "/orders", {"clientId": clients["Focus Study Zone"]["id"], "fulfilment": "delivery", "assignedTo": reps[0]["id"], "methodId": methods["cash"]["id"], "lines": [{"productId": prods["TC"]["id"], "qty": 5, "optionIds": []}]})
+api("POST", "/orders", {"clientId": clients["Bean & Book Café"]["id"], "methodId": methods["credit"]["id"], "lines": [{"productId": prods["CLUB"]["id"], "qty": 5, "optionIds": []}, {"productId": prods["LEMON"]["id"], "qty": 5, "optionIds": []}]})
+api("POST", "/orders", {"methodId": methods["sham"]["id"], "lines": [{"productId": prods["HAL"]["id"], "qty": 5, "optionIds": []}]})
 order_id = api("GET", "/orders")["rows"][0]["id"]
 api("POST", f"/clients/{clients['Focus Study Zone']['id']}/recurring", {"days": [0, 1, 2, 3, 4, 5, 6], "lines": [{"productId": prods["TC"]["id"], "qty": 15, "optionIds": []}]})
 api("POST", "/assets", {"nameAr": "برّاد", "nameEn": "Fridge", "price": 600, "currency": "USD", "purchaseDate": "2026-01-01", "lifeMonths": 60})

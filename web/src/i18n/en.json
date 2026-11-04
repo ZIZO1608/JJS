@@ -225,6 +225,7 @@
   "role_in_use": "Some users still have this role. Move them first.",
   "wrong_password": "The current password is wrong.",
   "invalid_input": "Some fields are missing or wrong.",
+  "invalid_qty": "Order quantities come in fives: 5, 10, 15…",
   "required": "This field is required.",
   "tooShort": "Too short: at least {n} characters.",
   "tooLong": "Too long: at most {n} characters.",

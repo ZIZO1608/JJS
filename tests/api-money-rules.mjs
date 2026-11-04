@@ -51,7 +51,7 @@ await step("setup and sample data", async () => {
 
 await step("payment report counts money received, not the order total", async () => {
   const before = await report();
-  const line = { productId: S.p.LEMON.id, qty: 4, optionIds: [] };
+  const line = { productId: S.p.LEMON.id, qty: 5, optionIds: [] };
   const o = ok(await admin("POST", "/orders", { clientId: S.client.id, methodId: S.m.cash.id, paidAmount: 1, lines: [line] }), 201);
   S.partial = o;
   ok(await admin("POST", `/clients/${S.client.id}/payments`, { amount: 2, currency: "USD", methodId: S.m.sham.id }), 201);
@@ -63,7 +63,7 @@ await step("payment report counts money received, not the order total", async ()
 
 await step("a cancelled order's money leaves the report", async () => {
   const before = await report();
-  const o = ok(await admin("POST", "/orders", { methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 1, optionIds: [] }] }), 201);
+  const o = ok(await admin("POST", "/orders", { methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 5, optionIds: [] }] }), 201);
   const paid = await report();
   assert.ok(received(paid, "cash") > received(before, "cash"));
   ok(await admin("POST", `/orders/${o.id}/cancel`, { reason: "typo" }));
@@ -112,7 +112,7 @@ await step("adding cash makes the payment possible and is not counted as a sale"
 });
 
 await step("a member can cancel an unpaid order but not one with money on it", async () => {
-  const line = { productId: S.p.LEMON.id, qty: 1, optionIds: [] };
+  const line = { productId: S.p.LEMON.id, qty: 5, optionIds: [] };
   const paid = ok(await member("POST", "/orders", { methodId: S.m.cash.id, lines: [line] }), 201);
   const bal = await mainBalance();
   const r = await member("POST", `/orders/${paid.id}/cancel`, { reason: "took the cash" });

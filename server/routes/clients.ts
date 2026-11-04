@@ -12,6 +12,7 @@ import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus, startSubscription, subscriptionStatus } from "../services/clients.js";
 import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "../services/money.js";
+import { assertOrderQtys } from "../services/orders.js";
 import { clientAging } from "../services/wholesale.js";
 import { getSetting } from "../lib/settings.js";
 import { accountOf } from "../services/portal.js";
@@ -636,6 +637,7 @@ clientsRouter.post(
   h((req, res) => {
     const id = String(req.params.id);
     const body = parse(recurringSchema, req.body);
+    assertOrderQtys(body.lines);
     const rid = newId();
     db.insert(recurringOrders).values({ id: rid, clientId: id, days: body.days.join(","), linesJson: JSON.stringify(body.lines), note: body.note, active: body.active }).run();
     writeAudit(db, { userId: req.user!.id, action: "create", entity: "recurring_order", entityId: rid, after: body });
@@ -648,6 +650,7 @@ clientsRouter.put(
   h((req, res) => {
     const rid = String(req.params.rid);
     const body = parse(recurringSchema, req.body);
+    assertOrderQtys(body.lines);
     db.update(recurringOrders).set({ days: body.days.join(","), linesJson: JSON.stringify(body.lines), note: body.note, active: body.active, updatedAt: nowIso(), syncedAt: null }).where(eq(recurringOrders.id, rid)).run();
     writeAudit(db, { userId: req.user!.id, action: "edit", entity: "recurring_order", entityId: rid, after: body });
     res.json({ ok: true });

@@ -77,8 +77,8 @@ await step("short map links are only followed to Google", async () => {
 
 await step("route sheet: stops carry their pins", async () => {
   ok(await admin("PUT", `/clients/${S.c["Focus Study Zone"].id}`, { ...S.c["Focus Study Zone"], lat: 33.52, lng: 36.28 }));
-  ok(await admin("POST", "/orders", { clientId: S.bean.id, fulfilment: "delivery", assignedTo: S.rep.id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 2, optionIds: [] }] }), 201);
-  ok(await admin("POST", "/orders", { clientId: S.c["Focus Study Zone"].id, fulfilment: "delivery", assignedTo: S.rep.id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 1, optionIds: [] }] }), 201);
+  ok(await admin("POST", "/orders", { clientId: S.bean.id, fulfilment: "delivery", assignedTo: S.rep.id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
+  ok(await admin("POST", "/orders", { clientId: S.c["Focus Study Zone"].id, fulfilment: "delivery", assignedTo: S.rep.id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
   const sheet = ok(await admin("GET", `/route-sheet?date=${TODAY}&repId=${S.rep.id}`));
   const bean = sheet.stops.find((s) => s.clientId === S.bean.id);
   assert.equal(bean.lat, 33.51);
@@ -87,7 +87,7 @@ await step("route sheet: stops carry their pins", async () => {
 
 await step("an order comes back: fridge, trash and another client", async () => {
   ok(await admin("POST", "/stock/produce", { productId: S.p.TC.id, qty: 10 }), 201);
-  const o = ok(await admin("POST", "/orders", { clientId: S.c["Focus Study Zone"].id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 6, optionIds: [] }, { productId: S.p.CLUB.id, qty: 2, optionIds: [] }] }), 201);
+  const o = ok(await admin("POST", "/orders", { clientId: S.c["Focus Study Zone"].id, methodId: S.m.credit.id, lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }, { productId: S.p.CLUB.id, qty: 5, optionIds: [] }] }), 201);
   const before = ok(await admin("GET", `/clients/${S.bean.id}`)).client?.balanceUsd ?? ok(await admin("GET", "/clients")).rows.find((c) => c.id === S.bean.id).balanceUsd;
   const r = ok(
     await admin("POST", "/returns", {
@@ -123,6 +123,15 @@ await step("my day: five boxes add up", async () => {
   assert.equal(day.boxes.rows.length, 2);
   const money = ok(await admin("GET", "/reports/my-money"));
   assert.ok(near(money.totalUsd, money.cashUsd + money.clientsOweUsd + money.goodsAtShopsUsd - money.weOweUsd - money.dueExpensesUsd));
+  const details = async (section) => ok(await admin("GET", `/reports/my-money/details/${section}`)).rows;
+  const sum = (rows) => rows.reduce((s, r) => s + r.amount, 0);
+  const debts = await details("clients");
+  assert.ok(near(sum(debts), money.clientsOweUsd), "the debts add up to the line");
+  assert.ok(debts.every((r) => r.who && r.at && !Number.isNaN(Date.parse(r.at))), "every debt says who and when");
+  assert.ok(near(sum(await details("goods")), money.goodsAtShopsUsd));
+  assert.ok(near(sum(await details("suppliers")), money.weOweUsd));
+  assert.ok(near(sum(await details("expenses")), money.dueExpensesUsd));
+  assert.equal((await admin("GET", "/reports/my-money/details/nope")).status, 400);
 });
 
 await step("clients sheet for a time window", async () => {
@@ -130,7 +139,7 @@ await step("clients sheet for a time window", async () => {
   const to = new Date(Date.now() + 60e3).toISOString();
   const sh = ok(await admin("GET", `/reports/clients-sheet?from=${from}&to=${to}`));
   const bean = sh.rows.find((r) => r.clientId === S.bean.id);
-  assert.ok(bean && bean.items === 5, "2 delivered + 3 given");
+  assert.ok(bean && bean.items === 8, "5 delivered + 3 given");
   assert.ok(near(bean.leftUsd, bean.totalUsd - bean.paidUsd));
   assert.ok(near(sh.totals.totalUsd, sh.rows.reduce((s, r) => s + r.totalUsd, 0)));
   const empty = ok(await admin("GET", `/reports/clients-sheet?from=2000-01-01T00:00:00.000Z&to=2000-01-02T00:00:00.000Z`));
@@ -141,8 +150,8 @@ await step("clients sheet for a time window", async () => {
 await step("client report: products, invoices, money", async () => {
   const r = ok(await admin("GET", `/clients/${S.bean.id}/statement?from=${TODAY}&to=${TODAY}`));
   assert.equal(r.summary.orders, 2);
-  assert.equal(r.summary.items, 5);
-  assert.equal(r.products[0].qty, 5);
+  assert.equal(r.summary.items, 8);
+  assert.equal(r.products[0].qty, 8);
   assert.ok(near(r.summary.boughtUsd, r.orders.reduce((s, o) => s + o.totalUsd, 0)));
 });
 
@@ -152,10 +161,15 @@ await step("member is orders only", async () => {
   ok(await member("POST", "/auth/login", { username: "sami", password: "pass1234" }));
   const me = ok(await member("GET", "/auth/me"));
   assert.deepEqual([...me.user.permissions].sort(), ["home:view", "orders:create", "orders:delete", "orders:view"]);
-  const o = ok(await member("POST", "/orders", { clientId: S.bean.id, methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 1, optionIds: [] }] }), 201);
+  const o = ok(await member("POST", "/orders", { clientId: S.bean.id, methodId: S.m.cash.id, lines: [{ productId: S.p.LEMON.id, qty: 5, optionIds: [] }] }), 201);
+  const moves = ok(await admin("GET", "/reports/my-money/details/boxes"));
+  const sale = moves.rows.find((r) => r.number === o.number);
+  assert.equal(sale.who, S.bean.name, "the box says who the money came from");
+  assert.equal(sale.by, "Sami");
+  assert.ok(sale.kind === "sale" && sale.nameEn && !Number.isNaN(Date.parse(sale.at)));
   // a paid order needs a manager; unpaid ones are covered in api-money-rules.mjs
   assert.equal((await member("POST", `/orders/${o.id}/cancel`, { reason: "typo" })).status, 403);
-  for (const path of ["/stock/batches", "/reports/day", "/reports/my-money", "/route-sheet", `/clients/${S.bean.id}/statement?from=${TODAY}&to=${TODAY}`]) {
+  for (const path of ["/stock/batches", "/reports/day", "/reports/my-money", "/reports/my-money/details/boxes", "/route-sheet", `/clients/${S.bean.id}/statement?from=${TODAY}&to=${TODAY}`]) {
     assert.equal((await member("GET", path)).status, 403, path);
   }
 });

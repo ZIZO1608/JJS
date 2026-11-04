@@ -131,7 +131,8 @@ with sync_playwright() as p:
         for fs in sheet.locator("fieldset").all():
             if "مطلوب" in fs.locator("legend").inner_text():
                 fs.get_by_role("button").first.click()
-        sheet.get_by_role("button", name="+", exact=True).click()
+        sheet.get_by_role("combobox", name="الكمية").click()
+        phone.get_by_role("option", name="10", exact=True).click()
         shot(phone, "06a-client-options-sheet")
         sheet.get_by_role("button", name="أضف إلى السلة").click()
         add_product(phone, "ليمون ونعناع")
@@ -139,7 +140,8 @@ with sync_playwright() as p:
         shot(phone, "06-client-menu-with-cart")
         phone.get_by_role("button", name="عرض السلة").click()
         sheet = phone.get_by_role("dialog")
-        sheet.get_by_role("button", name="+", exact=True).last.click()
+        sheet.get_by_role("combobox", name="الكمية").last.click()
+        phone.get_by_role("option", name="10", exact=True).click()
         sheet.get_by_role("button", name="توصيل").click()
         sheet.get_by_role("button", name="عند الاستلام").click()
         sheet.locator("textarea").fill("بدون بصل لو سمحت")

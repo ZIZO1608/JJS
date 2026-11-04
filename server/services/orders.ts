@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Currency } from "../../shared/money.js";
+import { isOrderQty } from "../../shared/orderQty.js";
 import {
   cashBoxes,
   clientPrices,
@@ -64,6 +65,11 @@ export interface PricedLine {
   options: { id: string; nameAr: string; nameEn: string; priceDelta: number }[];
   unitPrice: number;
   lineTotal: number;
+}
+
+/** What a person may order: fives only. Consignment settlements and requests already sent don't pass through here. */
+export function assertOrderQtys(lines: { qty: number }[]) {
+  if (lines.some((l) => !isOrderQty(l.qty))) throw new HttpError(400, "invalid_qty", "Order quantities come in fives: 5, 10, 15…");
 }
 
 /** Price an order without writing anything (used for the live preview and inside createOrder). */

@@ -25,7 +25,7 @@ const admin = client();
 const member = client();
 const S = {};
 const balance = async () => ok(await admin("GET", `/clients/${S.client.id}`)).client.balanceUsd;
-const onAccount = async (who) => ok(await who("POST", "/orders", { clientId: S.client.id, methodId: S.m.credit.id, lines: [{ productId: S.p.LEMON.id, qty: 1, optionIds: [] }] }), 201);
+const onAccount = async (who) => ok(await who("POST", "/orders", { clientId: S.client.id, methodId: S.m.credit.id, lines: [{ productId: S.p.LEMON.id, qty: 5, optionIds: [] }] }), 201);
 const canCancel = async (o) => ok(await member("GET", `/orders/${o.id}`)).order.canCancel;
 const refused = async (o) => {
   const r = await member("POST", `/orders/${o.id}/cancel`, { reason: "try" });

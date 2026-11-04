@@ -1,3 +1,4 @@
+import { ORDER_QTY_CHOICES } from "@shared/orderQty";
 import { useEffect, useRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from "react";
 import { useI18n } from "../lib/i18n";
 import { DateField } from "./DateField";
@@ -34,6 +35,21 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <Dropdown {...props} />;
+}
+
+/** Pick an order quantity from the list only (5, 10, 15…): nothing to type, so no 6. Removing a line sends 0. */
+export function QtySelect({ value, onChange, removable, className = "" }: { value: number; onChange: (qty: number) => void; removable?: boolean; className?: string }) {
+  const { tr } = useI18n();
+  return (
+    <Dropdown noSearch className={`num ${className}`} aria-label={tr("الكمية", "Quantity")} value={String(value)} onChange={(e) => onChange(Number(e.target.value))}>
+      {removable && <option value="0">{tr("إزالة", "Remove")}</option>}
+      {ORDER_QTY_CHOICES.map((q) => (
+        <option key={q} value={q}>
+          {q}
+        </option>
+      ))}
+    </Dropdown>
+  );
 }
 
 export function Modal({

@@ -278,7 +278,7 @@
                   }
                 },
                 {
-                  "text": "Click a product to add it. If it has extras, a small window opens: choose the extras in [[extras]], set the quantity with [[qty]], then press [[add]] **Add to order**.",
+                  "text": "Click a product to add it. If it has extras, a small window opens: choose the extras in [[extras]], pick the quantity (5, 10, 15…) in [[qty]], then press [[add]] **Add to order**.",
                   "shot": {
                     "id": "order-addons",
                     "size": "small",
@@ -302,7 +302,7 @@
                 {
                   "text": "Add the other products. The order builds up on [[cart]]. Then press [[next]] **Next: payment**.",
                   "sub": [
-                    "Click a product again to add one more, or use **+** and **−** in the order list.",
+                    "Orders come in fives. Click a product again to add 5 more, or pick the quantity (5, 10, 15…) from the list next to it.",
                     "Have a barcode scanner? Scan the product code into and press `Enter`."
                   ],
                   "shot": {

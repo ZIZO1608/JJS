@@ -63,15 +63,15 @@ CUR = {"page": None}
 
 
 def add(page, product, qty):
-    """Tap a product; products with add-ons open a small box where the quantity is set."""
+    """Tap a product, which adds 5; products with add-ons open a small box where the quantity is picked."""
     page.get_by_role("button").filter(has_text=product).first.click()
     dlg = page.get_by_role("dialog")
     if dlg.count():
-        for _ in range(qty - 1):
-            dlg.get_by_role("button", name="+", exact=True).click()
+        dlg.get_by_role("combobox", name="Quantity").click()
+        page.get_by_role("option", name=str(qty), exact=True).click()
         dlg.get_by_role("button", name="Add to order").click()
     else:
-        for _ in range(qty - 1):
+        for _ in range(qty // 5 - 1):
             page.get_by_role("button").filter(has_text=product).first.click()
 
 
@@ -132,7 +132,7 @@ with sync_playwright() as p:
 
     def client_return():
         page.goto(BASE + f"/clients/{clients['City Distributor']['id']}")
-        page.get_by_role("button", name="Return").first.click()
+        page.get_by_role("button", name="Goods came back").first.click()
         dialog = page.get_by_role("dialog")
         dialog.locator("#rt-o").click()
         page.get_by_role("option").nth(1).click()
@@ -140,7 +140,8 @@ with sync_playwright() as p:
         row = dialog.locator("div.grid").filter(has_text="Turkey & Cheddar").last
         row.get_by_role("button", name="+").click()
         shot(page, "05-return")
-        dialog.get_by_role("button", name="Save return").click()
+        dialog.get_by_role("button", name="Save", exact=True).click()
+        dialog.get_by_role("button", name="Done", exact=True).click()
         expect(page.get_by_role("dialog")).to_have_count(0)
         bal = next(c for c in api("GET", "/clients")["rows"] if c["name"] == "City Distributor")["balanceUsd"]
         assert abs(bal + 7.1) < 0.01, f"balance after return {bal} (owes 9 − 1.90)"
@@ -160,8 +161,8 @@ with sync_playwright() as p:
     def walk_in():
         page.goto(BASE + "/orders/new")
         page.get_by_role("button", name="Walk-in").first.click()
-        add(page, "Lemon Mint", 1)
-        add(page, "Halloumi & Tomato", 2)
+        add(page, "Lemon Mint", 5)
+        add(page, "Halloumi & Tomato", 5)
         page.get_by_role("button", name="Next: payment").click()
         page.get_by_role("button", name="Cash", exact=True).click()
         page.get_by_role("button", name="Confirm order").click()

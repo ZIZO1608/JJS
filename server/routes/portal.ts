@@ -11,6 +11,7 @@ import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus, subscriptionStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
+import { assertOrderQtys } from "../services/orders.js";
 import { createOrderRequest, createSubscriptionRequest, portalQuote } from "../services/portal.js";
 import { receiptOf } from "./orders.js";
 
@@ -213,6 +214,7 @@ portalRouter.post(
   h((req, res) => {
     const body = parse(quoteSchema, req.body);
     if (!body.lines.length) return res.json({ empty: true });
+    assertOrderQtys(body.lines);
     res.json(db.transaction((tx) => portalQuote(tx, req.portalClient!.clientId, body)));
   }),
 );
@@ -221,6 +223,7 @@ portalRouter.post(
   "/order-requests",
   h((req, res) => {
     const body = parse(quoteSchema.extend({ paymentChoice: z.enum(["on_account", "on_delivery"]), note: z.string().trim().max(250).default("") }), req.body);
+    assertOrderQtys(body.lines);
     const out = db.transaction((tx) => createOrderRequest(tx, req.portalClient!.clientId, body));
     res.status(201).json(out);
   }),

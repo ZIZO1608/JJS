@@ -54,7 +54,7 @@ screens = [
                                                    {"click": f"{DLG} button:has-text('Double filling'), {DLG} button:has-text('حشوة مضاعفة')", "optional": True}],
      "clip": DLG, "clip_padding": 8,
      "callouts": [{"key": "extras", "selector": f"{DLG} button:has-text('Double filling'), {DLG} button:has-text('حشوة مضاعفة')"},
-                  {"key": "qty", "selector": f"{DLG} button:text-is('+')"}, {"key": "add", "selector": t("Add to order", "أضف للطلب")}]},
+                  {"key": "qty", "selector": f"{DLG} button[role=combobox]"}, {"key": "add", "selector": t("Add to order", "أضف للطلب")}]},
     {"id": "order-items", "url": None, "actions": [{"click": t("Add to order", "أضف للطلب")}, {"wait": 300},
                                                   {"click": "main button:has-text('Greek Salad'), main button:has-text('سلطة يونانية')"}, {"wait": 300}],
      "callouts": [{"key": "cats", "selector": t("All", "الكل")}, {"key": "scan", "selector": "#scan"},

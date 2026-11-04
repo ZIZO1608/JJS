@@ -52,7 +52,7 @@ function readOptions(children: ReactNode, out: Opt[] = []): Opt[] {
 /** Lists longer than this get a search box. */
 const SEARCH_FROM = 9;
 
-export function Dropdown({ children, value, onChange, id, className = "", disabled, dir, title, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+export function Dropdown({ children, value, onChange, id, className = "", disabled, dir, title, noSearch, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { noSearch?: boolean }) {
   const { t, lang, dir: pageDir } = useI18n();
   const listId = useId();
   const options = useMemo(() => readOptions(children), [children]);
@@ -68,7 +68,7 @@ export function Dropdown({ children, value, onChange, id, className = "", disabl
   const search = useRef<HTMLInputElement>(null);
   const typed = useRef({ s: "", at: 0 });
 
-  const withSearch = items.length >= SEARCH_FROM;
+  const withSearch = !noSearch && items.length >= SEARCH_FROM;
   const q = query.trim().toLowerCase();
   const shown = q ? options.filter((o) => o.kind === "option" && o.text.toLowerCase().includes(q)) : options;
   const pickable = shown.filter((o): o is Extract<Opt, { kind: "option" }> => o.kind === "option" && !o.disabled);

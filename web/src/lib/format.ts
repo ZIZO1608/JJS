@@ -32,6 +32,23 @@ export const UNIT_LABEL: Record<string, { ar: string; en: string }> = {
   pc: { ar: "قطعة", en: "pc" },
 };
 
+export const MOVE_LABEL: Record<string, { ar: string; en: string }> = {
+  sale: { ar: "بيع", en: "Sale" },
+  client_payment: { ar: "دفعة زبون", en: "Client payment" },
+  topup: { ar: "شحن رصيد", en: "Top-up" },
+  expense: { ar: "مصروف", en: "Expense" },
+  purchase: { ar: "مشتريات", en: "Purchase" },
+  transfer: { ar: "تحويل", en: "Transfer" },
+  handover: { ar: "تسليم مندوب", en: "Rep handover" },
+  count_adjust: { ar: "فرق جرد", en: "Count difference" },
+  deposit: { ar: "إضافة نقد", en: "Cash added" },
+  salary: { ar: "رواتب", en: "Salaries" },
+  advance: { ar: "سلفة", en: "Advance" },
+  opening: { ar: "رصيد افتتاحي", en: "Opening" },
+  withdrawal: { ar: "سحب شخصي", en: "Withdrawal" },
+  refund: { ar: "استرداد", en: "Refund" },
+};
+
 /** Parse a number typed by a person (accepts Arabic digits and commas). */
 export function num(v: string): number {
   const s = v.replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/,/g, "").trim();

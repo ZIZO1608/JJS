@@ -1,6 +1,7 @@
+import { ORDER_QTY_MAX, ORDER_QTY_STEP, toOrderQty } from "@shared/orderQty";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Spinner } from "../../components/ui";
+import { QtySelect, Spinner } from "../../components/ui";
 import { post } from "../../lib/api";
 import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -63,7 +64,7 @@ const DRAFT_KEY = "jjs.portal.cart";
 const readDraft = (): CartLine[] => {
   try {
     const v = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "[]");
-    return Array.isArray(v) ? v : [];
+    return Array.isArray(v) ? v.map((l: CartLine) => ({ ...l, qty: toOrderQty(l.qty) })) : [];
   } catch {
     return [];
   }
@@ -77,27 +78,12 @@ const saveDraft = (lines: CartLine[]) => {
 };
 const keyOf = (productId: string, optionIds: string[]) => `${productId}|${[...optionIds].sort().join(",")}`;
 
-function Stepper({ qty, onChange, big }: { qty: number; onChange: (q: number) => void; big?: boolean }) {
-  const s = big ? "h-10 w-10 text-xl" : "h-8 w-8 text-lg";
-  return (
-    <div className="inline-flex items-center gap-1 rounded-full bg-sunken p-0.5">
-      <button className={`grid ${s} place-items-center rounded-full bg-surface font-bold shadow-sm active:scale-95`} onClick={() => onChange(qty - 1)} aria-label="−">
-        −
-      </button>
-      <span className="min-w-7 text-center font-bold num">{qty}</span>
-      <button className={`grid ${s} place-items-center rounded-full bg-brand font-bold text-white shadow-sm active:scale-95`} onClick={() => onChange(qty + 1)} aria-label="+">
-        +
-      </button>
-    </div>
-  );
-}
-
 /** Pick add-ons for one product before it goes in the cart. */
 function OptionsSheet({ product, groups, onAdd, onClose }: { product: MenuProduct; groups: MenuGroup[]; onAdd: (optionIds: string[], qty: number) => void; onClose: () => void }) {
   const { tr, pick } = useI18n();
   const m = useMoney();
   const [chosen, setChosen] = useState<string[]>([]);
-  const [qty, setQty] = useState(1);
+  const [qty, setQty] = useState(ORDER_QTY_STEP);
   const toggle = (g: MenuGroup, id: string) =>
     setChosen((cur) => {
       if (cur.includes(id)) return cur.filter((x) => x !== id);
@@ -113,7 +99,7 @@ function OptionsSheet({ product, groups, onAdd, onClose }: { product: MenuProduc
       onClose={onClose}
       footer={
         <div className="flex items-center gap-3">
-          <Stepper qty={qty} onChange={(q) => setQty(Math.max(1, q))} big />
+          <QtySelect value={qty} onChange={setQty} className="!w-24 shrink-0" />
           <button className="btn btn-primary flex-1 !py-3" disabled={!!missing} onClick={() => onAdd(chosen, qty)}>
             {missing ? tr(`اختر من «${pick(missing)}»`, `Choose from “${pick(missing)}”`) : tr("أضف إلى السلة", "Add to cart")}
           </button>
@@ -237,13 +223,13 @@ export function NewOrderPage() {
 
   const groupsOf = (p: MenuProduct) => menu.groups.filter((g) => p.groupIds.includes(g.id) && g.options.length);
   const qtyOf = (productId: string) => cart.filter((l) => l.productId === productId).reduce((s, l) => s + l.qty, 0);
-  const add = (productId: string, optionIds: string[], qty = 1) =>
+  const add = (productId: string, optionIds: string[], qty = ORDER_QTY_STEP) =>
     setCart((cur) => {
       const key = keyOf(productId, optionIds);
       const hit = cur.find((l) => l.key === key);
-      return hit ? cur.map((l) => (l.key === key ? { ...l, qty: Math.min(1000, l.qty + qty) } : l)) : [...cur, { key, productId, optionIds, qty }];
+      return hit ? cur.map((l) => (l.key === key ? { ...l, qty: Math.min(ORDER_QTY_MAX, l.qty + qty) } : l)) : [...cur, { key, productId, optionIds, qty }];
     });
-  const setQty = (key: string, qty: number) => setCart((cur) => (qty <= 0 ? cur.filter((l) => l.key !== key) : cur.map((l) => (l.key === key ? { ...l, qty: Math.min(1000, qty) } : l))));
+  const setQty = (key: string, qty: number) => setCart((cur) => (qty <= 0 ? cur.filter((l) => l.key !== key) : cur.map((l) => (l.key === key ? { ...l, qty } : l))));
   const tapProduct = (p: MenuProduct) => {
     if (groupsOf(p).length) setPicking(p);
     else add(p.id, []);
@@ -303,10 +289,10 @@ export function NewOrderPage() {
                 </button>
                 <div className="flex flex-1 flex-col p-3">
                   <div className="line-clamp-2 font-semibold leading-snug">{pick(p)}</div>
-                  <div className="mt-auto flex items-center justify-between gap-1 pt-2">
+                  <div className="mt-auto flex flex-wrap items-center justify-between gap-1 pt-2">
                     <span className="font-bold num ltr">{m(p.price, p.currency)}</span>
                     {line ? (
-                      <Stepper qty={line.qty} onChange={(n) => setQty(line.key, n)} />
+                      <QtySelect value={line.qty} onChange={(n) => setQty(line.key, n)} removable className="!w-full" />
                     ) : (
                       <button className="grid h-8 w-8 place-items-center rounded-full bg-brand text-lg font-bold text-white active:scale-95" onClick={() => tapProduct(p)} aria-label={tr("أضف", "Add")}>
                         +
@@ -376,7 +362,7 @@ export function NewOrderPage() {
                       </div>
                     )}
                   </div>
-                  <Stepper qty={l.qty} onChange={(n) => setQty(l.key, n)} />
+                  <QtySelect value={l.qty} onChange={(n) => setQty(l.key, n)} removable className="!w-28 shrink-0" />
                 </div>
               );
             })}

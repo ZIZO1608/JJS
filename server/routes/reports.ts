@@ -1,12 +1,12 @@
 import { and, asc, eq, gte, isNull, lte } from "drizzle-orm";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
 import { clients, expenses, lookups, orders, paymentMethods } from "../db/schema.js";
 import { requirePerm } from "../lib/auth.js";
 import { localDate } from "../lib/biz.js";
 import { h, HttpError, parse } from "../lib/util.js";
-import { allMyMoney, cashFlow, clientsSheet, dashboard, deliveryCost, fiveAnswers, monthsCompare, myDay, periodReport, productionVsSales, reportFor, unpaidBalances } from "../services/reports.js";
+import { allMyMoney, cashFlow, clientsSheet, dashboard, deliveryCost, fiveAnswers, MONEY_SECTIONS, monthsCompare, myDay, myMoneyDetails, periodReport, productionVsSales, reportFor, unpaidBalances } from "../services/reports.js";
 import { boxMoves, cashBoxes, purchases, returns, suppliers } from "../db/schema.js";
 import { desc } from "drizzle-orm";
 import { supplierDue } from "../services/wholesale.js";
@@ -60,13 +60,26 @@ reportsRouter.get(
   }),
 );
 
+const requireAdmin = (req: Request) => {
+  if (!req.user) throw new HttpError(401, "not_logged_in", "Please log in.");
+  if (req.user.role.systemKey !== "admin") throw new HttpError(403, "forbidden", "Only the admin can see this.");
+};
+
 /** The cloud: all the money that is the owner's. Admin only. */
 reportsRouter.get(
   "/my-money",
   h((req, res) => {
-    if (!req.user) throw new HttpError(401, "not_logged_in", "Please log in.");
-    if (req.user.role.systemKey !== "admin") throw new HttpError(403, "forbidden", "Only the admin can see this.");
+    requireAdmin(req);
     res.json(allMyMoney(db));
+  }),
+);
+
+/** The cloud, one line opened: who, when and how much. Admin only. */
+reportsRouter.get(
+  "/my-money/details/:section",
+  h((req, res) => {
+    requireAdmin(req);
+    res.json(myMoneyDetails(db, parse(z.enum(MONEY_SECTIONS), req.params.section)));
   }),
 );
 

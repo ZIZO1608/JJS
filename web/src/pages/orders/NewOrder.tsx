@@ -1,6 +1,7 @@
+import { ORDER_QTY_MAX, ORDER_QTY_STEP, toOrderQty } from "@shared/orderQty";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Empty, Field, Modal, Select, Spinner, TextInput } from "../../components/ui";
+import { Empty, Field, Modal, QtySelect, Select, Spinner, TextInput } from "../../components/ui";
 import { get, post } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
@@ -161,7 +162,7 @@ function AddonsDialog({
 }) {
   const { tr, pick, lang } = useI18n();
   const [sel, setSel] = useState<Record<string, string[]>>({});
-  const [q, setQ] = useState(1);
+  const [q, setQ] = useState(ORDER_QTY_STEP);
   const toggle = (g: OptionGroup, id: string) =>
     setSel((s) => {
       const cur = s[g.id] ?? [];
@@ -178,14 +179,8 @@ function AddonsDialog({
       wide
       footer={
         <>
-          <div className="me-auto flex items-center gap-2">
-            <button className="btn h-11 w-11 p-0 text-xl" onClick={() => setQ(Math.max(1, q - 1))} aria-label="−">
-              −
-            </button>
-            <span className="num w-10 text-center text-xl font-bold">{q}</span>
-            <button className="btn h-11 w-11 p-0 text-xl" onClick={() => setQ(q + 1)} aria-label="+">
-              +
-            </button>
+          <div className="me-auto">
+            <QtySelect value={q} onChange={setQ} className="!w-24" />
           </div>
           <button className="btn" onClick={onClose}>
             {tr("إلغاء", "Cancel")}
@@ -360,7 +355,7 @@ export function NewOrderPage() {
           if (!row) return;
           setWho("client");
           setClientId(row.clientId);
-          setCart(row.lines.map((l) => ({ key: keyOf(l.productId, l.optionIds ?? []), productId: l.productId, qty: l.qty, optionIds: l.optionIds ?? [] })));
+          setCart(row.lines.map((l) => ({ key: keyOf(l.productId, l.optionIds ?? []), productId: l.productId, qty: toOrderQty(l.qty), optionIds: l.optionIds ?? [] })));
           setStep(2);
         } catch (e) {
           toast(err(e), "error");
@@ -420,15 +415,15 @@ export function NewOrderPage() {
   }, [payload, cart.length, who, employeeId, err]);
 
   /* ----- cart actions ----- */
-  const addLine = (productId: string, optionIds: string[], qty = 1) => {
+  const addLine = (productId: string, optionIds: string[], qty = ORDER_QTY_STEP) => {
     const key = keyOf(productId, optionIds);
-    setCart((c) => (c.some((l) => l.key === key) ? c.map((l) => (l.key === key ? { ...l, qty: Math.min(1000, l.qty + qty) } : l)) : [...c, { key, productId, qty, optionIds }]));
+    setCart((c) => (c.some((l) => l.key === key) ? c.map((l) => (l.key === key ? { ...l, qty: Math.min(ORDER_QTY_MAX, l.qty + qty) } : l)) : [...c, { key, productId, qty, optionIds }]));
   };
   const tapProduct = (p: CatalogProduct) => {
     if (groupsFor(p).length) setAddonsFor(p);
     else addLine(p.id, []);
   };
-  const setQty = (key: string, q: number) => setCart((c) => (q <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty: Math.min(1000, q) } : l))));
+  const setQty = (key: string, q: number) => setCart((c) => (q <= 0 ? c.filter((l) => l.key !== key) : c.map((l) => (l.key === key ? { ...l, qty: q } : l))));
   const onScan = () => {
     const code = scan.trim().toUpperCase();
     if (!code) return;
@@ -587,15 +582,7 @@ export function NewOrderPage() {
                   {ql?.priceFrom === "client" && <div className="text-xs text-muted">{tr("سعر خاص للزبون", "Client's special price")}</div>}
                 </div>
                 {editable ? (
-                  <div className="flex items-center gap-1">
-                    <button className={`btn p-0 ${simple ? "h-11 w-11 text-xl" : "h-8 w-8"}`} onClick={() => setQty(l.key, l.qty - 1)} aria-label="−">
-                      −
-                    </button>
-                    <span className="num w-8 text-center font-bold">{l.qty}</span>
-                    <button className={`btn p-0 ${simple ? "h-11 w-11 text-xl" : "h-8 w-8"}`} onClick={() => setQty(l.key, l.qty + 1)} aria-label="+">
-                      +
-                    </button>
-                  </div>
+                  <QtySelect value={l.qty} onChange={(n) => setQty(l.key, n)} removable className="!w-24 shrink-0" />
                 ) : (
                   <span className="num">×{l.qty}</span>
                 )}
