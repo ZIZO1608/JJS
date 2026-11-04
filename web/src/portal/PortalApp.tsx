@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import { SupportLink } from "../components/SupportLink";
 import { Spinner } from "../components/ui";
 import { get } from "../lib/api";
 import { chime } from "../lib/chime";
@@ -117,6 +118,7 @@ function Shell() {
         <div className="mx-auto flex max-w-xl items-center gap-3 px-4 py-2.5">
           <img src={business?.logo || "/logo.png"} alt="" className="h-9 w-auto" />
           <div className="min-w-0 flex-1 truncate font-bold">{business ? pick(business) : "JJ's"}</div>
+          <SupportLink variant="icon" className="h-10 w-10 rounded-full bg-sunken" />
           <button className="relative grid h-10 w-10 place-items-center rounded-full bg-sunken text-ink" onClick={() => navigate("/portal/notifications")} aria-label={tr("الإشعارات", "Notifications")}>
             <PIcon d="bell" className="h-5 w-5" />
             {unread > 0 && <span className="absolute -end-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1 text-[11px] font-bold text-white num">{unread > 9 ? "9+" : unread}</span>}

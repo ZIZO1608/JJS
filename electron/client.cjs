@@ -37,8 +37,8 @@ function serverExe() {
 function waitingPage(title, detail) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>JJ's ERP</title>
 <style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;font-family:Segoe UI,Tahoma,sans-serif;background:#faf7f2;color:#2b2b2b;text-align:center}
-h1{font-size:22px;margin:16px 0 6px}p{margin:4px;color:#666}img{width:72px}</style></head>
-<body><div><h1>${title}</h1><p>${detail}</p></div></body></html>`;
+h1{font-size:22px;margin:16px 0 6px}p{margin:4px;color:#666}img{width:72px}a{display:inline-block;margin-top:16px;color:#128c7e;font-weight:600;text-decoration:none}</style></head>
+<body><div><h1>${title}</h1><p>${detail}</p><a href="https://wa.me/963942556404" target="_blank" rel="noreferrer">الدعم واتساب — WhatsApp support: <span dir="ltr">+963 942 556 404</span></a></div></body></html>`;
   return "data:text/html;charset=utf-8," + encodeURIComponent(html);
 }
 

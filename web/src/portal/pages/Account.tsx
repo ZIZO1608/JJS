@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { InstallButton } from "../../components/InstallButton";
+import { SupportLink } from "../../components/SupportLink";
 import { Field, TextInput } from "../../components/ui";
 import { ApiError } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
@@ -64,6 +65,7 @@ export function LoginPage() {
           </button>
         </div>
         <p className="mt-4 text-center text-sm text-faint">{tr("نسيت كلمة المرور؟ تواصل مع المحل.", "Forgot your password? Contact the shop.")}</p>
+        <SupportLink className="mt-3" />
         <InstallButton className="mt-3 w-full !py-3" />
       </form>
     </div>
@@ -123,6 +125,7 @@ export function ChangePasswordPage({ first }: { first?: boolean }) {
       <div className="card rounded-3xl p-5">
         <PasswordForm />
       </div>
+      <SupportLink className="mt-4 !rounded-3xl" />
       <button className="btn btn-ghost mx-auto mt-4" onClick={() => void logout()}>
         {tr("خروج", "Sign out")}
       </button>
@@ -161,6 +164,7 @@ export function AccountPage() {
           </div>
         )}
       </div>
+      <SupportLink className="!rounded-3xl" />
       <InstallButton className="w-full !py-3" />
       <button className="btn w-full !py-3 text-bad" onClick={() => void logout()}>
         {tr("تسجيل الخروج", "Sign out")}

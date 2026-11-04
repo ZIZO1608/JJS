@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { InstallButton } from "../components/InstallButton";
+import { SupportLink } from "../components/SupportLink";
 import { Field, TextInput } from "../components/ui";
 import { ApiError } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -28,6 +29,7 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="card p-6">{children}</div>
+        <SupportLink className="mt-4" />
         <InstallButton className="mt-4 w-full py-3" />
       </div>
     </div>

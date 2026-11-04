@@ -1764,6 +1764,10 @@
     "text": "Ask the shop owner first. Keep this guide next to the counter computer.",
     "contacts": [
       {
+        "label": "Support (WhatsApp)",
+        "value": "+963 942 556 404"
+      },
+      {
         "label": "Shop owner",
         "value": "Jabal — [[to fill: phone]]"
       },

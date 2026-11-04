@@ -9,6 +9,7 @@ import { Icon } from "./Icon";
 import { InboxProvider, NotificationBell, useInbox } from "./Inbox";
 import { InstallButton } from "./InstallButton";
 import { MoneyCloud } from "./MoneyCloud";
+import { SupportLink } from "./SupportLink";
 import { Field, Modal, TextInput } from "./ui";
 
 export const pathFor = (m: Module) =>
@@ -146,10 +147,11 @@ function LayoutInner() {
         <div className="min-w-0 leading-tight">
           <div className="truncate font-bold">{business ? pick(business) : t("app.name")}</div>
         </div>
-        <div className="ms-auto flex items-center gap-3">
+        <div className="ms-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-3">
           {!simple && <RateChip />}
           <InstallButton compact className="px-2.5 py-1.5 text-sm sm:px-3" />
           {me.role.systemKey === "admin" && <MoneyCloud />}
+          <SupportLink variant="icon" className="h-9 w-9 rounded-lg hover:bg-sunken" />
           <NotificationBell />
           <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group" aria-label={t("auth.language")}>
             {(["ar", "en"] as const).map((l) => (
@@ -176,6 +178,7 @@ function LayoutInner() {
                 <button className="w-full rounded-lg px-3 py-2 text-start hover:bg-sunken" onClick={() => (setMenu(false), setPw(true))}>
                   {t("auth.changePassword")}
                 </button>
+                <SupportLink variant="row" />
                 <button className="w-full rounded-lg px-3 py-2 text-start text-bad hover:bg-sunken" onClick={() => void logout()}>
                   {t("auth.logout")}
                 </button>
