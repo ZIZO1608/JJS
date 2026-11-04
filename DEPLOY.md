@@ -98,3 +98,12 @@ To start online with the data already on the laptop instead of an empty system:
 4. In Coolify, click **Restart**. The server swaps it in on startup and keeps the old database as a backup.
 
 The laptop's users and passwords come along. The `JJS_ADMIN_*` variables are ignored then, because users already exist.
+
+## Exchange rate API
+
+The app reads USD to SYP from the Syrian exchange-rates API every 30 minutes. The address is already set; only the key is needed, and it never goes in the code. Do one of these:
+
+- In the app: **Settings → Currency & rate → API key**, then **Save and check**.
+- On the server: set the environment variable `JJS_FX_API_KEY`.
+
+A manual rate overrides the API until it is cleared on the same screen.

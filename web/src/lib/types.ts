@@ -96,6 +96,7 @@ export interface Employee {
   commissionPerClientUsd: number;
   commissionPct: number;
   staffDiscountPct: number;
+  staffDiscountAmount: number;
   isDeliveryRep: boolean;
   active: boolean;
   userName: string | null;
@@ -154,6 +155,7 @@ export interface PeriodReport {
   items: number;
   freeItems: number;
   salesUsd: number;
+  collectedUsd?: number;
   grossUsd: number;
   discountUsd: number;
   taxUsd: number;

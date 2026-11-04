@@ -2,7 +2,7 @@ import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { categories, clientAccounts, clientPrices, clientSessions, clients, optionGroupLinks, optionGroups, options, orderLines, orderRequests, orders, priceListItems, products, subscriptionPlans, subscriptionRequests, subscriptions } from "../db/schema.js";
+import { categories, clientAccounts, clientPrices, clientSessions, clients, optionGroupLinks, optionGroups, options, orderLines, orderReports, orderRequests, orders, priceListItems, products, subscriptionPlans, subscriptionRequests, subscriptions } from "../db/schema.js";
 import { checkLoginLock, checkPassword, clearLoginFailures, hashPassword, recordLoginFailure } from "../lib/auth.js";
 import { createClientSession, destroyClientSession, loadClient, requireClient } from "../lib/clientAuth.js";
 import { localDate } from "../lib/biz.js";
@@ -12,7 +12,7 @@ import { loyaltyStatus, subscriptionStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
 import { assertOrderQtys } from "../services/orders.js";
-import { createOrderRequest, createSubscriptionRequest, portalQuote } from "../services/portal.js";
+import { createOrderReport, createOrderRequest, createSubscriptionRequest, deliveryPersonOf, portalQuote } from "../services/portal.js";
 import { receiptOf } from "./orders.js";
 
 /**
@@ -121,7 +121,7 @@ const myRequests = (clientId: string, limit: number) => {
 const subscriptionOut = (clientId: string) => {
   const s = subscriptionStatus(db, clientId, localDate());
   if (!s) return null;
-  return { planId: s.planId, nameAr: s.plan.nameAr, nameEn: s.plan.nameEn, monthlyFee: s.plan.monthlyFee, currency: s.plan.currency, discountPct: s.plan.discountPct, includedItems: s.plan.includedItems, usedIncluded: s.usedIncluded, availableIncluded: s.availableIncluded, startDate: s.startDate, endDate: s.endDate, autoRenew: s.autoRenew };
+  return { planId: s.planId, nameAr: s.plan.nameAr, nameEn: s.plan.nameEn, monthlyFee: s.plan.monthlyFee, currency: s.plan.currency, discountPct: s.plan.discountPct, discountAmount: s.plan.discountAmount, includedItems: s.plan.includedItems, usedIncluded: s.usedIncluded, availableIncluded: s.availableIncluded, startDate: s.startDate, endDate: s.endDate, autoRenew: s.autoRenew };
 };
 
 portalRouter.get(
@@ -257,7 +257,22 @@ portalRouter.get(
       const optNames = new Map(db.select({ id: options.id, nameAr: options.nameAr, nameEn: options.nameEn }).from(options).where(inArray(options.id, raw.flatMap((l) => l.optionIds).concat(["-"]))).all().map((o) => [o.id, o]));
       lines = raw.map((l) => ({ nameAr: names.get(l.productId)?.nameAr ?? "—", nameEn: names.get(l.productId)?.nameEn ?? "—", qty: l.qty, freeQty: 0, unitPrice: 0, lineTotal: 0, options: l.optionIds.map((o) => optNames.get(o) ?? { nameAr: "", nameEn: "" }) }));
     }
-    res.json({ request: { ...requestOut(r, order), lines, totals } });
+    const reports = db
+      .select({ id: orderReports.id, category: orderReports.category, message: orderReports.message, status: orderReports.status, reply: orderReports.reply, createdAt: orderReports.createdAt, resolvedAt: orderReports.resolvedAt })
+      .from(orderReports)
+      .where(and(eq(orderReports.requestId, r.id), isNull(orderReports.deletedAt)))
+      .orderBy(desc(orderReports.createdAt))
+      .all();
+    res.json({ request: { ...requestOut(r, order), lines, totals, delivery: deliveryPersonOf(db, r.orderId), reports } });
+  }),
+);
+
+/** The client tells the shop something went wrong with this order: it rings on every staff bell. */
+portalRouter.post(
+  "/order-requests/:id/reports",
+  h((req, res) => {
+    const body = parse(z.object({ category: z.enum(["late", "missing", "wrong", "quality", "payment", "other"]), message: z.string().trim().min(3).max(500) }), req.body);
+    res.status(201).json(db.transaction((tx) => createOrderReport(tx, req.portalClient!.clientId, String(req.params.id), body)));
   }),
 );
 
@@ -298,7 +313,7 @@ portalRouter.get(
       .all();
     res.json({
       current: subscriptionOut(clientId),
-      plans: plans.map((p) => ({ id: p.id, nameAr: p.nameAr, nameEn: p.nameEn, monthlyFee: p.monthlyFee, currency: p.currency, discountPct: p.discountPct, includedItems: p.includedItems })),
+      plans: plans.map((p) => ({ id: p.id, nameAr: p.nameAr, nameEn: p.nameEn, monthlyFee: p.monthlyFee, currency: p.currency, discountPct: p.discountPct, discountAmount: p.discountAmount, includedItems: p.includedItems })),
       requests: reqs.map((r) => ({ id: r.id, planId: r.planId, status: r.status, declineReason: r.declineReason, createdAt: r.createdAt, decidedAt: r.decidedAt })),
       history: history.map((x) => ({ id: x.s.id, nameAr: x.nameAr, nameEn: x.nameEn, startDate: x.s.startDate, endDate: x.s.endDate, status: x.s.status })),
     });

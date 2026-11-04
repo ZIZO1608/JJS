@@ -177,7 +177,7 @@
   "apiKey": "API key",
   "apiKeyKept": "A key is saved. Type a new one to replace it.",
   "jsonPath": "Where the number is in the reply",
-  "jsonPathHint": "e.g. rate or data.usd.sell",
+  "jsonPathHint": "For the Syrian API: rates.sell (selling rate) or rates.buy (buying rate)",
   "testSave": "Save and check now",
   "refresh": "Check now",
   "lastError": "Last check failed: {msg}. The last good rate is kept.",
@@ -244,6 +244,14 @@
   "credit_limit": "This order goes over the credit limit.",
   "day_closed": "The day is closed. Ask the admin to reopen it.",
   "no_rate": "The USD exchange rate is not set yet. An admin needs to set it under Settings → Currency & rate.",
-  "not_found": "Not found."
+  "not_found": "Not found.",
+  "already_delivered": "This order was already marked delivered.",
+  "not_delivery_person": "Choose an active delivery person.",
+  "order_closed": "This order was already delivered or cancelled.",
+  "not_a_delivery": "This order is a pickup, so nobody delivers it.",
+  "amount_required": "Type how much the client paid.",
+  "collected_too_much": "That is more than the client owes on this order.",
+  "too_many_reports": "The shop is still looking at your earlier reports on this order.",
+  "report_closed": "This report was already answered."
  }
 }

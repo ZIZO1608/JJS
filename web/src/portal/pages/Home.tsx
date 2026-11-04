@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { InstallHelp, useInstall } from "../../components/InstallButton";
+import { discountLabel } from "../../components/DiscountInput";
 import { Spinner } from "../../components/ui";
 import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -14,6 +15,7 @@ export interface PortalSubscription {
   monthlyFee: number;
   currency: Currency;
   discountPct: number;
+  discountAmount?: number;
   includedItems: number;
   usedIncluded: number;
   availableIncluded: number;
@@ -72,7 +74,7 @@ function InstallCard() {
 }
 
 export function HomePage() {
-  const { tr, pick, fmtDate } = useI18n();
+  const { tr, pick, fmtDate, lang } = useI18n();
   const m = useMoney();
   const ago = useAgo();
   const { data, reload } = useData<HomeData>("/portal/home");
@@ -128,7 +130,7 @@ export function HomePage() {
               <div className="text-xs opacity-70">{tr("اشتراكك", "Your plan")}</div>
               <div className="truncate text-lg font-bold">{pick(sub)}</div>
               <div className="text-xs opacity-70">{tr(`حتى ${fmtDate(sub.endDate)}`, `Until ${fmtDate(sub.endDate)}`)}</div>
-              {sub.discountPct > 0 && <div className="mt-1 inline-block rounded-full bg-bg/15 px-2 py-0.5 text-xs font-bold">−{sub.discountPct}%</div>}
+              {discountLabel(sub.discountPct, sub.discountAmount, sub.currency, lang) && <div className="mt-1 inline-block rounded-full bg-bg/15 px-2 py-0.5 text-xs font-bold">−{discountLabel(sub.discountPct, sub.discountAmount, sub.currency, lang)}</div>}
             </div>
           </Link>
         ) : (

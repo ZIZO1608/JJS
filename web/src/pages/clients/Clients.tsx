@@ -8,6 +8,7 @@ import { money } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import type { ClientSummary, Lookup } from "../../lib/types";
 import { useData } from "../../lib/useData";
+import { discountLabel } from "../../components/DiscountInput";
 import { BalanceText, ClientDialog, PaymentDialog, type Tier } from "./ClientDialogs";
 
 type Filter = "all" | "owes" | "late" | "subs" | "business" | "individual";
@@ -82,7 +83,7 @@ function SimpleClients({ rows, onPay }: { rows: ClientSummary[]; onPay: (c: Clie
 }
 
 export function ClientsPage() {
-  const { tr, pick } = useI18n();
+  const { tr, pick, lang } = useI18n();
   const { can, simple } = useAuth();
   const navigate = useNavigate();
   const { data, reload } = useData<{ rows: ClientSummary[] }>("/clients");
@@ -155,7 +156,7 @@ export function ClientsPage() {
     {
       key: "tier",
       header: tr("الفئة", "Tier"),
-      render: (c) => (c.tierId && tierOf.get(c.tierId) ? `${pick(tierOf.get(c.tierId)!)} · ${tierOf.get(c.tierId)!.discountPct}%` : <span className="text-faint">—</span>),
+      render: (c) => (c.tierId && tierOf.get(c.tierId) ? `${pick(tierOf.get(c.tierId)!)} · ${discountLabel(tierOf.get(c.tierId)!.discountPct, tierOf.get(c.tierId)!.discountAmount, tierOf.get(c.tierId)!.discountCurrency, lang) || "0%"}` : <span className="text-faint">—</span>),
     },
     { key: "bal", header: tr("الرصيد", "Balance"), align: "end", sortValue: (c) => c.balanceUsd, render: (c) => <BalanceText usd={c.balanceUsd} /> },
     {

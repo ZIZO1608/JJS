@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { DataTable, type Column } from "../components/DataTable";
+import { DiscountInput, discountLabel, readDiscount, type DiscountMode } from "../components/DiscountInput";
 import { Stat, Tabs } from "../components/Tabs";
 import { ConfirmDialog, Empty, Field, Modal, PageHeader, Select, Spinner, TextInput } from "../components/ui";
 import { ApiError, del, post, put } from "../lib/api";
@@ -30,7 +31,8 @@ function EmployeeDialog({ emp, onClose, onSaved }: { emp: Employee | null; onClo
     currency: emp?.currency ?? ((s?.defaultCurrency ?? "USD") as Currency),
     commissionPct: String(emp?.commissionPct ?? 0),
     commissionPerClientUsd: String(emp?.commissionPerClientUsd ?? 0),
-    staffDiscountPct: String(emp?.staffDiscountPct ?? 30),
+    staffDiscountMode: (emp?.staffDiscountAmount ? "amount" : "pct") as "pct" | "amount",
+    staffDiscount: String((emp?.staffDiscountAmount ? emp.staffDiscountAmount : emp?.staffDiscountPct) ?? 30),
     isDeliveryRep: emp?.isDeliveryRep ?? false,
     active: emp?.active ?? true,
   });
@@ -38,15 +40,20 @@ function EmployeeDialog({ emp, onClose, onSaved }: { emp: Employee | null; onClo
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
   const n0 = (v: string) => (Number.isNaN(num(v)) ? 0 : num(v));
 
+  const staffMode: DiscountMode = f.staffDiscountMode === "amount" ? f.currency : "pct";
+  const staffRead = readDiscount(staffMode, f.staffDiscount);
+
   const save = async () => {
     setErrors({});
+    const { staffDiscountMode: _mode, staffDiscount: _value, ...fields } = f;
     const body = {
-      ...f,
+      ...fields,
       userId: f.userId || null,
       baseSalary: n0(f.baseSalary),
       commissionPct: n0(f.commissionPct),
       commissionPerClientUsd: n0(f.commissionPerClientUsd),
-      staffDiscountPct: n0(f.staffDiscountPct),
+      staffDiscountPct: staffRead.pct,
+      staffDiscountAmount: staffRead.amount,
     };
     try {
       if (emp) await put(`/people/employees/${emp.id}`, body);
@@ -145,8 +152,8 @@ function EmployeeDialog({ emp, onClose, onSaved }: { emp: Employee | null; onClo
             </Field>
           </>
         )}
-        <Field label={tr("خصم الموظف ٪", "Staff discount %")} htmlFor="e-staff" hint={tr("على مشترياته من المحل", "On what they buy from the shop")}>
-          <TextInput id="e-staff" dir="ltr" inputMode="decimal" className="num" value={f.staffDiscountPct} onChange={(e) => set("staffDiscountPct", e.target.value)} />
+        <Field label={tr("خصم الموظف", "Staff discount")} htmlFor="e-staff" hint={tr("على مشترياته من المحل: نسبة أو مبلغ من كل طلب", "On what they buy from the shop: a percentage or an amount off each order")} error={errors.staffDiscountPct ?? errors.staffDiscountAmount}>
+          <DiscountInput id="e-staff" mode={staffMode} value={f.staffDiscount} currencies={[f.currency]} onChange={(m, v) => setF((x) => ({ ...x, staffDiscountMode: m === "pct" ? "pct" : "amount", staffDiscount: v }))} />
         </Field>
         <div className="grid content-end gap-2">
           <label className="inline-flex items-center gap-2">
@@ -164,7 +171,7 @@ function EmployeeDialog({ emp, onClose, onSaved }: { emp: Employee | null; onClo
 }
 
 function Employees() {
-  const { tr, err } = useI18n();
+  const { tr, err, lang } = useI18n();
   const { can } = useAuth();
   const toast = useToast();
   const { data, reload } = useData<{ rows: Employee[] }>("/people/employees");
@@ -199,7 +206,7 @@ function Employees() {
       header: tr("العمولة", "Commission"),
       render: (e) => (e.payModel === "fixed" ? "—" : <span className="num ltr text-sm">{`${e.commissionPct}% + ${money(e.commissionPerClientUsd)}/${tr("زبون", "client")}`}</span>),
     },
-    { key: "disc", header: tr("خصم الموظف", "Staff discount"), align: "end", render: (e) => <span className="num">{e.staffDiscountPct}%</span> },
+    { key: "disc", header: tr("خصم الموظف", "Staff discount"), align: "end", render: (e) => <span className="num ltr">{discountLabel(e.staffDiscountPct, e.staffDiscountAmount, e.currency, lang) || "0%"}</span> },
     {
       key: "act",
       header: "",

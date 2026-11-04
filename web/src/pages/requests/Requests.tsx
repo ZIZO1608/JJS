@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { discountLabel } from "../../components/DiscountInput";
 import { INBOX_EVENT, useInbox } from "../../components/Inbox";
 import { Tabs } from "../../components/Tabs";
 import { Empty, Field, Modal, PageHeader, Spinner, TextInput } from "../../components/ui";
@@ -42,7 +43,7 @@ interface SubRequest {
   declineReason: string;
   decidedByName: string | null;
   createdAt: string;
-  plan: { nameAr: string; nameEn: string; monthlyFee: number; currency: Currency; includedItems: number; discountPct: number };
+  plan: { nameAr: string; nameEn: string; monthlyFee: number; currency: Currency; includedItems: number; discountPct: number; discountAmount: number };
 }
 
 const STATUS: Record<Status, { ar: string; en: string; cls: string }> = {
@@ -250,7 +251,7 @@ function SubCard({ r, highlight, onChanged }: { r: SubRequest; highlight: boolea
         </div>
       </div>
       <div className="mt-2 text-sm text-muted">
-        {tr(`${r.plan.includedItems} قطعة مجانية · خصم ${r.plan.discountPct}%`, `${r.plan.includedItems} free items · ${r.plan.discountPct}% off`)}
+        {tr(`${r.plan.includedItems} قطعة مجانية · خصم ${discountLabel(r.plan.discountPct, r.plan.discountAmount, r.plan.currency, lang) || "0%"}`, `${r.plan.includedItems} free items · ${discountLabel(r.plan.discountPct, r.plan.discountAmount, r.plan.currency, lang) || "0%"} off`)}
       </div>
       {r.note && <p className="mt-2 text-sm">📝 {r.note}</p>}
       {r.status === "pending" && can("clients", "create") ? (
@@ -289,18 +290,108 @@ function SubCard({ r, highlight, onChanged }: { r: SubRequest; highlight: boolea
   );
 }
 
+interface OrderReport {
+  id: string;
+  requestId: string;
+  requestNumber: number;
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  category: "late" | "missing" | "wrong" | "quality" | "payment" | "other";
+  message: string;
+  status: "open" | "resolved";
+  reply: string;
+  createdAt: string;
+  resolvedByName: string | null;
+}
+
+export const REPORT_LABEL: Record<OrderReport["category"], { ar: string; en: string; icon: string }> = {
+  late: { ar: "الطلب تأخر", en: "Order is late", icon: "⏰" },
+  missing: { ar: "في شي ناقص", en: "Something is missing", icon: "📦" },
+  wrong: { ar: "الطلب غلط", en: "Wrong order", icon: "🔄" },
+  quality: { ar: "مشكلة بالجودة", en: "Quality problem", icon: "🥪" },
+  payment: { ar: "مشكلة بالحساب", en: "Payment problem", icon: "💰" },
+  other: { ar: "شي تاني", en: "Something else", icon: "💬" },
+};
+
+function ReportCard({ r, highlight, onChanged }: { r: OrderReport; highlight: boolean; onChanged: () => void }) {
+  const { tr, pick, err } = useI18n();
+  const toast = useToast();
+  const ago = useAgo();
+  const [reply, setReply] = useState("");
+  const [busy, setBusy] = useState(false);
+  const label = REPORT_LABEL[r.category];
+  const resolve = async () => {
+    setBusy(true);
+    try {
+      await post(`/requests/reports/${r.id}/resolve`, { reply: reply.trim() });
+      toast(tr("انسجّل الرد ووصل للزبون", "Answer saved and sent to the client"));
+      onChanged();
+    } catch (e) {
+      toast(err(e), "error");
+      setBusy(false);
+    }
+  };
+  return (
+    <article id={`req-${r.id}`} className={`card grid gap-3 ${highlight ? "ring-2 ring-brand" : ""} ${r.status === "open" ? "border-bad/40" : ""}`}>
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <Link to={`/clients/${r.clientId}`} className="font-bold hover:underline">
+            {r.clientName}
+          </Link>
+          <div className="text-sm text-muted">
+            {r.clientPhone && (
+              <a href={`tel:${r.clientPhone}`} className="num ltr me-2 text-brand">
+                {r.clientPhone}
+              </a>
+            )}
+            <span className="num">
+              {tr("طلب", "Order")} #{r.requestNumber}
+            </span>{" "}
+            · {ago(r.createdAt)}
+          </div>
+        </div>
+        <span className={`chip !font-bold ${r.status === "open" ? "bg-bad/15 text-bad" : "bg-good/15 text-good"}`}>{r.status === "open" ? tr("مفتوح", "Open") : tr("تم الحل", "Resolved")}</span>
+      </div>
+      <div className="rounded-xl bg-sunken p-3">
+        <div className="mb-1 text-sm font-bold">
+          {label.icon} {pick(label)}
+        </div>
+        <p className="whitespace-pre-wrap break-words">{r.message}</p>
+      </div>
+      {r.status === "open" ? (
+        <div className="flex flex-wrap gap-2">
+          <TextInput className="min-w-0 flex-1" maxLength={500} placeholder={tr("ردك على الزبون (اختياري)", "Your answer to the client (optional)")} value={reply} onChange={(e) => setReply(e.target.value)} aria-label={tr("ردك على الزبون", "Your answer to the client")} />
+          <button className="btn btn-primary" disabled={busy} onClick={() => void resolve()}>
+            ✓ {tr("تم الحل", "Resolved")}
+          </button>
+        </div>
+      ) : (
+        r.reply && (
+          <p className="text-sm">
+            <span className="font-semibold">{r.resolvedByName ?? tr("المحل", "The shop")}:</span> {r.reply}
+          </p>
+        )
+      )}
+    </article>
+  );
+}
+
 export function RequestsPage() {
   const { tr } = useI18n();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "subscriptions" ? "subscriptions" : "orders";
+  const rawTab = params.get("tab");
+  const tab = rawTab === "subscriptions" ? "subscriptions" : rawTab === "reports" ? "reports" : "orders";
   const highlight = params.get("id");
   const [status, setStatus] = useState<"pending" | "all">("pending");
   const { pending, refresh } = useInbox();
   const orders = useData<{ rows: OrderRequest[] }>(tab === "orders" ? `/requests/orders?status=${status}` : null);
   const subs = useData<{ rows: SubRequest[] }>(tab === "subscriptions" ? `/requests/subscriptions?status=${status}` : null);
+  const reports = useData<{ rows: OrderReport[] }>(tab === "reports" ? `/requests/reports?status=${status === "pending" ? "open" : "all"}` : null);
   const reloadAll = () => {
     void orders.reload();
     void subs.reload();
+    void reports.reload();
     void refresh();
   };
 
@@ -308,17 +399,18 @@ export function RequestsPage() {
     const on = () => {
       void orders.reload();
       void subs.reload();
+      void reports.reload();
     };
     window.addEventListener(INBOX_EVENT, on);
     return () => window.removeEventListener(INBOX_EVENT, on);
-  }, [orders.reload, subs.reload]);
+  }, [orders.reload, subs.reload, reports.reload]);
 
   useEffect(() => {
     if (highlight) document.getElementById(`req-${highlight}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [highlight, orders.data, subs.data]);
+  }, [highlight, orders.data, subs.data, reports.data]);
 
   const badge = (n: number) => (n ? ` (${n})` : "");
-  const rowsLoading = tab === "orders" ? !orders.data : !subs.data;
+  const rowsLoading = tab === "orders" ? !orders.data : tab === "reports" ? !reports.data : !subs.data;
 
   return (
     <>
@@ -327,6 +419,7 @@ export function RequestsPage() {
         tabs={[
           { key: "orders", label: tr("الطلبات", "Orders") + badge(pending.orders) },
           { key: "subscriptions", label: tr("الاشتراكات", "Subscriptions") + badge(pending.subscriptions) },
+          { key: "reports", label: tr("بلاغات الزبائن", "Client reports") + badge(pending.reports) },
         ]}
         value={tab}
         onChange={(k) => setParams(k === "orders" ? {} : { tab: k })}
@@ -345,6 +438,16 @@ export function RequestsPage() {
       </div>
       {rowsLoading ? (
         <Spinner />
+      ) : tab === "reports" ? (
+        reports.data!.rows.length === 0 ? (
+          <Empty text={status === "pending" ? tr("ما في بلاغات مفتوحة 🎉", "No open reports 🎉") : tr("ما في بلاغات بعد", "No reports yet")} />
+        ) : (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {reports.data!.rows.map((r) => (
+              <ReportCard key={r.id} r={r} highlight={r.id === highlight} onChanged={reloadAll} />
+            ))}
+          </div>
+        )
       ) : tab === "orders" ? (
         orders.data!.rows.length === 0 ? (
           <Empty text={status === "pending" ? tr("لا طلبات بانتظار الرد 🎉", "Nothing waiting 🎉") : tr("لا طلبات بعد", "No requests yet")} />

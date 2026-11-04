@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { discountLabel } from "../../components/DiscountInput";
 import { Spinner } from "../../components/ui";
 import { post } from "../../lib/api";
 import type { Currency } from "../../lib/format";
@@ -15,6 +16,7 @@ interface Plan {
   monthlyFee: number;
   currency: Currency;
   discountPct: number;
+  discountAmount?: number;
   includedItems: number;
 }
 interface SubData {
@@ -25,7 +27,7 @@ interface SubData {
 }
 
 export function SubscriptionPage() {
-  const { tr, pick, fmtDate, err } = useI18n();
+  const { tr, pick, fmtDate, err, lang } = useI18n();
   const m = useMoney();
   const toast = useToast();
   const { data, reload } = useData<SubData>("/portal/subscription");
@@ -92,7 +94,7 @@ export function SubscriptionPage() {
               <div className="text-xs text-white/80">{tr("استُخدمت", "used")}</div>
             </div>
             <div className="rounded-xl bg-white/15 p-2">
-              <div className="text-lg font-bold num">{c.discountPct}%</div>
+              <div className="text-lg font-bold num ltr">{discountLabel(c.discountPct, c.discountAmount, c.currency, lang) || "0%"}</div>
               <div className="text-xs text-white/80">{tr("خصم", "discount")}</div>
             </div>
           </div>
@@ -140,7 +142,7 @@ export function SubscriptionPage() {
                   </div>
                   <ul className="mt-2 grid gap-1 text-sm text-muted">
                     {p.includedItems > 0 && <li>✓ {tr(`${p.includedItems} قطعة مجانية كل شهر`, `${p.includedItems} free items every month`)}</li>}
-                    {p.discountPct > 0 && <li>✓ {tr(`خصم ${p.discountPct}% على كل طلب`, `${p.discountPct}% off every order`)}</li>}
+                    {discountLabel(p.discountPct, p.discountAmount, p.currency, lang) && <li>✓ {tr(`خصم ${discountLabel(p.discountPct, p.discountAmount, p.currency, lang)} على كل طلب`, `${discountLabel(p.discountPct, p.discountAmount, p.currency, lang)} off every order`)}</li>}
                     <li>✓ {tr("يتجدد شهرياً", "Renews monthly")}</li>
                   </ul>
                 </button>

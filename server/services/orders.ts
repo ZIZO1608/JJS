@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
-import type { Currency } from "../../shared/money.js";
+import { formatMoney, type Currency } from "../../shared/money.js";
 import { isOrderQty } from "../../shared/orderQty.js";
 import {
   cashBoxes,
@@ -23,6 +23,7 @@ import { assertDayOpen, convert, localDate, nextNumber, rateFor, roundMoney, rou
 import { HttpError, newId, nowIso } from "../lib/util.js";
 import { loyaltyStatus, subscriptionStatus } from "./clients.js";
 import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "./money.js";
+import { notifyStaff } from "./notifications.js";
 import { reverseStock, takeProductStock } from "./stock.js";
 
 export interface OrderInput {
@@ -35,6 +36,8 @@ export interface OrderInput {
   assignedTo?: string | null;
   methodId?: string | null;
   manualDiscountPct?: number;
+  /** A fixed amount off, in the order currency. Used instead of the percentage when above 0. */
+  manualDiscountAmount?: number;
   useLoyalty?: boolean;
   note?: string;
   /** Paid now, in the order currency. Less than the total → the rest goes on the client's account. */
@@ -102,7 +105,7 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate(), opts: O
   const allOptionIds = input.lines.flatMap((l) => l.optionIds);
   const optRows = allOptionIds.length ? tx.select().from(options).where(and(isNull(options.deletedAt), eq(options.active, true), inArray(options.id, allOptionIds))).all() : [];
   optRows.forEach((o) => used.add(o.currency));
-  const rate = opts.presetRate !== undefined && opts.presetRate !== null ? opts.presetRate : rateFor(...used);
+  let rate = opts.presetRate !== undefined && opts.presetRate !== null ? opts.presetRate : rateFor(...used);
 
   const lines: PricedLine[] = input.lines.map((l, i) => {
     const p = lineProducts[i]!;
@@ -158,28 +161,41 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate(), opts: O
   }
   const freeValue = roundMoney(lines.reduce((s, l) => s + l.freeQty * l.unitPrice, 0), currency);
 
-  // Percentage discounts: best one wins unless stacking is allowed.
-  const cands: { key: string; pct: number }[] = [];
-  if (input.type === "trial") cands.push({ key: "trial", pct: 100 });
-  if (input.type === "internal") cands.push({ key: "internal", pct: 100 });
+  // Discounts, as a percentage or a fixed amount: the one worth the most wins unless stacking is allowed.
+  const discountable = subtotal - freeValue;
+  type Cand = { key: string; pct: number; amount: number; label: string };
+  const cands: Cand[] = [];
+  const addDiscount = (key: string, pct: number, amount: number, amountCurrency: Currency) => {
+    if (amount > 0) {
+      if (amountCurrency !== currency && !rate) rate = rateFor(amountCurrency, currency);
+      cands.push({ key, pct: 0, amount: roundMoney(convert(amount, amountCurrency, currency, rate), currency), label: `${amount} ${amountCurrency}` });
+    } else if (pct > 0) cands.push({ key, pct, amount: 0, label: `${pct}%` });
+  };
+  if (input.type === "trial") addDiscount("trial", 100, 0, currency);
+  if (input.type === "internal") addDiscount("internal", 100, 0, currency);
   if (client?.tierId && input.type === "normal" && !agreed) {
     const tier = tx.select().from(clientTiers).where(eq(clientTiers.id, client.tierId)).get();
-    if (tier && tier.discountPct > 0) cands.push({ key: "tier", pct: tier.discountPct });
+    if (tier) addDiscount("tier", tier.discountPct, tier.discountAmount, tier.discountCurrency);
   }
-  if (sub && sub.plan.discountPct > 0) cands.push({ key: "subscription", pct: sub.plan.discountPct });
+  if (sub) addDiscount("subscription", sub.plan.discountPct, sub.plan.discountAmount, sub.plan.currency);
   let employee: typeof employees.$inferSelect | undefined;
   if (input.type === "staff") {
     employee = input.employeeId ? tx.select().from(employees).where(and(eq(employees.id, input.employeeId), isNull(employees.deletedAt))).get() : undefined;
     if (!employee) throw new HttpError(400, "employee_required", "Choose which employee is buying.");
-    if (employee.staffDiscountPct > 0) cands.push({ key: "staff", pct: employee.staffDiscountPct });
+    addDiscount("staff", employee.staffDiscountPct, employee.staffDiscountAmount, employee.currency);
   }
-  if (input.manualDiscountPct && input.manualDiscountPct > 0) cands.push({ key: "manual", pct: Math.min(100, input.manualDiscountPct) });
+  addDiscount("manual", Math.min(100, input.manualDiscountPct ?? 0), input.manualDiscountAmount ?? 0, currency);
+  const worth = (c: Cand) => Math.min(discountable, discountable * (c.pct / 100) + c.amount);
   const stacking = getSetting("orders").allowStacking;
-  const pct = cands.length === 0 ? 0 : stacking ? Math.min(100, cands.reduce((s, c) => s + c.pct, 0)) : Math.max(...cands.map((c) => c.pct));
-  const pctKeys = stacking ? cands : cands.filter((c) => c.pct === pct).slice(0, 1);
-  pctKeys.forEach((c) => reasons.push(`${c.key}:${c.pct}%`));
-  const pctDiscount = roundMoney((subtotal - freeValue) * (pct / 100), currency);
-  const discount = roundMoney(freeValue + pctDiscount, currency);
+  const best = cands.reduce<Cand | null>((b, c) => (!b || worth(c) > worth(b) ? c : b), null);
+  const applied = stacking ? cands : best ? [best] : [];
+  applied.forEach((c) => reasons.push(`${c.key}:${c.label}`));
+  const appliedPct = Math.min(100, applied.reduce((s, c) => s + c.pct, 0));
+  const appliedAmount = applied.reduce((s, c) => s + c.amount, 0);
+  const offDiscountable = roundMoney(Math.min(discountable, discountable * (appliedPct / 100) + appliedAmount), currency);
+  // The share of the price this discount takes: consignment prices use it line by line.
+  const pct = appliedAmount > 0 ? (discountable > 0 ? round4((offDiscountable / discountable) * 100) : 0) : appliedPct;
+  const discount = roundMoney(freeValue + offDiscountable, currency);
 
   // Taxes (not on free trials).
   const appliedTaxes: { id: string; nameAr: string; nameEn: string; kind: string; value: number; amount: number }[] = [];
@@ -339,6 +355,101 @@ export function createOrder(tx: Q, input: OrderInput, userId: string, opts: Orde
     if (c && !c.convertedAt && hadTrial > 0) tx.update(clients).set({ convertedAt: date, updatedAt: nowIso(), syncedAt: null }).where(eq(clients.id, c.id)).run();
   }
   return { id, number, priced, paidNow, onAccount, paymentStatus };
+}
+
+/** What the client still owes on this order, in the order currency. */
+export const orderRemaining = (o: typeof orders.$inferSelect) => (o.paymentStatus === "credit" || o.paymentStatus === "partial" ? Math.max(0, roundMoney(o.total - o.paidAmount, o.currency)) : 0);
+
+/** The rule for "who may carry an order": an active delivery person. */
+function assertDeliveryPerson(tx: Q, employeeId: string) {
+  const e = tx.select().from(employees).where(and(eq(employees.id, employeeId), eq(employees.isDeliveryRep, true), eq(employees.active, true), isNull(employees.deletedAt))).get();
+  if (!e) throw new HttpError(400, "not_delivery_person", "Choose an active delivery person.");
+  return e;
+}
+
+export function assignDelivery(tx: Q, orderId: string, employeeId: string | null) {
+  const o = tx.select().from(orders).where(and(eq(orders.id, orderId), isNull(orders.deletedAt))).get();
+  if (!o) throw new HttpError(404, "not_found", "Order not found");
+  if (o.status !== "confirmed") throw new HttpError(409, "order_closed", "This order was already delivered or cancelled.");
+  if (o.fulfilment !== "delivery") throw new HttpError(400, "not_a_delivery", "This order is a pickup, so nobody delivers it.");
+  if (employeeId) assertDeliveryPerson(tx, employeeId);
+  tx.update(orders).set({ assignedTo: employeeId, updatedAt: nowIso(), syncedAt: null }).where(eq(orders.id, o.id)).run();
+  return { order: o, changed: o.assignedTo !== employeeId };
+}
+
+export interface DeliveryCollection {
+  /** full = paid everything still owed; part = paid `amount`; none = paid nothing, it stays on the client's account. */
+  mode: "full" | "part" | "none";
+  amount?: number;
+  currency?: Currency;
+  methodId?: string | null;
+}
+
+/**
+ * Hand an order over and record what the client paid. What they did not pay stays on their
+ * account (so it shows in the cloud under what clients owe) and every manager's bell says so.
+ */
+export function deliverOrder(tx: Q, orderId: string, input: { assignedTo?: string | null; collection?: DeliveryCollection }, userId: string) {
+  const o = tx.select().from(orders).where(and(eq(orders.id, orderId), isNull(orders.deletedAt))).get();
+  if (!o) throw new HttpError(404, "not_found", "Order not found");
+  if (o.status === "cancelled") throw new HttpError(409, "cancelled", "This order was cancelled.");
+  if (o.status === "delivered") throw new HttpError(409, "already_delivered", "This order was already marked delivered.");
+  const assignedTo = input.assignedTo ?? o.assignedTo;
+  const owed = orderRemaining(o);
+  const c = input.collection ?? { mode: "none" as const };
+  let paidInOrderCcy = 0;
+  let paidStatus = o.paymentStatus;
+  let methodId = o.methodId;
+  if (owed > 0 && c.mode !== "none") {
+    const date = localDate();
+    assertDayOpen(tx, date);
+    if (!c.methodId) throw new HttpError(400, "method_required", "Choose how the client paid.");
+    const method = getMethod(tx, c.methodId);
+    if (method.kind !== "box" || !method.boxId) throw new HttpError(400, "method_has_no_box", "This payment method has no cash box. Fix it in Settings → Cash boxes.");
+    const repBox = o.fulfilment === "delivery" && assignedTo && method.systemKey === "cash" ? tx.select().from(cashBoxes).where(and(eq(cashBoxes.employeeId, assignedTo), eq(cashBoxes.kind, "rep"), isNull(cashBoxes.deletedAt))).get() : undefined;
+    const boxId = repBox?.id ?? method.boxId;
+    const currency = c.currency ?? o.currency;
+    const box = tx.select({ currency: cashBoxes.currency }).from(cashBoxes).where(eq(cashBoxes.id, boxId)).get();
+    const rate = rateFor(currency, o.currency, box?.currency ?? currency) ?? o.fxRate;
+    let amount: number;
+    if (c.mode === "full") {
+      paidInOrderCcy = owed;
+      amount = roundMoney(convert(owed, o.currency, currency, rate), currency);
+    } else {
+      amount = roundMoney(c.amount ?? 0, currency);
+      if (!(amount > 0)) throw new HttpError(400, "amount_required", "Type how much the client paid.");
+      paidInOrderCcy = roundMoney(convert(amount, currency, o.currency, rate), o.currency);
+      // one unit of slack: a whole-pound amount cannot always land exactly on a dollar remainder
+      if (paidInOrderCcy > owed + (o.currency === "USD" ? 0.01 : 1)) throw new HttpError(400, "collected_too_much", "That is more than the client owes on this order.");
+      paidInOrderCcy = Math.min(paidInOrderCcy, owed);
+    }
+    const pid = newId();
+    tx.insert(payments).values({ id: pid, kind: "order", orderId: o.id, clientId: o.clientId, methodId: method.id, boxId, amount, currency, fxRate: rate, amountUsd: round4(toUsd(amount, currency, rate)), userId, businessDate: date }).run();
+    addBoxMove(tx, { boxId, type: "sale", amount, currency, rate, refType: "order", refId: o.id, note: `#${o.number}`, userId, date });
+    if (o.clientId) addClientMove(tx, { clientId: o.clientId, type: "payment", amount, currency, rate, orderId: o.id, paymentId: pid, note: `#${o.number}`, userId, date });
+    paidStatus = paidInOrderCcy >= owed ? "paid" : "partial";
+    methodId = method.id;
+  }
+  const stillOwed = roundMoney(owed - paidInOrderCcy, o.currency);
+  tx.update(orders)
+    .set({ status: "delivered", assignedTo, deliveredAt: nowIso(), deliveredBy: userId, deliveryCollected: paidInOrderCcy, paymentStatus: paidStatus, methodId, paidAmount: roundMoney(o.paidAmount + paidInOrderCcy, o.currency), updatedAt: nowIso(), syncedAt: null })
+    .where(eq(orders.id, o.id))
+    .run();
+  if (stillOwed > 0 && o.clientId) {
+    const client = tx.select({ name: clients.name }).from(clients).where(eq(clients.id, o.clientId)).get();
+    const name = client?.name ?? "";
+    const part = paidInOrderCcy > 0;
+    notifyStaff(tx, {
+      kind: "delivery_unpaid",
+      titleAr: part ? `💰 ${name} دفع جزء بس` : `💰 ${name} ما دفع`,
+      titleEn: part ? `💰 ${name} paid only part` : `💰 ${name} did not pay`,
+      bodyAr: `طلب #${o.number} · باقي عليه ${formatMoney(stillOwed, o.currency, "ar")}`,
+      bodyEn: `Order #${o.number} · still owes ${formatMoney(stillOwed, o.currency, "en")}`,
+      link: `/clients/${o.clientId}`,
+      refId: o.id,
+    });
+  }
+  return { collected: paidInOrderCcy, stillOwed, currency: o.currency };
 }
 
 /** Cancel: stock goes back, money is reversed, and the client box is credited back. */

@@ -21,6 +21,19 @@ create table if not exists public."advances" (
   "box_id" text,
   "note" text
 );
+alter table public."advances" add column if not exists "created_at" text;
+alter table public."advances" add column if not exists "updated_at" text;
+alter table public."advances" add column if not exists "deleted_at" text;
+alter table public."advances" add column if not exists "synced_at" text;
+alter table public."advances" add column if not exists "employee_id" text;
+alter table public."advances" add column if not exists "date" text;
+alter table public."advances" add column if not exists "amount" double precision;
+alter table public."advances" add column if not exists "currency" text;
+alter table public."advances" add column if not exists "fx_rate" double precision;
+alter table public."advances" add column if not exists "amount_usd" double precision;
+alter table public."advances" add column if not exists "remaining_usd" double precision;
+alter table public."advances" add column if not exists "box_id" text;
+alter table public."advances" add column if not exists "note" text;
 alter table public."advances" enable row level security;
 
 create table if not exists public."assets" (
@@ -41,6 +54,21 @@ create table if not exists public."assets" (
   "note" text,
   "active" boolean
 );
+alter table public."assets" add column if not exists "created_at" text;
+alter table public."assets" add column if not exists "updated_at" text;
+alter table public."assets" add column if not exists "deleted_at" text;
+alter table public."assets" add column if not exists "synced_at" text;
+alter table public."assets" add column if not exists "name_ar" text;
+alter table public."assets" add column if not exists "name_en" text;
+alter table public."assets" add column if not exists "price" double precision;
+alter table public."assets" add column if not exists "currency" text;
+alter table public."assets" add column if not exists "fx_rate" double precision;
+alter table public."assets" add column if not exists "price_usd" double precision;
+alter table public."assets" add column if not exists "purchase_date" text;
+alter table public."assets" add column if not exists "life_months" bigint;
+alter table public."assets" add column if not exists "salvage_usd" double precision;
+alter table public."assets" add column if not exists "note" text;
+alter table public."assets" add column if not exists "active" boolean;
 alter table public."assets" enable row level security;
 
 create table if not exists public."audit_log" (
@@ -54,6 +82,14 @@ create table if not exists public."audit_log" (
   "created_at" text,
   "synced_at" text
 );
+alter table public."audit_log" add column if not exists "user_id" text;
+alter table public."audit_log" add column if not exists "action" text;
+alter table public."audit_log" add column if not exists "entity" text;
+alter table public."audit_log" add column if not exists "entity_id" text;
+alter table public."audit_log" add column if not exists "before_json" text;
+alter table public."audit_log" add column if not exists "after_json" text;
+alter table public."audit_log" add column if not exists "created_at" text;
+alter table public."audit_log" add column if not exists "synced_at" text;
 alter table public."audit_log" enable row level security;
 
 create table if not exists public."batches" (
@@ -72,6 +108,19 @@ create table if not exists public."batches" (
   "unit_cost_usd" double precision,
   "run_id" text
 );
+alter table public."batches" add column if not exists "created_at" text;
+alter table public."batches" add column if not exists "updated_at" text;
+alter table public."batches" add column if not exists "deleted_at" text;
+alter table public."batches" add column if not exists "synced_at" text;
+alter table public."batches" add column if not exists "item_id" text;
+alter table public."batches" add column if not exists "location_id" text;
+alter table public."batches" add column if not exists "batch_code" text;
+alter table public."batches" add column if not exists "produced_at" text;
+alter table public."batches" add column if not exists "expires_at" text;
+alter table public."batches" add column if not exists "qty_in" double precision;
+alter table public."batches" add column if not exists "qty_left" double precision;
+alter table public."batches" add column if not exists "unit_cost_usd" double precision;
+alter table public."batches" add column if not exists "run_id" text;
 alter table public."batches" enable row level security;
 
 create table if not exists public."box_moves" (
@@ -92,6 +141,21 @@ create table if not exists public."box_moves" (
   "user_id" text,
   "business_date" text
 );
+alter table public."box_moves" add column if not exists "created_at" text;
+alter table public."box_moves" add column if not exists "updated_at" text;
+alter table public."box_moves" add column if not exists "deleted_at" text;
+alter table public."box_moves" add column if not exists "synced_at" text;
+alter table public."box_moves" add column if not exists "box_id" text;
+alter table public."box_moves" add column if not exists "type" text;
+alter table public."box_moves" add column if not exists "amount" double precision;
+alter table public."box_moves" add column if not exists "currency" text;
+alter table public."box_moves" add column if not exists "fx_rate" double precision;
+alter table public."box_moves" add column if not exists "amount_usd" double precision;
+alter table public."box_moves" add column if not exists "ref_type" text;
+alter table public."box_moves" add column if not exists "ref_id" text;
+alter table public."box_moves" add column if not exists "note" text;
+alter table public."box_moves" add column if not exists "user_id" text;
+alter table public."box_moves" add column if not exists "business_date" text;
 alter table public."box_moves" enable row level security;
 
 create table if not exists public."business_days" (
@@ -111,6 +175,20 @@ create table if not exists public."business_days" (
   "reopened_at" text,
   "reopened_by" text
 );
+alter table public."business_days" add column if not exists "created_at" text;
+alter table public."business_days" add column if not exists "updated_at" text;
+alter table public."business_days" add column if not exists "deleted_at" text;
+alter table public."business_days" add column if not exists "synced_at" text;
+alter table public."business_days" add column if not exists "date" text;
+alter table public."business_days" add column if not exists "status" text;
+alter table public."business_days" add column if not exists "closed_at" text;
+alter table public."business_days" add column if not exists "closed_by" text;
+alter table public."business_days" add column if not exists "expected_cash_usd" double precision;
+alter table public."business_days" add column if not exists "counted_cash_usd" double precision;
+alter table public."business_days" add column if not exists "difference_usd" double precision;
+alter table public."business_days" add column if not exists "totals_json" text;
+alter table public."business_days" add column if not exists "reopened_at" text;
+alter table public."business_days" add column if not exists "reopened_by" text;
 alter table public."business_days" enable row level security;
 
 create table if not exists public."cash_boxes" (
@@ -127,6 +205,17 @@ create table if not exists public."cash_boxes" (
   "system_key" text,
   "active" boolean
 );
+alter table public."cash_boxes" add column if not exists "created_at" text;
+alter table public."cash_boxes" add column if not exists "updated_at" text;
+alter table public."cash_boxes" add column if not exists "deleted_at" text;
+alter table public."cash_boxes" add column if not exists "synced_at" text;
+alter table public."cash_boxes" add column if not exists "name_ar" text;
+alter table public."cash_boxes" add column if not exists "name_en" text;
+alter table public."cash_boxes" add column if not exists "kind" text;
+alter table public."cash_boxes" add column if not exists "currency" text;
+alter table public."cash_boxes" add column if not exists "employee_id" text;
+alter table public."cash_boxes" add column if not exists "system_key" text;
+alter table public."cash_boxes" add column if not exists "active" boolean;
 alter table public."cash_boxes" enable row level security;
 
 create table if not exists public."categories" (
@@ -140,6 +229,14 @@ create table if not exists public."categories" (
   "sort" bigint,
   "active" boolean
 );
+alter table public."categories" add column if not exists "created_at" text;
+alter table public."categories" add column if not exists "updated_at" text;
+alter table public."categories" add column if not exists "deleted_at" text;
+alter table public."categories" add column if not exists "synced_at" text;
+alter table public."categories" add column if not exists "name_ar" text;
+alter table public."categories" add column if not exists "name_en" text;
+alter table public."categories" add column if not exists "sort" bigint;
+alter table public."categories" add column if not exists "active" boolean;
 alter table public."categories" enable row level security;
 
 create table if not exists public."client_moves" (
@@ -160,6 +257,21 @@ create table if not exists public."client_moves" (
   "user_id" text,
   "business_date" text
 );
+alter table public."client_moves" add column if not exists "created_at" text;
+alter table public."client_moves" add column if not exists "updated_at" text;
+alter table public."client_moves" add column if not exists "deleted_at" text;
+alter table public."client_moves" add column if not exists "synced_at" text;
+alter table public."client_moves" add column if not exists "client_id" text;
+alter table public."client_moves" add column if not exists "type" text;
+alter table public."client_moves" add column if not exists "amount" double precision;
+alter table public."client_moves" add column if not exists "currency" text;
+alter table public."client_moves" add column if not exists "fx_rate" double precision;
+alter table public."client_moves" add column if not exists "amount_usd" double precision;
+alter table public."client_moves" add column if not exists "order_id" text;
+alter table public."client_moves" add column if not exists "payment_id" text;
+alter table public."client_moves" add column if not exists "note" text;
+alter table public."client_moves" add column if not exists "user_id" text;
+alter table public."client_moves" add column if not exists "business_date" text;
 alter table public."client_moves" enable row level security;
 
 create table if not exists public."client_prices" (
@@ -173,6 +285,14 @@ create table if not exists public."client_prices" (
   "price" double precision,
   "currency" text
 );
+alter table public."client_prices" add column if not exists "created_at" text;
+alter table public."client_prices" add column if not exists "updated_at" text;
+alter table public."client_prices" add column if not exists "deleted_at" text;
+alter table public."client_prices" add column if not exists "synced_at" text;
+alter table public."client_prices" add column if not exists "client_id" text;
+alter table public."client_prices" add column if not exists "product_id" text;
+alter table public."client_prices" add column if not exists "price" double precision;
+alter table public."client_prices" add column if not exists "currency" text;
 alter table public."client_prices" enable row level security;
 
 create table if not exists public."client_tiers" (
@@ -184,8 +304,20 @@ create table if not exists public."client_tiers" (
   "name_ar" text,
   "name_en" text,
   "discount_pct" double precision,
+  "discount_amount" double precision,
+  "discount_currency" text,
   "sort" bigint
 );
+alter table public."client_tiers" add column if not exists "created_at" text;
+alter table public."client_tiers" add column if not exists "updated_at" text;
+alter table public."client_tiers" add column if not exists "deleted_at" text;
+alter table public."client_tiers" add column if not exists "synced_at" text;
+alter table public."client_tiers" add column if not exists "name_ar" text;
+alter table public."client_tiers" add column if not exists "name_en" text;
+alter table public."client_tiers" add column if not exists "discount_pct" double precision;
+alter table public."client_tiers" add column if not exists "discount_amount" double precision;
+alter table public."client_tiers" add column if not exists "discount_currency" text;
+alter table public."client_tiers" add column if not exists "sort" bigint;
 alter table public."client_tiers" enable row level security;
 
 create table if not exists public."clients" (
@@ -216,6 +348,31 @@ create table if not exists public."clients" (
   "lng" double precision,
   "map_url" text
 );
+alter table public."clients" add column if not exists "created_at" text;
+alter table public."clients" add column if not exists "updated_at" text;
+alter table public."clients" add column if not exists "deleted_at" text;
+alter table public."clients" add column if not exists "synced_at" text;
+alter table public."clients" add column if not exists "type" text;
+alter table public."clients" add column if not exists "name" text;
+alter table public."clients" add column if not exists "contact_person" text;
+alter table public."clients" add column if not exists "phone" text;
+alter table public."clients" add column if not exists "address" text;
+alter table public."clients" add column if not exists "tier_id" text;
+alter table public."clients" add column if not exists "tag_id" text;
+alter table public."clients" add column if not exists "receipt_language" text;
+alter table public."clients" add column if not exists "credit_limit_usd" double precision;
+alter table public."clients" add column if not exists "credit_block" boolean;
+alter table public."clients" add column if not exists "note" text;
+alter table public."clients" add column if not exists "active" boolean;
+alter table public."clients" add column if not exists "converted_at" text;
+alter table public."clients" add column if not exists "area_id" text;
+alter table public."clients" add column if not exists "payment_terms_days" bigint;
+alter table public."clients" add column if not exists "price_list_id" text;
+alter table public."clients" add column if not exists "consignment" boolean;
+alter table public."clients" add column if not exists "rep_id" text;
+alter table public."clients" add column if not exists "lat" double precision;
+alter table public."clients" add column if not exists "lng" double precision;
+alter table public."clients" add column if not exists "map_url" text;
 alter table public."clients" enable row level security;
 
 create table if not exists public."consignment_lines" (
@@ -233,6 +390,18 @@ create table if not exists public."consignment_lines" (
   "unit_cost_usd" double precision,
   "returned_qty" bigint
 );
+alter table public."consignment_lines" add column if not exists "created_at" text;
+alter table public."consignment_lines" add column if not exists "updated_at" text;
+alter table public."consignment_lines" add column if not exists "deleted_at" text;
+alter table public."consignment_lines" add column if not exists "synced_at" text;
+alter table public."consignment_lines" add column if not exists "consignment_id" text;
+alter table public."consignment_lines" add column if not exists "product_id" text;
+alter table public."consignment_lines" add column if not exists "name_ar" text;
+alter table public."consignment_lines" add column if not exists "name_en" text;
+alter table public."consignment_lines" add column if not exists "qty" bigint;
+alter table public."consignment_lines" add column if not exists "unit_price" double precision;
+alter table public."consignment_lines" add column if not exists "unit_cost_usd" double precision;
+alter table public."consignment_lines" add column if not exists "returned_qty" bigint;
 alter table public."consignment_lines" enable row level security;
 
 create table if not exists public."consignments" (
@@ -254,6 +423,22 @@ create table if not exists public."consignments" (
   "order_id" text,
   "return_id" text
 );
+alter table public."consignments" add column if not exists "created_at" text;
+alter table public."consignments" add column if not exists "updated_at" text;
+alter table public."consignments" add column if not exists "deleted_at" text;
+alter table public."consignments" add column if not exists "synced_at" text;
+alter table public."consignments" add column if not exists "number" bigint;
+alter table public."consignments" add column if not exists "business_date" text;
+alter table public."consignments" add column if not exists "client_id" text;
+alter table public."consignments" add column if not exists "rep_id" text;
+alter table public."consignments" add column if not exists "status" text;
+alter table public."consignments" add column if not exists "currency" text;
+alter table public."consignments" add column if not exists "fx_rate" double precision;
+alter table public."consignments" add column if not exists "note" text;
+alter table public."consignments" add column if not exists "user_id" text;
+alter table public."consignments" add column if not exists "settled_at" text;
+alter table public."consignments" add column if not exists "order_id" text;
+alter table public."consignments" add column if not exists "return_id" text;
 alter table public."consignments" enable row level security;
 
 create table if not exists public."employees" (
@@ -272,9 +457,27 @@ create table if not exists public."employees" (
   "commission_per_client_usd" double precision,
   "commission_pct" double precision,
   "staff_discount_pct" double precision,
+  "staff_discount_amount" double precision,
   "is_delivery_rep" boolean,
   "active" boolean
 );
+alter table public."employees" add column if not exists "created_at" text;
+alter table public."employees" add column if not exists "updated_at" text;
+alter table public."employees" add column if not exists "deleted_at" text;
+alter table public."employees" add column if not exists "synced_at" text;
+alter table public."employees" add column if not exists "name" text;
+alter table public."employees" add column if not exists "phone" text;
+alter table public."employees" add column if not exists "job_title" text;
+alter table public."employees" add column if not exists "user_id" text;
+alter table public."employees" add column if not exists "pay_model" text;
+alter table public."employees" add column if not exists "base_salary" double precision;
+alter table public."employees" add column if not exists "currency" text;
+alter table public."employees" add column if not exists "commission_per_client_usd" double precision;
+alter table public."employees" add column if not exists "commission_pct" double precision;
+alter table public."employees" add column if not exists "staff_discount_pct" double precision;
+alter table public."employees" add column if not exists "staff_discount_amount" double precision;
+alter table public."employees" add column if not exists "is_delivery_rep" boolean;
+alter table public."employees" add column if not exists "active" boolean;
 alter table public."employees" enable row level security;
 
 create table if not exists public."expenses" (
@@ -303,6 +506,29 @@ create table if not exists public."expenses" (
   "employee_id" text,
   "recurring_id" text
 );
+alter table public."expenses" add column if not exists "created_at" text;
+alter table public."expenses" add column if not exists "updated_at" text;
+alter table public."expenses" add column if not exists "deleted_at" text;
+alter table public."expenses" add column if not exists "synced_at" text;
+alter table public."expenses" add column if not exists "date" text;
+alter table public."expenses" add column if not exists "category_id" text;
+alter table public."expenses" add column if not exists "item_id" text;
+alter table public."expenses" add column if not exists "amount" double precision;
+alter table public."expenses" add column if not exists "currency" text;
+alter table public."expenses" add column if not exists "fx_rate" double precision;
+alter table public."expenses" add column if not exists "amount_usd" double precision;
+alter table public."expenses" add column if not exists "box_id" text;
+alter table public."expenses" add column if not exists "asset_id" text;
+alter table public."expenses" add column if not exists "note" text;
+alter table public."expenses" add column if not exists "user_id" text;
+alter table public."expenses" add column if not exists "status" text;
+alter table public."expenses" add column if not exists "due_date" text;
+alter table public."expenses" add column if not exists "paid_date" text;
+alter table public."expenses" add column if not exists "paid_by" text;
+alter table public."expenses" add column if not exists "beneficiary" text;
+alter table public."expenses" add column if not exists "photo" text;
+alter table public."expenses" add column if not exists "employee_id" text;
+alter table public."expenses" add column if not exists "recurring_id" text;
 alter table public."expenses" enable row level security;
 
 create table if not exists public."fx_rates" (
@@ -314,6 +540,12 @@ create table if not exists public."fx_rates" (
   "fetched_at" text,
   "synced_at" text
 );
+alter table public."fx_rates" add column if not exists "from_ccy" text;
+alter table public."fx_rates" add column if not exists "to_ccy" text;
+alter table public."fx_rates" add column if not exists "rate" double precision;
+alter table public."fx_rates" add column if not exists "source" text;
+alter table public."fx_rates" add column if not exists "fetched_at" text;
+alter table public."fx_rates" add column if not exists "synced_at" text;
 alter table public."fx_rates" enable row level security;
 
 create table if not exists public."items" (
@@ -335,6 +567,22 @@ create table if not exists public."items" (
   "avg_cost_usd" double precision,
   "active" boolean
 );
+alter table public."items" add column if not exists "created_at" text;
+alter table public."items" add column if not exists "updated_at" text;
+alter table public."items" add column if not exists "deleted_at" text;
+alter table public."items" add column if not exists "synced_at" text;
+alter table public."items" add column if not exists "kind" text;
+alter table public."items" add column if not exists "product_id" text;
+alter table public."items" add column if not exists "name_ar" text;
+alter table public."items" add column if not exists "name_en" text;
+alter table public."items" add column if not exists "unit_id" text;
+alter table public."items" add column if not exists "unit_code" text;
+alter table public."items" add column if not exists "pack_unit" text;
+alter table public."items" add column if not exists "pack_size" double precision;
+alter table public."items" add column if not exists "supplier_id" text;
+alter table public."items" add column if not exists "min_level" double precision;
+alter table public."items" add column if not exists "avg_cost_usd" double precision;
+alter table public."items" add column if not exists "active" boolean;
 alter table public."items" enable row level security;
 
 create table if not exists public."locations" (
@@ -348,6 +596,14 @@ create table if not exists public."locations" (
   "name_en" text,
   "active" boolean
 );
+alter table public."locations" add column if not exists "created_at" text;
+alter table public."locations" add column if not exists "updated_at" text;
+alter table public."locations" add column if not exists "deleted_at" text;
+alter table public."locations" add column if not exists "synced_at" text;
+alter table public."locations" add column if not exists "warehouse_id" text;
+alter table public."locations" add column if not exists "name_ar" text;
+alter table public."locations" add column if not exists "name_en" text;
+alter table public."locations" add column if not exists "active" boolean;
 alter table public."locations" enable row level security;
 
 create table if not exists public."lookups" (
@@ -362,6 +618,15 @@ create table if not exists public."lookups" (
   "sort" bigint,
   "active" boolean
 );
+alter table public."lookups" add column if not exists "created_at" text;
+alter table public."lookups" add column if not exists "updated_at" text;
+alter table public."lookups" add column if not exists "deleted_at" text;
+alter table public."lookups" add column if not exists "synced_at" text;
+alter table public."lookups" add column if not exists "list_type" text;
+alter table public."lookups" add column if not exists "name_ar" text;
+alter table public."lookups" add column if not exists "name_en" text;
+alter table public."lookups" add column if not exists "sort" bigint;
+alter table public."lookups" add column if not exists "active" boolean;
 alter table public."lookups" enable row level security;
 
 create table if not exists public."option_group_links" (
@@ -374,6 +639,13 @@ create table if not exists public."option_group_links" (
   "category_id" text,
   "product_id" text
 );
+alter table public."option_group_links" add column if not exists "created_at" text;
+alter table public."option_group_links" add column if not exists "updated_at" text;
+alter table public."option_group_links" add column if not exists "deleted_at" text;
+alter table public."option_group_links" add column if not exists "synced_at" text;
+alter table public."option_group_links" add column if not exists "group_id" text;
+alter table public."option_group_links" add column if not exists "category_id" text;
+alter table public."option_group_links" add column if not exists "product_id" text;
 alter table public."option_group_links" enable row level security;
 
 create table if not exists public."option_groups" (
@@ -388,6 +660,15 @@ create table if not exists public."option_groups" (
   "max_select" bigint,
   "sort" bigint
 );
+alter table public."option_groups" add column if not exists "created_at" text;
+alter table public."option_groups" add column if not exists "updated_at" text;
+alter table public."option_groups" add column if not exists "deleted_at" text;
+alter table public."option_groups" add column if not exists "synced_at" text;
+alter table public."option_groups" add column if not exists "name_ar" text;
+alter table public."option_groups" add column if not exists "name_en" text;
+alter table public."option_groups" add column if not exists "min_select" bigint;
+alter table public."option_groups" add column if not exists "max_select" bigint;
+alter table public."option_groups" add column if not exists "sort" bigint;
 alter table public."option_groups" enable row level security;
 
 create table if not exists public."options" (
@@ -404,6 +685,17 @@ create table if not exists public."options" (
   "sort" bigint,
   "active" boolean
 );
+alter table public."options" add column if not exists "created_at" text;
+alter table public."options" add column if not exists "updated_at" text;
+alter table public."options" add column if not exists "deleted_at" text;
+alter table public."options" add column if not exists "synced_at" text;
+alter table public."options" add column if not exists "group_id" text;
+alter table public."options" add column if not exists "name_ar" text;
+alter table public."options" add column if not exists "name_en" text;
+alter table public."options" add column if not exists "price_delta" double precision;
+alter table public."options" add column if not exists "currency" text;
+alter table public."options" add column if not exists "sort" bigint;
+alter table public."options" add column if not exists "active" boolean;
 alter table public."options" enable row level security;
 
 create table if not exists public."order_lines" (
@@ -423,6 +715,20 @@ create table if not exists public."order_lines" (
   "line_total" double precision,
   "unit_cost_usd" double precision
 );
+alter table public."order_lines" add column if not exists "created_at" text;
+alter table public."order_lines" add column if not exists "updated_at" text;
+alter table public."order_lines" add column if not exists "deleted_at" text;
+alter table public."order_lines" add column if not exists "synced_at" text;
+alter table public."order_lines" add column if not exists "order_id" text;
+alter table public."order_lines" add column if not exists "product_id" text;
+alter table public."order_lines" add column if not exists "name_ar" text;
+alter table public."order_lines" add column if not exists "name_en" text;
+alter table public."order_lines" add column if not exists "qty" bigint;
+alter table public."order_lines" add column if not exists "free_qty" bigint;
+alter table public."order_lines" add column if not exists "unit_price" double precision;
+alter table public."order_lines" add column if not exists "options_json" text;
+alter table public."order_lines" add column if not exists "line_total" double precision;
+alter table public."order_lines" add column if not exists "unit_cost_usd" double precision;
 alter table public."order_lines" enable row level security;
 
 create table if not exists public."orders" (
@@ -462,8 +768,50 @@ create table if not exists public."orders" (
   "cancel_reason" text,
   "paid_amount" double precision,
   "consignment_id" text,
-  "source" text
+  "source" text,
+  "delivered_at" text,
+  "delivered_by" text,
+  "delivery_collected" double precision
 );
+alter table public."orders" add column if not exists "created_at" text;
+alter table public."orders" add column if not exists "updated_at" text;
+alter table public."orders" add column if not exists "deleted_at" text;
+alter table public."orders" add column if not exists "synced_at" text;
+alter table public."orders" add column if not exists "number" bigint;
+alter table public."orders" add column if not exists "business_date" text;
+alter table public."orders" add column if not exists "client_id" text;
+alter table public."orders" add column if not exists "type" text;
+alter table public."orders" add column if not exists "employee_id" text;
+alter table public."orders" add column if not exists "fulfilment" text;
+alter table public."orders" add column if not exists "assigned_to" text;
+alter table public."orders" add column if not exists "status" text;
+alter table public."orders" add column if not exists "payment_status" text;
+alter table public."orders" add column if not exists "method_id" text;
+alter table public."orders" add column if not exists "currency" text;
+alter table public."orders" add column if not exists "fx_rate" double precision;
+alter table public."orders" add column if not exists "subtotal" double precision;
+alter table public."orders" add column if not exists "discount" double precision;
+alter table public."orders" add column if not exists "discount_reason" text;
+alter table public."orders" add column if not exists "tax_total" double precision;
+alter table public."orders" add column if not exists "taxes_json" text;
+alter table public."orders" add column if not exists "delivery_fee" double precision;
+alter table public."orders" add column if not exists "total" double precision;
+alter table public."orders" add column if not exists "total_usd" double precision;
+alter table public."orders" add column if not exists "cost_usd" double precision;
+alter table public."orders" add column if not exists "items_count" bigint;
+alter table public."orders" add column if not exists "free_items" bigint;
+alter table public."orders" add column if not exists "loyalty_free" bigint;
+alter table public."orders" add column if not exists "sub_free" bigint;
+alter table public."orders" add column if not exists "note" text;
+alter table public."orders" add column if not exists "user_id" text;
+alter table public."orders" add column if not exists "cancelled_at" text;
+alter table public."orders" add column if not exists "cancel_reason" text;
+alter table public."orders" add column if not exists "paid_amount" double precision;
+alter table public."orders" add column if not exists "consignment_id" text;
+alter table public."orders" add column if not exists "source" text;
+alter table public."orders" add column if not exists "delivered_at" text;
+alter table public."orders" add column if not exists "delivered_by" text;
+alter table public."orders" add column if not exists "delivery_collected" double precision;
 alter table public."orders" enable row level security;
 
 create table if not exists public."payment_methods" (
@@ -480,6 +828,17 @@ create table if not exists public."payment_methods" (
   "sort" bigint,
   "active" boolean
 );
+alter table public."payment_methods" add column if not exists "created_at" text;
+alter table public."payment_methods" add column if not exists "updated_at" text;
+alter table public."payment_methods" add column if not exists "deleted_at" text;
+alter table public."payment_methods" add column if not exists "synced_at" text;
+alter table public."payment_methods" add column if not exists "name_ar" text;
+alter table public."payment_methods" add column if not exists "name_en" text;
+alter table public."payment_methods" add column if not exists "kind" text;
+alter table public."payment_methods" add column if not exists "box_id" text;
+alter table public."payment_methods" add column if not exists "system_key" text;
+alter table public."payment_methods" add column if not exists "sort" bigint;
+alter table public."payment_methods" add column if not exists "active" boolean;
 alter table public."payment_methods" enable row level security;
 
 create table if not exists public."payments" (
@@ -501,6 +860,22 @@ create table if not exists public."payments" (
   "user_id" text,
   "business_date" text
 );
+alter table public."payments" add column if not exists "created_at" text;
+alter table public."payments" add column if not exists "updated_at" text;
+alter table public."payments" add column if not exists "deleted_at" text;
+alter table public."payments" add column if not exists "synced_at" text;
+alter table public."payments" add column if not exists "kind" text;
+alter table public."payments" add column if not exists "order_id" text;
+alter table public."payments" add column if not exists "client_id" text;
+alter table public."payments" add column if not exists "method_id" text;
+alter table public."payments" add column if not exists "box_id" text;
+alter table public."payments" add column if not exists "amount" double precision;
+alter table public."payments" add column if not exists "currency" text;
+alter table public."payments" add column if not exists "fx_rate" double precision;
+alter table public."payments" add column if not exists "amount_usd" double precision;
+alter table public."payments" add column if not exists "note" text;
+alter table public."payments" add column if not exists "user_id" text;
+alter table public."payments" add column if not exists "business_date" text;
 alter table public."payments" enable row level security;
 
 create table if not exists public."payroll_runs" (
@@ -514,6 +889,14 @@ create table if not exists public."payroll_runs" (
   "paid_at" text,
   "box_id" text
 );
+alter table public."payroll_runs" add column if not exists "created_at" text;
+alter table public."payroll_runs" add column if not exists "updated_at" text;
+alter table public."payroll_runs" add column if not exists "deleted_at" text;
+alter table public."payroll_runs" add column if not exists "synced_at" text;
+alter table public."payroll_runs" add column if not exists "month" text;
+alter table public."payroll_runs" add column if not exists "status" text;
+alter table public."payroll_runs" add column if not exists "paid_at" text;
+alter table public."payroll_runs" add column if not exists "box_id" text;
 alter table public."payroll_runs" enable row level security;
 
 create table if not exists public."payslips" (
@@ -531,6 +914,18 @@ create table if not exists public."payslips" (
   "net_usd" double precision,
   "details_json" text
 );
+alter table public."payslips" add column if not exists "created_at" text;
+alter table public."payslips" add column if not exists "updated_at" text;
+alter table public."payslips" add column if not exists "deleted_at" text;
+alter table public."payslips" add column if not exists "synced_at" text;
+alter table public."payslips" add column if not exists "run_id" text;
+alter table public."payslips" add column if not exists "employee_id" text;
+alter table public."payslips" add column if not exists "base_usd" double precision;
+alter table public."payslips" add column if not exists "commission_usd" double precision;
+alter table public."payslips" add column if not exists "advances_usd" double precision;
+alter table public."payslips" add column if not exists "staff_purchases_usd" double precision;
+alter table public."payslips" add column if not exists "net_usd" double precision;
+alter table public."payslips" add column if not exists "details_json" text;
 alter table public."payslips" enable row level security;
 
 create table if not exists public."permissions" (
@@ -543,6 +938,13 @@ create table if not exists public."permissions" (
   "module" text,
   "action" text
 );
+alter table public."permissions" add column if not exists "created_at" text;
+alter table public."permissions" add column if not exists "updated_at" text;
+alter table public."permissions" add column if not exists "deleted_at" text;
+alter table public."permissions" add column if not exists "synced_at" text;
+alter table public."permissions" add column if not exists "role_id" text;
+alter table public."permissions" add column if not exists "module" text;
+alter table public."permissions" add column if not exists "action" text;
 alter table public."permissions" enable row level security;
 
 create table if not exists public."price_changes" (
@@ -558,6 +960,16 @@ create table if not exists public."price_changes" (
   "purchase_id" text,
   "business_date" text
 );
+alter table public."price_changes" add column if not exists "created_at" text;
+alter table public."price_changes" add column if not exists "updated_at" text;
+alter table public."price_changes" add column if not exists "deleted_at" text;
+alter table public."price_changes" add column if not exists "synced_at" text;
+alter table public."price_changes" add column if not exists "item_id" text;
+alter table public."price_changes" add column if not exists "old_cost_usd" double precision;
+alter table public."price_changes" add column if not exists "new_cost_usd" double precision;
+alter table public."price_changes" add column if not exists "change_pct" double precision;
+alter table public."price_changes" add column if not exists "purchase_id" text;
+alter table public."price_changes" add column if not exists "business_date" text;
 alter table public."price_changes" enable row level security;
 
 create table if not exists public."price_list_items" (
@@ -571,6 +983,14 @@ create table if not exists public."price_list_items" (
   "price" double precision,
   "currency" text
 );
+alter table public."price_list_items" add column if not exists "created_at" text;
+alter table public."price_list_items" add column if not exists "updated_at" text;
+alter table public."price_list_items" add column if not exists "deleted_at" text;
+alter table public."price_list_items" add column if not exists "synced_at" text;
+alter table public."price_list_items" add column if not exists "list_id" text;
+alter table public."price_list_items" add column if not exists "product_id" text;
+alter table public."price_list_items" add column if not exists "price" double precision;
+alter table public."price_list_items" add column if not exists "currency" text;
 alter table public."price_list_items" enable row level security;
 
 create table if not exists public."price_lists" (
@@ -583,6 +1003,13 @@ create table if not exists public."price_lists" (
   "name_en" text,
   "active" boolean
 );
+alter table public."price_lists" add column if not exists "created_at" text;
+alter table public."price_lists" add column if not exists "updated_at" text;
+alter table public."price_lists" add column if not exists "deleted_at" text;
+alter table public."price_lists" add column if not exists "synced_at" text;
+alter table public."price_lists" add column if not exists "name_ar" text;
+alter table public."price_lists" add column if not exists "name_en" text;
+alter table public."price_lists" add column if not exists "active" boolean;
 alter table public."price_lists" enable row level security;
 
 create table if not exists public."production_runs" (
@@ -599,6 +1026,17 @@ create table if not exists public."production_runs" (
   "note" text,
   "user_id" text
 );
+alter table public."production_runs" add column if not exists "created_at" text;
+alter table public."production_runs" add column if not exists "updated_at" text;
+alter table public."production_runs" add column if not exists "deleted_at" text;
+alter table public."production_runs" add column if not exists "synced_at" text;
+alter table public."production_runs" add column if not exists "number" bigint;
+alter table public."production_runs" add column if not exists "business_date" text;
+alter table public."production_runs" add column if not exists "employee_id" text;
+alter table public."production_runs" add column if not exists "items_count" bigint;
+alter table public."production_runs" add column if not exists "cost_usd" double precision;
+alter table public."production_runs" add column if not exists "note" text;
+alter table public."production_runs" add column if not exists "user_id" text;
 alter table public."production_runs" enable row level security;
 
 create table if not exists public."products" (
@@ -621,6 +1059,23 @@ create table if not exists public."products" (
   "weight_g" double precision,
   "extra_cost_usd" double precision
 );
+alter table public."products" add column if not exists "created_at" text;
+alter table public."products" add column if not exists "updated_at" text;
+alter table public."products" add column if not exists "deleted_at" text;
+alter table public."products" add column if not exists "synced_at" text;
+alter table public."products" add column if not exists "category_id" text;
+alter table public."products" add column if not exists "code" text;
+alter table public."products" add column if not exists "name_ar" text;
+alter table public."products" add column if not exists "name_en" text;
+alter table public."products" add column if not exists "price" double precision;
+alter table public."products" add column if not exists "currency" text;
+alter table public."products" add column if not exists "shelf_life_hours" bigint;
+alter table public."products" add column if not exists "allergens" text;
+alter table public."products" add column if not exists "photo" text;
+alter table public."products" add column if not exists "sort" bigint;
+alter table public."products" add column if not exists "active" boolean;
+alter table public."products" add column if not exists "weight_g" double precision;
+alter table public."products" add column if not exists "extra_cost_usd" double precision;
 alter table public."products" enable row level security;
 
 create table if not exists public."purchase_lines" (
@@ -637,6 +1092,17 @@ create table if not exists public."purchase_lines" (
   "expires_at" text,
   "batch_id" text
 );
+alter table public."purchase_lines" add column if not exists "created_at" text;
+alter table public."purchase_lines" add column if not exists "updated_at" text;
+alter table public."purchase_lines" add column if not exists "deleted_at" text;
+alter table public."purchase_lines" add column if not exists "synced_at" text;
+alter table public."purchase_lines" add column if not exists "purchase_id" text;
+alter table public."purchase_lines" add column if not exists "item_id" text;
+alter table public."purchase_lines" add column if not exists "qty" double precision;
+alter table public."purchase_lines" add column if not exists "unit_price" double precision;
+alter table public."purchase_lines" add column if not exists "location_id" text;
+alter table public."purchase_lines" add column if not exists "expires_at" text;
+alter table public."purchase_lines" add column if not exists "batch_id" text;
 alter table public."purchase_lines" enable row level security;
 
 create table if not exists public."purchases" (
@@ -662,6 +1128,26 @@ create table if not exists public."purchases" (
   "note" text,
   "user_id" text
 );
+alter table public."purchases" add column if not exists "created_at" text;
+alter table public."purchases" add column if not exists "updated_at" text;
+alter table public."purchases" add column if not exists "deleted_at" text;
+alter table public."purchases" add column if not exists "synced_at" text;
+alter table public."purchases" add column if not exists "number" bigint;
+alter table public."purchases" add column if not exists "supplier_id" text;
+alter table public."purchases" add column if not exists "date" text;
+alter table public."purchases" add column if not exists "currency" text;
+alter table public."purchases" add column if not exists "fx_rate" double precision;
+alter table public."purchases" add column if not exists "total" double precision;
+alter table public."purchases" add column if not exists "total_usd" double precision;
+alter table public."purchases" add column if not exists "paid" double precision;
+alter table public."purchases" add column if not exists "paid_from_box_id" text;
+alter table public."purchases" add column if not exists "supplier_ref" text;
+alter table public."purchases" add column if not exists "discount" double precision;
+alter table public."purchases" add column if not exists "transport" double precision;
+alter table public."purchases" add column if not exists "due_date" text;
+alter table public."purchases" add column if not exists "photo" text;
+alter table public."purchases" add column if not exists "note" text;
+alter table public."purchases" add column if not exists "user_id" text;
 alter table public."purchases" enable row level security;
 
 create table if not exists public."recipes" (
@@ -676,6 +1162,15 @@ create table if not exists public."recipes" (
   "qty" double precision,
   "waste_pct" double precision
 );
+alter table public."recipes" add column if not exists "created_at" text;
+alter table public."recipes" add column if not exists "updated_at" text;
+alter table public."recipes" add column if not exists "deleted_at" text;
+alter table public."recipes" add column if not exists "synced_at" text;
+alter table public."recipes" add column if not exists "product_id" text;
+alter table public."recipes" add column if not exists "option_id" text;
+alter table public."recipes" add column if not exists "item_id" text;
+alter table public."recipes" add column if not exists "qty" double precision;
+alter table public."recipes" add column if not exists "waste_pct" double precision;
 alter table public."recipes" enable row level security;
 
 create table if not exists public."recurring_expenses" (
@@ -694,6 +1189,19 @@ create table if not exists public."recurring_expenses" (
   "active" boolean,
   "last_month" text
 );
+alter table public."recurring_expenses" add column if not exists "created_at" text;
+alter table public."recurring_expenses" add column if not exists "updated_at" text;
+alter table public."recurring_expenses" add column if not exists "deleted_at" text;
+alter table public."recurring_expenses" add column if not exists "synced_at" text;
+alter table public."recurring_expenses" add column if not exists "category_id" text;
+alter table public."recurring_expenses" add column if not exists "item_id" text;
+alter table public."recurring_expenses" add column if not exists "amount" double precision;
+alter table public."recurring_expenses" add column if not exists "currency" text;
+alter table public."recurring_expenses" add column if not exists "day_of_month" bigint;
+alter table public."recurring_expenses" add column if not exists "beneficiary" text;
+alter table public."recurring_expenses" add column if not exists "note" text;
+alter table public."recurring_expenses" add column if not exists "active" boolean;
+alter table public."recurring_expenses" add column if not exists "last_month" text;
 alter table public."recurring_expenses" enable row level security;
 
 create table if not exists public."recurring_orders" (
@@ -708,6 +1216,15 @@ create table if not exists public."recurring_orders" (
   "note" text,
   "active" boolean
 );
+alter table public."recurring_orders" add column if not exists "created_at" text;
+alter table public."recurring_orders" add column if not exists "updated_at" text;
+alter table public."recurring_orders" add column if not exists "deleted_at" text;
+alter table public."recurring_orders" add column if not exists "synced_at" text;
+alter table public."recurring_orders" add column if not exists "client_id" text;
+alter table public."recurring_orders" add column if not exists "days" text;
+alter table public."recurring_orders" add column if not exists "lines_json" text;
+alter table public."recurring_orders" add column if not exists "note" text;
+alter table public."recurring_orders" add column if not exists "active" boolean;
 alter table public."recurring_orders" enable row level security;
 
 create table if not exists public."return_lines" (
@@ -727,6 +1244,20 @@ create table if not exists public."return_lines" (
   "action" text,
   "batch_id" text
 );
+alter table public."return_lines" add column if not exists "created_at" text;
+alter table public."return_lines" add column if not exists "updated_at" text;
+alter table public."return_lines" add column if not exists "deleted_at" text;
+alter table public."return_lines" add column if not exists "synced_at" text;
+alter table public."return_lines" add column if not exists "return_id" text;
+alter table public."return_lines" add column if not exists "product_id" text;
+alter table public."return_lines" add column if not exists "name_ar" text;
+alter table public."return_lines" add column if not exists "name_en" text;
+alter table public."return_lines" add column if not exists "qty" bigint;
+alter table public."return_lines" add column if not exists "unit_price" double precision;
+alter table public."return_lines" add column if not exists "line_total" double precision;
+alter table public."return_lines" add column if not exists "unit_cost_usd" double precision;
+alter table public."return_lines" add column if not exists "action" text;
+alter table public."return_lines" add column if not exists "batch_id" text;
 alter table public."return_lines" enable row level security;
 
 create table if not exists public."returns" (
@@ -752,6 +1283,26 @@ create table if not exists public."returns" (
   "note" text,
   "user_id" text
 );
+alter table public."returns" add column if not exists "created_at" text;
+alter table public."returns" add column if not exists "updated_at" text;
+alter table public."returns" add column if not exists "deleted_at" text;
+alter table public."returns" add column if not exists "synced_at" text;
+alter table public."returns" add column if not exists "number" bigint;
+alter table public."returns" add column if not exists "business_date" text;
+alter table public."returns" add column if not exists "client_id" text;
+alter table public."returns" add column if not exists "order_id" text;
+alter table public."returns" add column if not exists "consignment_id" text;
+alter table public."returns" add column if not exists "currency" text;
+alter table public."returns" add column if not exists "fx_rate" double precision;
+alter table public."returns" add column if not exists "total" double precision;
+alter table public."returns" add column if not exists "total_usd" double precision;
+alter table public."returns" add column if not exists "cost_usd" double precision;
+alter table public."returns" add column if not exists "settlement" text;
+alter table public."returns" add column if not exists "given_order_id" text;
+alter table public."returns" add column if not exists "box_id" text;
+alter table public."returns" add column if not exists "rep_id" text;
+alter table public."returns" add column if not exists "note" text;
+alter table public."returns" add column if not exists "user_id" text;
 alter table public."returns" enable row level security;
 
 create table if not exists public."roles" (
@@ -764,6 +1315,13 @@ create table if not exists public."roles" (
   "name_en" text,
   "system_key" text
 );
+alter table public."roles" add column if not exists "created_at" text;
+alter table public."roles" add column if not exists "updated_at" text;
+alter table public."roles" add column if not exists "deleted_at" text;
+alter table public."roles" add column if not exists "synced_at" text;
+alter table public."roles" add column if not exists "name_ar" text;
+alter table public."roles" add column if not exists "name_en" text;
+alter table public."roles" add column if not exists "system_key" text;
 alter table public."roles" enable row level security;
 
 create table if not exists public."sales_calls" (
@@ -781,6 +1339,18 @@ create table if not exists public."sales_calls" (
   "next_follow_up" text,
   "note" text
 );
+alter table public."sales_calls" add column if not exists "created_at" text;
+alter table public."sales_calls" add column if not exists "updated_at" text;
+alter table public."sales_calls" add column if not exists "deleted_at" text;
+alter table public."sales_calls" add column if not exists "synced_at" text;
+alter table public."sales_calls" add column if not exists "employee_id" text;
+alter table public."sales_calls" add column if not exists "client_id" text;
+alter table public."sales_calls" add column if not exists "prospect_name" text;
+alter table public."sales_calls" add column if not exists "phone" text;
+alter table public."sales_calls" add column if not exists "date" text;
+alter table public."sales_calls" add column if not exists "result" text;
+alter table public."sales_calls" add column if not exists "next_follow_up" text;
+alter table public."sales_calls" add column if not exists "note" text;
 alter table public."sales_calls" enable row level security;
 
 create table if not exists public."settings" (
@@ -789,6 +1359,9 @@ create table if not exists public."settings" (
   "updated_at" text,
   "synced_at" text
 );
+alter table public."settings" add column if not exists "value" text;
+alter table public."settings" add column if not exists "updated_at" text;
+alter table public."settings" add column if not exists "synced_at" text;
 alter table public."settings" enable row level security;
 
 create table if not exists public."stock_moves" (
@@ -810,6 +1383,22 @@ create table if not exists public."stock_moves" (
   "user_id" text,
   "business_date" text
 );
+alter table public."stock_moves" add column if not exists "created_at" text;
+alter table public."stock_moves" add column if not exists "updated_at" text;
+alter table public."stock_moves" add column if not exists "deleted_at" text;
+alter table public."stock_moves" add column if not exists "synced_at" text;
+alter table public."stock_moves" add column if not exists "item_id" text;
+alter table public."stock_moves" add column if not exists "batch_id" text;
+alter table public."stock_moves" add column if not exists "type" text;
+alter table public."stock_moves" add column if not exists "qty" double precision;
+alter table public."stock_moves" add column if not exists "location_id" text;
+alter table public."stock_moves" add column if not exists "unit_cost_usd" double precision;
+alter table public."stock_moves" add column if not exists "ref_type" text;
+alter table public."stock_moves" add column if not exists "ref_id" text;
+alter table public."stock_moves" add column if not exists "reason_id" text;
+alter table public."stock_moves" add column if not exists "note" text;
+alter table public."stock_moves" add column if not exists "user_id" text;
+alter table public."stock_moves" add column if not exists "business_date" text;
 alter table public."stock_moves" enable row level security;
 
 create table if not exists public."subscription_plans" (
@@ -823,9 +1412,22 @@ create table if not exists public."subscription_plans" (
   "monthly_fee" double precision,
   "currency" text,
   "discount_pct" double precision,
+  "discount_amount" double precision,
   "included_items" bigint,
   "active" boolean
 );
+alter table public."subscription_plans" add column if not exists "created_at" text;
+alter table public."subscription_plans" add column if not exists "updated_at" text;
+alter table public."subscription_plans" add column if not exists "deleted_at" text;
+alter table public."subscription_plans" add column if not exists "synced_at" text;
+alter table public."subscription_plans" add column if not exists "name_ar" text;
+alter table public."subscription_plans" add column if not exists "name_en" text;
+alter table public."subscription_plans" add column if not exists "monthly_fee" double precision;
+alter table public."subscription_plans" add column if not exists "currency" text;
+alter table public."subscription_plans" add column if not exists "discount_pct" double precision;
+alter table public."subscription_plans" add column if not exists "discount_amount" double precision;
+alter table public."subscription_plans" add column if not exists "included_items" bigint;
+alter table public."subscription_plans" add column if not exists "active" boolean;
 alter table public."subscription_plans" enable row level security;
 
 create table if not exists public."subscriptions" (
@@ -841,6 +1443,16 @@ create table if not exists public."subscriptions" (
   "status" text,
   "auto_renew" boolean
 );
+alter table public."subscriptions" add column if not exists "created_at" text;
+alter table public."subscriptions" add column if not exists "updated_at" text;
+alter table public."subscriptions" add column if not exists "deleted_at" text;
+alter table public."subscriptions" add column if not exists "synced_at" text;
+alter table public."subscriptions" add column if not exists "client_id" text;
+alter table public."subscriptions" add column if not exists "plan_id" text;
+alter table public."subscriptions" add column if not exists "start_date" text;
+alter table public."subscriptions" add column if not exists "end_date" text;
+alter table public."subscriptions" add column if not exists "status" text;
+alter table public."subscriptions" add column if not exists "auto_renew" boolean;
 alter table public."subscriptions" enable row level security;
 
 create table if not exists public."suppliers" (
@@ -859,6 +1471,19 @@ create table if not exists public."suppliers" (
   "payment_terms_days" bigint,
   "active" boolean
 );
+alter table public."suppliers" add column if not exists "created_at" text;
+alter table public."suppliers" add column if not exists "updated_at" text;
+alter table public."suppliers" add column if not exists "deleted_at" text;
+alter table public."suppliers" add column if not exists "synced_at" text;
+alter table public."suppliers" add column if not exists "name" text;
+alter table public."suppliers" add column if not exists "phone" text;
+alter table public."suppliers" add column if not exists "note" text;
+alter table public."suppliers" add column if not exists "opening_balance" double precision;
+alter table public."suppliers" add column if not exists "opening_currency" text;
+alter table public."suppliers" add column if not exists "opening_usd" double precision;
+alter table public."suppliers" add column if not exists "opening_paid_usd" double precision;
+alter table public."suppliers" add column if not exists "payment_terms_days" bigint;
+alter table public."suppliers" add column if not exists "active" boolean;
 alter table public."suppliers" enable row level security;
 
 create table if not exists public."taxes" (
@@ -873,6 +1498,15 @@ create table if not exists public."taxes" (
   "value" double precision,
   "active" boolean
 );
+alter table public."taxes" add column if not exists "created_at" text;
+alter table public."taxes" add column if not exists "updated_at" text;
+alter table public."taxes" add column if not exists "deleted_at" text;
+alter table public."taxes" add column if not exists "synced_at" text;
+alter table public."taxes" add column if not exists "name_ar" text;
+alter table public."taxes" add column if not exists "name_en" text;
+alter table public."taxes" add column if not exists "kind" text;
+alter table public."taxes" add column if not exists "value" double precision;
+alter table public."taxes" add column if not exists "active" boolean;
 alter table public."taxes" enable row level security;
 
 create table if not exists public."users" (
@@ -887,6 +1521,15 @@ create table if not exists public."users" (
   "language" text,
   "active" boolean
 );
+alter table public."users" add column if not exists "created_at" text;
+alter table public."users" add column if not exists "updated_at" text;
+alter table public."users" add column if not exists "deleted_at" text;
+alter table public."users" add column if not exists "synced_at" text;
+alter table public."users" add column if not exists "name" text;
+alter table public."users" add column if not exists "username" text;
+alter table public."users" add column if not exists "role_id" text;
+alter table public."users" add column if not exists "language" text;
+alter table public."users" add column if not exists "active" boolean;
 alter table public."users" enable row level security;
 
 create table if not exists public."warehouses" (
@@ -901,6 +1544,15 @@ create table if not exists public."warehouses" (
   "sort" bigint,
   "active" boolean
 );
+alter table public."warehouses" add column if not exists "created_at" text;
+alter table public."warehouses" add column if not exists "updated_at" text;
+alter table public."warehouses" add column if not exists "deleted_at" text;
+alter table public."warehouses" add column if not exists "synced_at" text;
+alter table public."warehouses" add column if not exists "name_ar" text;
+alter table public."warehouses" add column if not exists "name_en" text;
+alter table public."warehouses" add column if not exists "kind" text;
+alter table public."warehouses" add column if not exists "sort" bigint;
+alter table public."warehouses" add column if not exists "active" boolean;
 alter table public."warehouses" enable row level security;
 
 -- one small JSON summary per day for the owner's phone

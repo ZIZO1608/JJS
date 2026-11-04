@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
@@ -10,8 +10,8 @@ import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
-import { assertOrderQtys, cancelOrder, createOrder, priceOrder } from "../services/orders.js";
-import { notifyOrderStatus } from "../services/portal.js";
+import { assertOrderQtys, assignDelivery, cancelOrder, createOrder, deliverOrder, orderRemaining, priceOrder } from "../services/orders.js";
+import { notifyDeliveryAssigned, notifyOrderStatus } from "../services/portal.js";
 
 export const ordersRouter = Router();
 
@@ -24,6 +24,7 @@ const inputSchema = z.object({
   assignedTo: z.string().nullable().optional(),
   methodId: z.string().nullable().optional(),
   manualDiscountPct: z.number().min(0).max(100).optional(),
+  manualDiscountAmount: z.number().min(0).max(1_000_000_000).optional(),
   useLoyalty: z.boolean().optional(),
   paidAmount: z.number().min(0).nullable().optional(),
   note: z.string().max(300).optional(),
@@ -61,6 +62,58 @@ ordersRouter.get(
   }),
 );
 
+/**
+ * The deliveries screen: orders still to hand over (open) or handed over today (done). No costs here:
+ * whoever delivers needs the client, the address and what is left to collect.
+ */
+ordersRouter.get(
+  "/deliveries",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const q = parse(z.object({ status: z.enum(["open", "done"]).default("open") }), req.query);
+    const mine = db.select({ id: employees.id }).from(employees).where(and(eq(employees.userId, req.user!.id), isNull(employees.deletedAt))).get();
+    const startOfToday = new Date(`${localDate()}T00:00:00`).toISOString();
+    const rows = db
+      .select({ o: orders, clientName: clients.name, clientPhone: clients.phone, clientAddress: clients.address, assignedName: employees.name, assignedPhone: employees.phone })
+      .from(orders)
+      .leftJoin(clients, eq(orders.clientId, clients.id))
+      .leftJoin(employees, eq(orders.assignedTo, employees.id))
+      .where(and(isNull(orders.deletedAt), ne(orders.type, "internal"), q.status === "open" ? eq(orders.status, "confirmed") : and(eq(orders.status, "delivered"), gte(orders.deliveredAt, startOfToday))))
+      .orderBy(q.status === "open" ? asc(orders.number) : desc(orders.deliveredAt))
+      .limit(200)
+      .all();
+    const lines = rows.length ? db.select({ orderId: orderLines.orderId, nameAr: orderLines.nameAr, nameEn: orderLines.nameEn, qty: orderLines.qty }).from(orderLines).where(inArray(orderLines.orderId, rows.map((r) => r.o.id))).all() : [];
+    res.json({
+      myEmployeeId: mine?.id ?? null,
+      rows: rows.map((r) => ({
+        id: r.o.id,
+        number: r.o.number,
+        businessDate: r.o.businessDate,
+        createdAt: r.o.createdAt,
+        fulfilment: r.o.fulfilment,
+        status: r.o.status,
+        paymentStatus: r.o.paymentStatus,
+        total: r.o.total,
+        currency: r.o.currency,
+        paidAmount: r.o.paidAmount,
+        remaining: orderRemaining(r.o),
+        deliveredAt: r.o.deliveredAt,
+        deliveryCollected: r.o.deliveryCollected,
+        note: r.o.note,
+        source: r.o.source,
+        clientId: r.o.clientId,
+        clientName: r.clientName,
+        clientPhone: r.clientPhone,
+        clientAddress: r.clientAddress,
+        assignedTo: r.o.assignedTo,
+        assignedName: r.assignedName,
+        assignedPhone: r.assignedPhone,
+        lines: lines.filter((l) => l.orderId === r.o.id),
+      })),
+    });
+  }),
+);
+
 /** Live price preview while the order is being built. */
 ordersRouter.post(
   "/quote",
@@ -79,7 +132,7 @@ ordersRouter.post(
   h((req, res) => {
     const body = parse(inputSchema, req.body);
     assertOrderQtys(body.lines);
-    if (body.manualDiscountPct && !req.user!.permissions.has("orders:edit")) throw new HttpError(403, "forbidden", "Your role cannot give a manual discount.");
+    if ((body.manualDiscountPct || body.manualDiscountAmount) && !req.user!.permissions.has("orders:edit")) throw new HttpError(403, "forbidden", "Your role cannot give a manual discount.");
     const out = db.transaction((tx) => {
       const r = createOrder(tx, body, req.user!.id);
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "order", entityId: r.id, after: { number: r.number, total: r.priced.total, currency: r.priced.currency, type: body.type, items: r.priced.itemsCount } });
@@ -139,17 +192,37 @@ ordersRouter.post(
   requirePerm("orders", "edit"),
   h((req, res) => {
     const id = String(req.params.id);
-    const body = parse(z.object({ assignedTo: z.string().nullable().optional() }), req.body);
-    const o = db.select().from(orders).where(eq(orders.id, id)).get();
-    if (!o) throw notFound("order");
-    if (o.status === "cancelled") throw new HttpError(409, "cancelled", "This order was cancelled.");
+    const body = parse(
+      z.object({
+        assignedTo: z.string().nullable().optional(),
+        collection: z
+          .object({ mode: z.enum(["full", "part", "none"]), amount: z.number().positive().max(1_000_000_000).optional(), currency: z.enum(["USD", "SYP"]).optional(), methodId: z.string().nullable().optional() })
+          .optional(),
+      }),
+      req.body ?? {},
+    );
+    const out = db.transaction((tx) => {
+      const r = deliverOrder(tx, id, body, req.user!.id);
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order", entityId: id, after: { status: "delivered", collected: r.collected, stillOwed: r.stillOwed, currency: r.currency } });
+      notifyOrderStatus(tx, id, "delivered");
+      return r;
+    });
+    res.json({ ok: true, collected: out.collected, stillOwed: out.stillOwed, currency: out.currency });
+  }),
+);
+
+/** Admin or manager picks who brings the order; a client who ordered from the portal is told who and how to reach them. */
+ordersRouter.post(
+  "/:id/assign",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const { assignedTo } = parse(z.object({ assignedTo: z.string().nullable() }), req.body);
     db.transaction((tx) => {
-      tx.update(orders)
-        .set({ status: "delivered", assignedTo: body.assignedTo ?? o.assignedTo, updatedAt: nowIso(), syncedAt: null })
-        .where(eq(orders.id, id))
-        .run();
-      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order", entityId: id, after: { status: "delivered" } });
-      if (o.status !== "delivered") notifyOrderStatus(tx, id, "delivered");
+      const { changed } = assignDelivery(tx, id, assignedTo);
+      if (!changed) return;
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order", entityId: id, after: { assignedTo } });
+      if (assignedTo) notifyDeliveryAssigned(tx, id, assignedTo);
     });
     res.json({ ok: true });
   }),

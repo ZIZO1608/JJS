@@ -10,10 +10,13 @@ import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../lib/toast";
 import type { ClientSummary, Named, PaymentMethod } from "../../lib/types";
 import { useData } from "../../lib/useData";
+import { discountLabel } from "../../components/DiscountInput";
 import type { PortalCredentials } from "./PortalAccess";
 
 export interface Tier extends Named {
   discountPct: number;
+  discountAmount: number;
+  discountCurrency: Currency;
   sort: number;
 }
 
@@ -23,7 +26,7 @@ export interface PriceListRow extends Named {
 }
 
 export function ClientDialog({ client, onClose, onSaved }: { client: ClientSummary | null; onClose: () => void; onSaved: (id: string, portal?: PortalCredentials | null) => void }) {
-  const { tr, pick, err, fieldErrors } = useI18n();
+  const { tr, pick, err, fieldErrors, lang } = useI18n();
   const toast = useToast();
   const { s: app } = useAppSettings();
   const tiers = useData<{ rows: Tier[] }>("/clients/tiers");
@@ -157,7 +160,7 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
               <option value="">—</option>
               {tiers.data?.rows.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {pick(t)} ({t.discountPct}%)
+                  {pick(t)} ({discountLabel(t.discountPct, t.discountAmount, t.discountCurrency, lang) || "0%"})
                 </option>
               ))}
             </Select>

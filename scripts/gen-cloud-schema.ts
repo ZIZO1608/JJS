@@ -40,7 +40,9 @@ for (const t of tables) {
     const pk = c.primary ? " primary key" : "";
     return `  "${c.name}" ${type}${pk}`;
   });
-  out += `create table if not exists public."${cfg.name}" (\n${cols.join(",\n")}\n);\nalter table public."${cfg.name}" enable row level security;\n\n`;
+  // "add column if not exists" lets the same file bring an older cloud copy up to date.
+  const additions = cols.filter((c) => !c.includes(" primary key")).map((c) => `alter table public."${cfg.name}" add column if not exists${c.slice(1)};`);
+  out += `create table if not exists public."${cfg.name}" (\n${cols.join(",\n")}\n);\n${additions.join("\n")}\nalter table public."${cfg.name}" enable row level security;\n\n`;
 }
 out += `-- one small JSON summary per day for the owner's phone
 create table if not exists public.daily_snapshots (

@@ -73,7 +73,7 @@ clientsRouter.use(
     table: clientTiers,
     module: "clients",
     entity: "client_tier",
-    schema: z.object({ ...names, discountPct: z.number().min(0).max(100), sort: z.number().int().min(0).default(0) }),
+    schema: z.object({ ...names, discountPct: z.number().min(0).max(100), discountAmount: z.number().min(0).max(1_000_000_000).default(0), discountCurrency: z.enum(["USD", "SYP"]).default("USD"), sort: z.number().int().min(0).default(0) }),
     beforeDelete: (tx, row) => {
       const n = tx.select({ n: count() }).from(clients).where(and(eq(clients.tierId, row.id), isNull(clients.deletedAt))).get()?.n ?? 0;
       if (n) throw new HttpError(409, "in_use", `${n} client(s) are in this tier.`);
@@ -87,7 +87,7 @@ clientsRouter.use(
     table: subscriptionPlans,
     module: "clients",
     entity: "subscription_plan",
-    schema: z.object({ ...names, monthlyFee: z.number().min(0), currency: z.enum(["USD", "SYP"]), discountPct: z.number().min(0).max(100).default(0), includedItems: z.number().int().min(0).default(0), active: z.boolean().default(true) }),
+    schema: z.object({ ...names, monthlyFee: z.number().min(0), currency: z.enum(["USD", "SYP"]), discountPct: z.number().min(0).max(100).default(0), discountAmount: z.number().min(0).max(1_000_000_000).default(0), includedItems: z.number().int().min(0).default(0), active: z.boolean().default(true) }),
   }),
 );
 
@@ -421,7 +421,7 @@ clientsRouter.get(
       lastOrder: last ? { id: last.id, number: last.number, date: last.businessDate, total: last.total, currency: last.currency, items: last.itemsCount } : null,
       aging: clientAging(db, id, today),
       month: { orders: month.n, salesUsd: round4(month.usd), items: month.items },
-      tier: tier ? { nameAr: tier.nameAr, nameEn: tier.nameEn, discountPct: tier.discountPct } : null,
+      tier: tier ? { nameAr: tier.nameAr, nameEn: tier.nameEn, discountPct: tier.discountPct, discountAmount: tier.discountAmount, discountCurrency: tier.discountCurrency } : null,
       agreedPrices: agreed,
       openConsignments: db.select({ n: count() }).from(consignments).where(and(eq(consignments.clientId, id), eq(consignments.status, "open"))).get()?.n ?? 0,
     });

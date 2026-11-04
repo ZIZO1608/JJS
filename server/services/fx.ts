@@ -2,7 +2,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { fxRates } from "../db/schema.js";
 import { FX_REFRESH_MS } from "../env.js";
-import { getSetting, setSetting } from "../lib/settings.js";
+import { getSetting, setSetting, SYRIAN_RATES_URL } from "../lib/settings.js";
 import { newId, nowIso } from "../lib/util.js";
 
 export interface CurrentRate {
@@ -19,13 +19,22 @@ export interface CurrentRate {
 const latestApiRate = () =>
   db.select().from(fxRates).where(and(eq(fxRates.fromCcy, "USD"), eq(fxRates.toCcy, "SYP"), eq(fxRates.source, "api"))).orderBy(desc(fxRates.fetchedAt)).get();
 
+/** Saved settings first; an install that never saved them gets the Syrian API, with the key from the environment. */
+function rateApi() {
+  const cfg = getSetting("fx.config");
+  const apiUrl = cfg.apiUrl || SYRIAN_RATES_URL;
+  const apiKey = cfg.apiKey || process.env.JJS_FX_API_KEY || "";
+  // The Syrian API refuses requests without a key, so don't call it until there is one.
+  return { apiUrl, apiKey, jsonPath: cfg.apiUrl ? cfg.jsonPath : "rates.sell", ready: apiUrl !== SYRIAN_RATES_URL || !!apiKey };
+}
+
 export function getCurrentRate(): CurrentRate {
   const manual = getSetting("fx.manualRate");
-  const cfg = getSetting("fx.config");
+  const cfg = rateApi();
   const lastError = getSetting("fx.lastError");
   if (manual && manual > 0) {
     const lastManual = db.select().from(fxRates).where(eq(fxRates.source, "manual")).orderBy(desc(fxRates.fetchedAt)).get();
-    return { rate: manual, source: "manual", updatedAt: lastManual?.fetchedAt ?? null, manualRate: manual, apiConfigured: !!cfg.apiUrl, lastError };
+    return { rate: manual, source: "manual", updatedAt: lastManual?.fetchedAt ?? null, manualRate: manual, apiConfigured: cfg.ready, lastError };
   }
   const api = latestApiRate();
   return {
@@ -33,7 +42,7 @@ export function getCurrentRate(): CurrentRate {
     source: api ? "api" : null,
     updatedAt: getSetting("fx.lastCheckedAt") ?? api?.fetchedAt ?? null,
     manualRate: null,
-    apiConfigured: !!cfg.apiUrl,
+    apiConfigured: cfg.ready,
     lastError,
   };
 }
@@ -43,8 +52,8 @@ const readPath = (obj: unknown, path: string): unknown =>
 
 /** Fetch USD→SYP from the user's own rate API. Keeps the last good rate on any failure. */
 export async function refreshRate(): Promise<CurrentRate> {
-  const cfg = getSetting("fx.config");
-  if (!cfg.apiUrl) return getCurrentRate();
+  const cfg = rateApi();
+  if (!cfg.ready) return getCurrentRate();
   try {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (cfg.apiKey) {

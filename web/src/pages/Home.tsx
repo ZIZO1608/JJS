@@ -8,8 +8,9 @@ import { DashboardPage } from "./Dashboard";
 import { FiveAnswersCard } from "./five/FiveAnswers";
 
 /** What each big button on the simple home is for (manager & members). */
-const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution"; to?: string; ar: string; en: string; titleAr?: string; titleEn?: string }[] = [
+const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution" | "deliveries"; to?: string; ar: string; en: string; titleAr?: string; titleEn?: string }[] = [
   { m: "orders", to: "/orders/new", titleAr: "فاتورة جديدة", titleEn: "New invoice", ar: "فاتورة لمحل أو زبون، دفع كامل أو جزئي، واطبعها", en: "Invoice a shop or client, full or part payment, and print it" },
+  { m: "orders", icon: "deliveries", to: "/deliveries", titleAr: "طلبات التسليم", titleEn: "Deliveries", ar: "اطبع الطلب، علّم إنو تسلّم، وسجّل إذا استلمت المصاري", en: "Print the order, tick it delivered, and say if you got the money" },
   { m: "warehouse", icon: "production", to: "/production/new", titleAr: "إنتاج الصبح", titleEn: "Morning production", ar: "اعمل دفعة بكل الأصناف واطبع الملصقات", en: "Make the batch for every product and print labels" },
   { m: "orders", icon: "distribution", to: "/distribution/route", titleAr: "خط التوزيع", titleEn: "Route sheet", ar: "المحلات اليوم، بالأمانة، والمرتجعات", en: "Today's shops, consignment and returns" },
   { m: "warehouse", ar: "البرّاد، الهدر والجرد", en: "Fridge, waste and counts" },
@@ -23,7 +24,7 @@ const SIMPLE_TILES: { m: Module; icon?: "production" | "distribution"; to?: stri
 function SimpleHome() {
   const { pick, tr } = useI18n();
   const { can } = useAuth();
-  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.icon === "distribution" ? "edit" : x.to && !x.icon ? "create" : "view"));
+  const tiles = SIMPLE_TILES.filter((x) => can(x.m, x.icon === "distribution" || x.icon === "deliveries" ? "edit" : x.to && !x.icon ? "create" : "view"));
   return (
     <div className="grid grid-cols-2 gap-3">
       {tiles.map((x, i) => (

@@ -11,6 +11,7 @@ import { openPrint } from "../../lib/print";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
 import type { Catalog, CatalogProduct, ClientSummary, Employee, OptionGroup, PaymentMethod } from "../../lib/types";
+import { DiscountInput, discountLabel, type DiscountMode } from "../../components/DiscountInput";
 import { discountWords, type AppliedTax } from "./shared";
 
 type WhoKind = "walkin" | "client" | "trial" | "staff" | "internal";
@@ -64,7 +65,7 @@ interface Snapshot {
   lastOrder: { id: string; number: number; date: string; total: number; currency: Currency; items: number } | null;
   aging: { balanceUsd: number; overdueDays: number; daysOutstanding: number; termsDays: number };
   month: { orders: number; salesUsd: number; items: number };
-  tier: { nameAr: string; nameEn: string; discountPct: number } | null;
+  tier: { nameAr: string; nameEn: string; discountPct: number; discountAmount: number; discountCurrency: Currency } | null;
   agreedPrices: { productId: string }[];
   openConsignments: number;
 }
@@ -106,7 +107,7 @@ function SnapshotCard({ clientId }: { clientId: string }) {
         <div className="text-muted">
           {d.agreedPrices.length > 0 && tr(`${d.agreedPrices.length} سعر متفق عليه`, `${d.agreedPrices.length} agreed prices`)}
           {d.agreedPrices.length > 0 && d.tier && " · "}
-          {d.tier && `${pick(d.tier)} ${d.tier.discountPct}%`}
+          {d.tier && `${pick(d.tier)} ${discountLabel(d.tier.discountPct, d.tier.discountAmount, d.tier.discountCurrency, lang)}`}
         </div>
       )}
       {d.openConsignments > 0 && <div className="text-muted">{tr(`عنده ${d.openConsignments} بضاعة بالأمانة`, `${d.openConsignments} open consignment(s)`)}</div>}
@@ -317,6 +318,7 @@ export function NewOrderPage() {
   const [assignedTo, setAssignedTo] = useState("");
   const [methodId, setMethodId] = useState<string | null>(null);
   const [manualPct, setManualPct] = useState("");
+  const [manualMode, setManualMode] = useState<DiscountMode>("pct");
   const [useLoyalty, setUseLoyalty] = useState(true);
   const [note, setNote] = useState("");
   const [paidNow, setPaidNow] = useState("");
@@ -387,13 +389,13 @@ export function NewOrderPage() {
       deliveryFee: fulfilment === "delivery" && fee !== "" && !Number.isNaN(num(fee)) ? num(fee) : null,
       assignedTo: fulfilment === "delivery" && assignedTo ? assignedTo : null,
       methodId: noPay ? null : methodId,
-      ...(can("orders", "edit") && !noPay && manualPct !== "" && num(manualPct) > 0 ? { manualDiscountPct: Math.min(100, num(manualPct)) } : {}),
+      ...(can("orders", "edit") && !noPay && manualPct !== "" && num(manualPct) > 0 ? (manualMode === "pct" ? { manualDiscountPct: Math.min(100, num(manualPct)) } : { manualDiscountAmount: num(manualPct) }) : {}),
       ...(paidValue !== null ? { paidAmount: paidValue } : {}),
       useLoyalty,
       note: note.trim() || undefined,
       lines: cart.map((l) => ({ productId: l.productId, qty: l.qty, optionIds: l.optionIds })),
     }),
-    [who, clientId, employeeId, fulfilment, fee, assignedTo, methodId, manualPct, useLoyalty, note, cart, can, noPay, paidValue],
+    [who, clientId, employeeId, fulfilment, fee, assignedTo, methodId, manualPct, manualMode, useLoyalty, note, cart, can, noPay, paidValue],
   );
   useEffect(() => {
     if (!cart.length) {
@@ -769,7 +771,7 @@ export function NewOrderPage() {
                       >
                         <div className="font-semibold">{e.name}</div>
                         <div className="text-xs text-muted">
-                          {tr("خصم الموظف", "Staff discount")} <span className="num">{e.staffDiscountPct}%</span>
+                          {tr("خصم الموظف", "Staff discount")} <span className="num ltr">{discountLabel(e.staffDiscountPct, e.staffDiscountAmount, e.currency, lang) || "0%"}</span>
                         </div>
                       </button>
                     ))}
@@ -983,11 +985,24 @@ export function NewOrderPage() {
                 )}
                 {can("orders", "edit") && (
                   <Field
-                    label={tr("خصم يدوي %", "Manual discount %")}
+                    label={tr("خصم يدوي", "Manual discount")}
                     htmlFor="mdisc"
                     hint={tr("يُستعمل أفضل خصم واحد إلا إذا سُمح بالجمع بالإعدادات", "The best single discount applies unless stacking is allowed in settings")}
                   >
-                    <TextInput id="mdisc" inputMode="decimal" dir="ltr" className="num max-w-[8rem]" value={manualPct} onChange={(e) => setManualPct(e.target.value)} />
+                    <div className="max-w-xs">
+                      <DiscountInput
+                        id="mdisc"
+                        mode={manualMode}
+                        value={manualPct}
+                        currencies={[cur]}
+                        base={quote?.subtotal}
+                        baseCurrency={cur}
+                        onChange={(m, v) => {
+                          setManualMode(m);
+                          setManualPct(v);
+                        }}
+                      />
+                    </div>
                   </Field>
                 )}
               </div>

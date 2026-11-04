@@ -60,7 +60,7 @@ focus = clients["Focus Study Zone"]["id"]
 batch_id = made["batchId"]
 
 ADMIN_ROUTES = [
-    "/", "/dashboard", "/orders", "/orders/new", "/close", "/clients", f"/clients/{focus}",
+    "/", "/orders", "/deliveries", "/orders/new", "/close", "/clients", f"/clients/{focus}",
     "/menu/products", "/menu/categories", "/menu/addons",
     "/warehouse/fridge", "/warehouse/produce", "/warehouse/items", "/warehouse/moves", "/warehouse/places",
     "/production/new", "/production/runs", "/production/trace", "/distribution/route", "/distribution/consignments", "/distribution/returns", "/purchasing/list", "/purchasing/new", "/purchasing/suppliers", "/purchasing/debts", "/purchasing/prices",

@@ -198,7 +198,7 @@ moneyRouter.get(
   requireAuth,
   h((_req, res) => {
     const reps = db.select().from(employees).where(and(eq(employees.isDeliveryRep, true), eq(employees.active, true), isNull(employees.deletedAt))).all();
-    res.json({ rows: reps.map((e) => ({ id: e.id, name: e.name, boxId: db.select({ id: cashBoxes.id }).from(cashBoxes).where(and(eq(cashBoxes.employeeId, e.id), isNull(cashBoxes.deletedAt))).get()?.id ?? null })) });
+    res.json({ rows: reps.map((e) => ({ id: e.id, name: e.name, phone: e.phone, boxId: db.select({ id: cashBoxes.id }).from(cashBoxes).where(and(eq(cashBoxes.employeeId, e.id), isNull(cashBoxes.deletedAt))).get()?.id ?? null })) });
   }),
 );
 

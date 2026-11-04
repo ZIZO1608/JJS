@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Stat } from "../components/Tabs";
 import { Empty, PageHeader, Spinner, TextInput } from "../components/ui";
 import { post } from "../lib/api";
@@ -27,7 +28,29 @@ interface DayRow {
   totals: DayTotals | null;
   closedByName?: string | null;
 }
+interface HighlightRow {
+  orderId: string;
+  number: number;
+  clientId: string | null;
+  clientName: string | null;
+  assignedName: string | null;
+  total: number;
+  currency: Currency;
+  remaining: number;
+}
+interface Highlights {
+  previous: { date: string; salesUsd: number; orders: number; items: number };
+  deliveries: { done: number; total: number };
+  notDelivered: HighlightRow[];
+  unpaid: HighlightRow[];
+  unpaidCount: number;
+  unpaidUsd: number;
+  openReports: number;
+  waitingRequests: number;
+  rate: number | null;
+}
 interface DayView {
+  highlights: Highlights;
   day: DayRow;
   report: PeriodReport;
   mainBox: { id: string; nameAr: string; nameEn: string; currency: Currency; expected: number | null };
@@ -158,6 +181,183 @@ function MadeVsSold({ rows }: { rows: NonNullable<DayView["production"]> }) {
       {rows.some((r) => Math.abs(r.counted) > 0.001) && (
         <p className="mt-2 text-xs text-muted">{tr("في فروقات جرد مسجّلة: شوف المستودع ← الحركات.", "Count differences were recorded: see Warehouse → Moves.")}</p>
       )}
+    </div>
+  );
+}
+
+/** "+12%" against the day before, when there is a day before to compare with. */
+function Trend({ now, before }: { now: number; before: number }) {
+  const { tr } = useI18n();
+  if (!(before > 0)) return <span className="text-xs text-muted">{tr("ما في مبيعات مبارح", "No sales the day before")}</span>;
+  const change = Math.round(((now - before) / before) * 100);
+  if (change === 0) return <span className="text-xs font-semibold text-muted">{tr("متل مبارح", "Same as the day before")}</span>;
+  return (
+    <span className={`text-xs font-bold ${change > 0 ? "text-good" : "text-bad"}`}>
+      {change > 0 ? "▲" : "▼"} <span className="num ltr">{Math.abs(change)}%</span> {tr("عن مبارح", "vs the day before")}
+    </span>
+  );
+}
+
+function HeroNumber({ label, value, sub, tone }: { label: string; value: string; sub?: React.ReactNode; tone?: "good" | "bad" | "warn" }) {
+  const c = tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : "";
+  return (
+    <div className="min-w-0 rounded-xl bg-surface/70 p-3">
+      <div className="text-xs font-semibold text-muted">{label}</div>
+      <div className={`num ltr truncate text-start text-2xl font-bold ${c}`}>{value}</div>
+      {sub && <div className="mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+/** The day at a glance: how it went, what sold best, and what still needs someone's attention. */
+function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: Highlights; date: string; closed: boolean; showCollected: boolean }) {
+  const { tr, pick, lang, fmtDate } = useI18n();
+  const top = [...r.byProduct].sort((a, b) => b.revenueUsd - a.revenueUsd).slice(0, 4);
+  const maxRevenue = top[0]?.revenueUsd ?? 0;
+  const deliveredShare = h.deliveries.total ? Math.round((h.deliveries.done / h.deliveries.total) * 100) : 0;
+  const best = top[0];
+  const headline = !r.orders
+    ? tr("ما في طلبات بهاليوم لهلأ.", "No orders on this day yet.")
+    : tr(`${r.orders} طلب و${qty(r.items)} قطعة بـ ${usd(r.salesUsd)}${best ? `، والأكتر مبيعاً ${pick(best)}` : ""}.`, `${r.orders} orders and ${qty(r.items)} items for ${usd(r.salesUsd)}${best ? `. Best seller: ${pick(best)}` : ""}.`);
+  const attention = h.notDelivered.length + h.unpaidCount + h.openReports + h.waitingRequests;
+  return (
+    <section className="grid gap-3" aria-label={tr("ملخص اليوم", "Summary of the day")}>
+      <div className="rounded-2xl bg-gradient-to-br from-brand/20 via-brand/10 to-brand/5 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-bold">{closed ? `🔒 ${tr("حكاية اليوم", "How the day went")}` : `✨ ${tr("كيف ماشي اليوم؟", "How is the day going?")}`}</h2>
+          <span className="text-sm text-muted">{fmtDate(`${date}T12:00:00`)}</span>
+          {h.rate ? (
+            <span className="chip ms-auto">
+              💱 <span className="num ltr">{h.rate.toLocaleString("en-US")}</span> {tr("ل.س للدولار", "SYP per $")}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-[15px]">{headline}</p>
+        <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <HeroNumber label={tr("المبيعات", "Sales")} value={usd(r.salesUsd)} sub={<Trend now={r.salesUsd} before={h.previous.salesUsd} />} />
+          {showCollected ? (
+            <HeroNumber label={tr("انقبض اليوم", "Collected today")} value={usd(r.collectedUsd ?? 0)} sub={<span className="text-xs text-muted">{h.rate ? money((r.collectedUsd ?? 0) * h.rate, "SYP", lang) : ""}</span>} tone="good" />
+          ) : (
+            <HeroNumber label={tr("القطع", "Items")} value={qty(r.items)} sub={<span className="text-xs text-muted">{tr(`${r.orders} طلب`, `${r.orders} orders`)}</span>} />
+          )}
+          <HeroNumber label={tr("ما اندفع لسا", "Not paid yet")} value={usd(h.unpaidUsd)} tone={h.unpaidCount ? "bad" : "good"} sub={<span className="text-xs text-muted">{h.unpaidCount ? tr(`${h.unpaidCount} طلب بالغيمة`, `${h.unpaidCount} orders in the cloud`) : tr("كلو مدفوع ✓", "All paid ✓")}</span>} />
+          <HeroNumber label={r.netUsd !== undefined ? tr("الصافي", "Net") : tr("مصاريف وهدر", "Expenses & waste")} value={usd(r.netUsd ?? r.expensesUsd + r.wasteUsd)} tone={r.netUsd !== undefined ? (r.netUsd < 0 ? "bad" : "good") : undefined} sub={<span className="text-xs text-muted">{tr(`خصومات ${usd(r.discountUsd)}`, `Discounts ${usd(r.discountUsd)}`)}</span>} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="card">
+          <h3 className="mb-2 font-semibold">🏆 {tr("الأكتر مبيعاً", "Best sellers")}</h3>
+          {top.length === 0 ? (
+            <p className="text-sm text-muted">{tr("لسا ما انباع شي.", "Nothing sold yet.")}</p>
+          ) : (
+            <ul className="grid gap-2">
+              {top.map((p) => (
+                <li key={p.productId}>
+                  <div className="flex justify-between gap-2 text-sm">
+                    <span className="min-w-0 truncate font-medium">{pick(p)}</span>
+                    <span className="num ltr shrink-0 text-muted">
+                      ×{qty(p.qty)} · {usd(p.revenueUsd)}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-sunken">
+                    <div className="h-full rounded-full bg-brand" style={{ width: `${maxRevenue > 0 ? Math.max(4, (p.revenueUsd / maxRevenue) * 100) : 0}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-3 border-t border-line pt-3">
+            <div className="flex justify-between text-sm">
+              <span className="font-semibold">🛵 {tr("التسليم", "Deliveries")}</span>
+              <span className="num">
+                {h.deliveries.done}/{h.deliveries.total}
+              </span>
+            </div>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-sunken">
+              <div className="h-full rounded-full bg-good transition-[width]" style={{ width: `${deliveredShare}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3 className="mb-2 font-semibold">{attention ? `👀 ${tr("شغلات بدها انتباه", "Needs attention")}` : `🎉 ${tr("كلو تمام", "All good")}`}</h3>
+          {attention === 0 ? (
+            <p className="text-sm text-muted">{tr("كل شي تسلّم وكل شي مدفوع وما في بلاغات.", "Everything is delivered and paid, with no open reports.")}</p>
+          ) : (
+            <ul className="grid gap-2 text-sm">
+              {h.notDelivered.length > 0 && (
+                <li>
+                  <Link to="/deliveries" className="font-semibold text-warn hover:underline">
+                    🛵 {tr(`${h.notDelivered.length} طلب لسا ما تسلّم`, `${h.notDelivered.length} orders not delivered yet`)}
+                  </Link>
+                  <div className="text-xs text-muted">{h.notDelivered.slice(0, 5).map((o) => `#${o.number} ${o.clientName ?? ""}`.trim()).join(" · ")}</div>
+                </li>
+              )}
+              {h.unpaid.length > 0 && (
+                <li>
+                  <div className="font-semibold text-bad">💰 {tr("ما دفعوا", "Did not pay")}</div>
+                  <ul className="mt-1 grid gap-1">
+                    {h.unpaid.slice(0, 6).map((o) => (
+                      <li key={o.orderId} className="flex justify-between gap-2">
+                        {o.clientId ? (
+                          <Link to={`/clients/${o.clientId}`} className="min-w-0 truncate hover:underline">
+                            {o.clientName} <span className="num text-xs text-faint">#{o.number}</span>
+                          </Link>
+                        ) : (
+                          <span className="min-w-0 truncate">#{o.number}</span>
+                        )}
+                        <span className="num ltr shrink-0 font-semibold">{money(o.remaining, o.currency, lang)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {h.unpaidCount > 6 && <div className="mt-1 text-xs text-muted">{tr(`و${h.unpaidCount - 6} غيرهم`, `and ${h.unpaidCount - 6} more`)}</div>}
+                </li>
+              )}
+              {h.openReports > 0 && (
+                <li>
+                  <Link to="/requests?tab=reports" className="font-semibold text-bad hover:underline">
+                    ⚠️ {tr(`${h.openReports} بلاغ من الزبائن بدو رد`, `${h.openReports} client reports to answer`)}
+                  </Link>
+                </li>
+              )}
+              {h.waitingRequests > 0 && (
+                <li>
+                  <Link to="/requests" className="font-semibold text-warn hover:underline">
+                    📱 {tr(`${h.waitingRequests} طلب من الزبائن بانتظار الرد`, `${h.waitingRequests} client requests waiting`)}
+                  </Link>
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Where the close stands: each step lights up when it is done. */
+function CloseSteps({ steps }: { steps: { label: string; done: boolean }[] }) {
+  const { tr } = useI18n();
+  const doneCount = steps.filter((s) => s.done).length;
+  return (
+    <div className="card" aria-label={tr("خطوات الإقفال", "Closing steps")}>
+      <div className="mb-2 flex items-center justify-between text-sm">
+        <span className="font-semibold">{tr("خطوات الإقفال", "Closing steps")}</span>
+        <span className="num text-muted">
+          {doneCount}/{steps.length}
+        </span>
+      </div>
+      <ol className="flex flex-wrap gap-2">
+        {steps.map((s, i) => (
+          <li key={i} className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${s.done ? "bg-good/15 text-good" : "bg-sunken text-muted"}`}>
+            <span className="num" aria-hidden>
+              {s.done ? "✓" : i + 1}
+            </span>
+            {s.label}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -355,11 +555,21 @@ export function DailyClosePage() {
               )}
             </div>
           </div>
+          <DayStory r={d.day.totals ?? d.report} h={d.highlights} date={date} closed showCollected />
           <DaySummary r={d.day.totals ?? d.report} cash={d.day.totals?.cash} />
           {d.production && <MadeVsSold rows={d.production} />}
         </div>
       ) : (
         <div className="grid gap-4">
+          <DayStory r={d.report} h={d.highlights} date={date} closed={false} showCollected={!blind} />
+          <CloseSteps
+            steps={[
+              { label: tr("كاش المندوبين", "Delivery cash"), done: repCash.length === 0 || repCash.every((r) => taken[r.boxId] ?? true) },
+              { label: tr("عدّ الصندوق", "Count the box"), done: counted !== "" && !Number.isNaN(c) },
+              ...(isToday && leftovers.length > 0 ? [{ label: tr("البرّاد", "The fridge"), done: Object.keys(trash).length > 0 || leftovers.every((b) => b.expired) }] : []),
+              { label: tr("اقفل اليوم", "Lock the day"), done: false },
+            ]}
+          />
           {/* part 1: delivery cash — ticked, received with the close */}
           <section className="card">
             <h2 className={`mb-2 font-bold ${big ? "text-xl" : "text-lg"}`}>1 · {tr("كاش المندوبين", "Delivery cash")}</h2>

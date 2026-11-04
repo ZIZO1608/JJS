@@ -358,6 +358,9 @@ export const clientTiers = sqliteTable("client_tiers", {
   nameAr: text("name_ar").notNull(),
   nameEn: text("name_en").notNull(),
   discountPct: real("discount_pct").notNull().default(0),
+  /** A fixed amount off each order instead of a percentage (used when above 0). */
+  discountAmount: real("discount_amount").notNull().default(0),
+  discountCurrency: text("discount_currency", { enum: ["USD", "SYP"] }).notNull().default("USD"),
   sort: integer("sort").notNull().default(0),
 });
 
@@ -434,6 +437,8 @@ export const subscriptionPlans = sqliteTable("subscription_plans", {
   monthlyFee: real("monthly_fee").notNull(),
   currency: text("currency", { enum: ["USD", "SYP"] }).notNull(),
   discountPct: real("discount_pct").notNull().default(0),
+  /** A fixed amount off each order, in the plan's currency, instead of a percentage (used when above 0). */
+  discountAmount: real("discount_amount").notNull().default(0),
   includedItems: integer("included_items").notNull().default(0),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
@@ -549,6 +554,10 @@ export const orders = sqliteTable(
     consignmentId: text("consignment_id"),
     /** staff = typed in the shop; portal = a client's request that staff accepted. */
     source: text("source", { enum: ["staff", "portal"] }).notNull().default("staff"),
+    deliveredAt: text("delivered_at"),
+    deliveredBy: text("delivered_by").references(() => users.id),
+    /** Money taken when handing the order over, in the order currency (0 = the client did not pay then). */
+    deliveryCollected: real("delivery_collected").notNull().default(0),
   },
   (t) => [
     uniqueIndex("orders_number_uq").on(t.number),
@@ -556,6 +565,8 @@ export const orders = sqliteTable(
     index("orders_client_idx").on(t.clientId, t.businessDate),
     // the clients sheet picks orders by the exact time they were taken
     index("orders_created_idx").on(t.createdAt),
+    // the deliveries screen lists open orders and who carries them
+    index("orders_status_idx").on(t.status, t.assignedTo),
   ],
 );
 
@@ -671,6 +682,8 @@ export const employees = sqliteTable("employees", {
   /** % of the sales of orders delivered by this person. */
   commissionPct: real("commission_pct").notNull().default(0),
   staffDiscountPct: real("staff_discount_pct").notNull().default(30),
+  /** A fixed amount off each purchase, in the employee's currency, instead of the percentage (used when above 0). */
+  staffDiscountAmount: real("staff_discount_amount").notNull().default(0),
   isDeliveryRep: integer("is_delivery_rep", { mode: "boolean" }).notNull().default(false),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
@@ -937,6 +950,23 @@ export const orderRequests = sqliteTable(
     orderId: text("order_id").references(() => orders.id),
   },
   (t) => [uniqueIndex("order_requests_number_uq").on(t.number), index("order_requests_client_idx").on(t.clientId, t.createdAt), index("order_requests_status_idx").on(t.status)],
+);
+
+/** A client's complaint about one of their orders, sent from the portal and answered by staff. */
+export const orderReports = sqliteTable(
+  "order_reports",
+  {
+    ...base,
+    requestId: text("request_id").notNull().references(() => orderRequests.id),
+    clientId: text("client_id").notNull().references(() => clients.id),
+    category: text("category", { enum: ["late", "missing", "wrong", "quality", "payment", "other"] }).notNull(),
+    message: text("message").notNull(),
+    status: text("status", { enum: ["open", "resolved"] }).notNull().default("open"),
+    reply: text("reply").notNull().default(""),
+    resolvedBy: text("resolved_by").references(() => users.id),
+    resolvedAt: text("resolved_at"),
+  },
+  (t) => [index("order_reports_request_idx").on(t.requestId), index("order_reports_status_idx").on(t.status, t.createdAt)],
 );
 
 export const subscriptionRequests = sqliteTable(

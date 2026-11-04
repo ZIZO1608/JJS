@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Spinner } from "../../components/ui";
+import { Modal, Spinner } from "../../components/ui";
 import { post } from "../../lib/api";
 import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
@@ -60,6 +60,72 @@ export function RequestsPage() {
 interface Detail extends PortalRequest {
   lines: { nameAr: string; nameEn: string; qty: number; freeQty: number; unitPrice: number; lineTotal: number; options: { nameAr: string; nameEn: string }[] }[];
   totals: { subtotal: number; discount: number; taxTotal: number; deliveryFee: number; total: number; currency: Currency } | null;
+  delivery: { name: string; phone: string } | null;
+  reports: { id: string; category: ReportCategory; message: string; status: "open" | "resolved"; reply: string; createdAt: string; resolvedAt: string | null }[];
+}
+
+type ReportCategory = "late" | "missing" | "wrong" | "quality" | "payment" | "other";
+const REPORT_CHOICES: { key: ReportCategory; ar: string; en: string; icon: string }[] = [
+  { key: "late", ar: "الطلب تأخر", en: "Order is late", icon: "⏰" },
+  { key: "missing", ar: "في شي ناقص", en: "Something is missing", icon: "📦" },
+  { key: "wrong", ar: "الطلب غلط", en: "Wrong order", icon: "🔄" },
+  { key: "quality", ar: "مشكلة بالجودة", en: "Quality problem", icon: "🥪" },
+  { key: "payment", ar: "مشكلة بالحساب", en: "Payment problem", icon: "💰" },
+  { key: "other", ar: "شي تاني", en: "Something else", icon: "💬" },
+];
+
+/** The client tells the shop what went wrong: one tap for the kind of problem, then a few words. */
+function ReportDialog({ requestId, number, onClose, onSent }: { requestId: string; number: number; onClose: () => void; onSent: () => void }) {
+  const { tr, pick, err } = useI18n();
+  const toast = useToast();
+  const [category, setCategory] = useState<ReportCategory | null>(null);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ready = !!category && message.trim().length >= 3;
+  const send = async () => {
+    setBusy(true);
+    try {
+      await post(`/portal/order-requests/${requestId}/reports`, { category, message: message.trim() });
+      toast(tr("وصل بلاغك للمحل، رح يردوا عليك قريباً", "Your report reached the shop: they will answer soon"));
+      onSent();
+    } catch (e) {
+      toast(err(e), "error");
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={tr(`بلاغ عن الطلب #${number}`, `Report on order #${number}`)}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {tr("رجوع", "Back")}
+          </button>
+          <button className="btn btn-primary" disabled={!ready || busy} onClick={() => void send()}>
+            {tr("إرسال البلاغ", "Send report")}
+          </button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label={tr("شو المشكلة؟", "What went wrong?")}>
+          {REPORT_CHOICES.map((c) => (
+            <button key={c.key} type="button" role="radio" aria-checked={category === c.key} onClick={() => setCategory(c.key)} className={`rounded-xl border-2 p-3 text-start text-sm font-semibold transition-colors ${category === c.key ? "border-brand bg-brand/10" : "border-line"}`}>
+              <span className="me-1.5" aria-hidden>
+                {c.icon}
+              </span>
+              {pick(c)}
+            </button>
+          ))}
+        </div>
+        <label className="grid gap-1">
+          <span className="label">{tr("احكيلنا شو صار", "Tell us what happened")}</span>
+          <textarea className="input min-h-[96px]" maxLength={500} value={message} onChange={(e) => setMessage(e.target.value)} />
+        </label>
+      </div>
+    </Modal>
+  );
 }
 
 function Timeline({ r }: { r: Detail }) {
@@ -96,10 +162,12 @@ export function RequestDetailPage() {
   const { id } = useParams();
   const { tr, pick, err } = useI18n();
   const m = useMoney();
+  const ago = useAgo();
   const toast = useToast();
   const { data, reload } = useData<{ request: Detail }>(`/portal/order-requests/${id}`);
   useRefreshOn(reload);
   const [busy, setBusy] = useState(false);
+  const [reporting, setReporting] = useState(false);
   if (!data) return <Spinner />;
   const r = data.request;
   const stage = stageOf(r);
@@ -138,6 +206,24 @@ export function RequestDetailPage() {
       <div className="card rounded-3xl p-5">
         <Timeline r={r} />
       </div>
+
+      {r.delivery && (
+        <div className="card flex items-center gap-3 rounded-3xl p-4">
+          <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand/15 text-2xl" aria-hidden>
+            🛵
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm text-muted">{stage === "delivered" ? tr("وصّل طلبك", "Delivered by") : tr("رح يوصّل طلبك", "Delivering your order")}</div>
+            <div className="truncate text-lg font-bold">{r.delivery.name}</div>
+            {r.delivery.phone && <div className="num ltr text-start text-sm text-muted">{r.delivery.phone}</div>}
+          </div>
+          {r.delivery.phone && (
+            <a href={`tel:${r.delivery.phone}`} className="btn btn-primary shrink-0">
+              📞 {tr("اتصل", "Call")}
+            </a>
+          )}
+        </div>
+      )}
 
       <div className="card rounded-3xl p-5">
         <div className="mb-3 flex flex-wrap gap-2 text-sm">
@@ -188,6 +274,49 @@ export function RequestDetailPage() {
           )}
         </dl>
       </div>
+
+      {r.reports.length > 0 && (
+        <div className="card rounded-3xl p-5">
+          <h2 className="mb-2 font-bold">{tr("بلاغاتك عن هالطلب", "Your reports on this order")}</h2>
+          <ul className="grid gap-3">
+            {r.reports.map((x) => {
+              const c = REPORT_CHOICES.find((k) => k.key === x.category);
+              return (
+                <li key={x.id} className="rounded-2xl bg-sunken/60 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                      {c?.icon} {c ? pick(c) : ""}
+                    </span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${x.status === "open" ? "bg-warn/15 text-warn" : "bg-good/15 text-good"}`}>{x.status === "open" ? tr("عم نشوفو", "Looking into it") : tr("تم الحل ✓", "Resolved ✓")}</span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap break-words">{x.message}</p>
+                  {x.reply && (
+                    <p className="mt-2 rounded-xl bg-surface p-2">
+                      <b>{tr("رد المحل:", "The shop says:")}</b> {x.reply}
+                    </p>
+                  )}
+                  <div className="mt-1 text-xs text-faint">{ago(x.createdAt)}</div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <button className="btn w-full !py-3" onClick={() => setReporting(true)}>
+        ⚠️ {tr("في مشكلة بالطلب؟ بلّغنا", "Something wrong? Report it")}
+      </button>
+      {reporting && (
+        <ReportDialog
+          requestId={r.id}
+          number={r.number}
+          onClose={() => setReporting(false)}
+          onSent={() => {
+            setReporting(false);
+            void reload();
+          }}
+        />
+      )}
 
       {stage === "waiting" && (
         <button className="btn w-full !py-3 text-bad" disabled={busy} onClick={cancel}>

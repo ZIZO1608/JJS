@@ -1,12 +1,13 @@
-import { and, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, ne } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { batches, businessDays, cashBoxes, users } from "../db/schema.js";
+import { batches, businessDays, cashBoxes, clients, orderReports, orderRequests, orders, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { can, requirePerm, type AuthUser } from "../lib/auth.js";
 import { currentRate, getDay, localDate, round4 } from "../lib/biz.js";
 import { h, HttpError, nowIso, parse } from "../lib/util.js";
+import { orderRemaining } from "../services/orders.js";
 import { addBoxMove, boxBalance, handOverRepCash, systemBox } from "../services/money.js";
 import { takeFromBatch } from "../services/stock.js";
 import { periodReport, productionVsSales, reportFor } from "../services/reports.js";
@@ -24,6 +25,40 @@ function dayOut(d: typeof businessDays.$inferSelect, user: AuthUser | undefined)
   // A reopened day still holds the numbers of its first close, and those would give the expected cash away.
   if (d.status !== "closed" && countsBlind(user)) return { ...day, expectedCashUsd: null, countedCashUsd: null, differenceUsd: null, totals: null };
   return { ...day, totals: totalsJson ? reportFor(user, JSON.parse(totalsJson) as object) : null };
+}
+
+const previousDate = (date: string) => {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() - 1);
+  return localDate(d);
+};
+
+/** The day's story for the close screen: how it compares, who did not pay, what is still out. Sales figures only, never the expected cash. */
+function dayHighlights(date: string) {
+  const prev = periodReport(db, previousDate(date), previousDate(date));
+  const dayOrders = db
+    .select({ o: orders, clientName: clients.name, assignedName: employees.name })
+    .from(orders)
+    .leftJoin(clients, eq(orders.clientId, clients.id))
+    .leftJoin(employees, eq(orders.assignedTo, employees.id))
+    .where(and(eq(orders.businessDate, date), isNull(orders.deletedAt), ne(orders.status, "cancelled"), ne(orders.type, "internal")))
+    .orderBy(desc(orders.number))
+    .all();
+  const row = (x: (typeof dayOrders)[number]) => ({ orderId: x.o.id, number: x.o.number, clientId: x.o.clientId, clientName: x.clientName, assignedName: x.assignedName, total: x.o.total, currency: x.o.currency, remaining: orderRemaining(x.o) });
+  const notDelivered = dayOrders.filter((x) => x.o.status === "confirmed");
+  const unpaid = dayOrders.filter((x) => orderRemaining(x.o) > 0);
+  const owedUsd = (x: (typeof dayOrders)[number]) => (x.o.total > 0 ? (orderRemaining(x.o) / x.o.total) * x.o.totalUsd : 0);
+  return {
+    previous: { date: previousDate(date), salesUsd: prev.salesUsd, orders: prev.orders, items: prev.items },
+    deliveries: { done: dayOrders.length - notDelivered.length, total: dayOrders.length },
+    notDelivered: notDelivered.slice(0, 30).map(row),
+    unpaid: unpaid.slice(0, 30).map(row),
+    unpaidCount: unpaid.length,
+    unpaidUsd: round4(unpaid.reduce((s, x) => s + owedUsd(x), 0)),
+    openReports: db.select({ n: sql<number>`count(*)` }).from(orderReports).where(and(eq(orderReports.status, "open"), isNull(orderReports.deletedAt))).get()?.n ?? 0,
+    waitingRequests: db.select({ n: sql<number>`count(*)` }).from(orderRequests).where(and(eq(orderRequests.status, "pending"), isNull(orderRequests.deletedAt))).get()?.n ?? 0,
+    rate: currentRate(),
+  };
 }
 
 function dayView(date: string, user: AuthUser | undefined) {
@@ -61,6 +96,7 @@ function dayView(date: string, user: AuthUser | undefined) {
       };
     });
   return {
+    highlights: dayHighlights(date),
     cashFlow: blind ? undefined : { currency: main.currency, opening: round4(opening), moves: moves.map((m) => ({ ...m, amount: round4(m.amount) })), expected: round4(opening + moves.reduce((s, m) => s + m.amount, 0)) },
     repSettlement: repRows,
     production: productionVsSales(db, date, date).map(({ itemId: _i, ...r }) => r),

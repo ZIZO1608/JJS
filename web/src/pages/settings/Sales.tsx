@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DiscountInput, discountLabel, readDiscount, type DiscountMode } from "../../components/DiscountInput";
 import { Field, Select, Spinner } from "../../components/ui";
 import { post, put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
@@ -13,6 +14,8 @@ interface Tier {
   nameAr: string;
   nameEn: string;
   discountPct: number;
+  discountAmount: number;
+  discountCurrency: Currency;
   sort: number;
 }
 interface Plan {
@@ -22,6 +25,7 @@ interface Plan {
   monthlyFee: number;
   currency: Currency;
   discountPct: number;
+  discountAmount: number;
   includedItems: number;
   active: boolean;
 }
@@ -50,16 +54,23 @@ function Section({ title, hint, children, onSave, busy, can }: { title: string; 
 function TierDialog({ tier, onClose, onSaved }: { tier: Tier | null; onClose: () => void; onSaved: () => void }) {
   const { tr } = useI18n();
   const { errors, busy, run } = useSaver();
-  const [f, setF] = useState({ nameAr: tier?.nameAr ?? "", nameEn: tier?.nameEn ?? "", discountPct: String(tier?.discountPct ?? 0), sort: String(tier?.sort ?? 0) });
+  const [f, setF] = useState({
+    nameAr: tier?.nameAr ?? "",
+    nameEn: tier?.nameEn ?? "",
+    mode: (tier?.discountAmount ? tier.discountCurrency : "pct") as DiscountMode,
+    discount: String((tier?.discountAmount ? tier.discountAmount : tier?.discountPct) ?? 0),
+    sort: String(tier?.sort ?? 0),
+  });
+  const read = readDiscount(f.mode, f.discount);
   const save = async () => {
-    const body = { nameAr: f.nameAr, nameEn: f.nameEn, discountPct: num(f.discountPct) || 0, sort: Math.round(num(f.sort) || 0) };
+    const body = { nameAr: f.nameAr, nameEn: f.nameEn, discountPct: read.pct, discountAmount: read.amount, discountCurrency: f.mode === "pct" ? (tier?.discountCurrency ?? "USD") : f.mode, sort: Math.round(num(f.sort) || 0) };
     if (await run(() => (tier ? put(`/clients/tiers/${tier.id}`, body) : post("/clients/tiers", body)))) onSaved();
   };
   return (
-    <ActionDialog title={tier ? tr("تعديل فئة", "Edit tier") : tr("فئة زبائن جديدة", "New client tier")} onClose={onClose} onSave={save} busy={busy} disabled={!f.nameAr || !f.nameEn}>
+    <ActionDialog title={tier ? tr("تعديل فئة", "Edit tier") : tr("فئة زبائن جديدة", "New client tier")} onClose={onClose} onSave={save} busy={busy} disabled={!f.nameAr || !f.nameEn || !!read.problem}>
       <NameFields f={f} set={setF} errors={errors} idp="tr" />
-      <Field label={tr("الخصم %", "Discount %")} htmlFor="tr-d" error={errors.discountPct}>
-        <NumInput id="tr-d" value={f.discountPct} onChange={(v) => setF({ ...f, discountPct: v })} />
+      <Field label={tr("الخصم", "Discount")} htmlFor="tr-d" hint={tr("نسبة من كل طلب، أو مبلغ ثابت من كل طلب", "A percentage of each order, or a fixed amount off each order")} error={errors.discountPct ?? errors.discountAmount}>
+        <DiscountInput id="tr-d" mode={f.mode} value={f.discount} currencies={["USD", "SYP"]} onChange={(mode, discount) => setF({ ...f, mode, discount })} />
       </Field>
     </ActionDialog>
   );
@@ -74,16 +85,19 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: Plan | null; onClose: ()
     nameEn: plan?.nameEn ?? "",
     monthlyFee: plan ? String(plan.monthlyFee) : "",
     currency: plan?.currency ?? s?.defaultCurrency ?? "USD",
-    discountPct: String(plan?.discountPct ?? 0),
+    amountOff: !!plan?.discountAmount,
+    discount: String((plan?.discountAmount ? plan.discountAmount : plan?.discountPct) ?? 0),
     includedItems: String(plan?.includedItems ?? 0),
     active: plan?.active ?? true,
   });
+  const mode: DiscountMode = f.amountOff ? f.currency : "pct";
+  const read = readDiscount(mode, f.discount);
   const save = async () => {
-    const body = { nameAr: f.nameAr, nameEn: f.nameEn, monthlyFee: num(f.monthlyFee) || 0, currency: f.currency, discountPct: num(f.discountPct) || 0, includedItems: Math.round(num(f.includedItems) || 0), active: f.active };
+    const body = { nameAr: f.nameAr, nameEn: f.nameEn, monthlyFee: num(f.monthlyFee) || 0, currency: f.currency, discountPct: read.pct, discountAmount: read.amount, includedItems: Math.round(num(f.includedItems) || 0), active: f.active };
     if (await run(() => (plan ? put(`/clients/plans/${plan.id}`, body) : post("/clients/plans", body)))) onSaved();
   };
   return (
-    <ActionDialog title={plan ? tr("تعديل اشتراك", "Edit plan") : tr("اشتراك جديد", "New plan")} onClose={onClose} onSave={save} busy={busy} disabled={!f.nameAr || !f.nameEn || f.monthlyFee === ""}>
+    <ActionDialog title={plan ? tr("تعديل اشتراك", "Edit plan") : tr("اشتراك جديد", "New plan")} onClose={onClose} onSave={save} busy={busy} disabled={!f.nameAr || !f.nameEn || f.monthlyFee === "" || !!read.problem}>
       <NameFields f={f} set={setF} errors={errors} idp="pl" />
       <div className="grid grid-cols-2 gap-3">
         <Field label={tr("الرسم الشهري", "Monthly fee")} htmlFor="pl-f">
@@ -95,8 +109,8 @@ function PlanDialog({ plan, onClose, onSaved }: { plan: Plan | null; onClose: ()
         <Field label={tr("قطع مجانية بالشهر", "Free items a month")} htmlFor="pl-i">
           <NumInput id="pl-i" step="1" value={f.includedItems} onChange={(v) => setF({ ...f, includedItems: v })} />
         </Field>
-        <Field label={tr("خصم على الباقي %", "Discount on the rest %")} htmlFor="pl-d">
-          <NumInput id="pl-d" value={f.discountPct} onChange={(v) => setF({ ...f, discountPct: v })} />
+        <Field label={tr("خصم على الباقي", "Discount on the rest")} htmlFor="pl-d">
+          <DiscountInput id="pl-d" mode={mode} value={f.discount} currencies={[f.currency]} onChange={(m, discount) => setF({ ...f, amountOff: m !== "pct", discount })} />
         </Field>
       </div>
       <Check checked={f.active} onChange={(v) => setF({ ...f, active: v })}>
@@ -215,7 +229,7 @@ export function SalesTab() {
             {tiers.data.rows.map((t) => (
               <tr key={t.id}>
                 <td className="td font-semibold">{pick(t)}</td>
-                <td className="td num ltr">{t.discountPct}%</td>
+                <td className="td num ltr">{discountLabel(t.discountPct, t.discountAmount, t.discountCurrency, lang) || "0%"}</td>
                 <td className="td">
                   <RowActions canEdit={can("clients", "edit")} canDelete={can("clients", "delete")} onEdit={() => setTierDlg(t)} onDelete={() => setDelTier(t)} />
                 </td>
@@ -245,7 +259,7 @@ export function SalesTab() {
                   <td className="td num ltr">{money(p.monthlyFee, p.currency, lang)}</td>
                   <td className="td text-muted">
                     {tr(`${p.includedItems} قطعة مجانية`, `${p.includedItems} free items`)}
-                    {p.discountPct > 0 && ` · ${p.discountPct}%`}
+                    {discountLabel(p.discountPct, p.discountAmount, p.currency, lang) && ` · ${tr("خصم", "off")} ${discountLabel(p.discountPct, p.discountAmount, p.currency, lang)}`}
                   </td>
                   <td className="td">
                     <RowActions canEdit={can("clients", "edit")} canDelete={can("clients", "delete")} onEdit={() => setPlanDlg(p)} onDelete={() => setDelPlan(p)} />

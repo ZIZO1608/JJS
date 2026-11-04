@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { formatMoney } from "../../shared/money.js";
-import { clientAccounts, clients, orderRequests, paymentMethods, subscriptionPlans, subscriptionRequests } from "../db/schema.js";
+import { clientAccounts, clients, employees, orderReports, orderRequests, orders, paymentMethods, subscriptionPlans, subscriptionRequests } from "../db/schema.js";
 import { localDate, nextNumber, rateFor, type Q } from "../lib/biz.js";
 import { HttpError, newId, notFound, nowIso } from "../lib/util.js";
 import { startSubscription, subscriptionStatus } from "./clients.js";
@@ -108,6 +108,82 @@ export function notifyOrderStatus(tx: Q, orderId: string, status: "delivered" | 
   notifyClient(tx, r.clientId, status === "delivered"
     ? { kind: "order_delivered", titleAr: `تم تسليم طلبك #${r.number} 🎉`, titleEn: `Your order #${r.number} was delivered 🎉`, link: `/portal/orders/${r.id}`, refId: r.id }
     : { kind: "order_cancelled", titleAr: `أُلغي طلبك #${r.number}`, titleEn: `Your order #${r.number} was cancelled`, bodyAr: reason, bodyEn: reason, link: `/portal/orders/${r.id}`, refId: r.id });
+}
+
+/** Tells a portal client who is bringing their order, with the phone number to reach them. */
+export function notifyDeliveryAssigned(tx: Q, orderId: string, employeeId: string) {
+  const r = tx.select().from(orderRequests).where(eq(orderRequests.orderId, orderId)).get();
+  const e = tx.select({ name: employees.name, phone: employees.phone }).from(employees).where(eq(employees.id, employeeId)).get();
+  if (!r || !e) return;
+  notifyClient(tx, r.clientId, {
+    kind: "order_assigned",
+    titleAr: `${e.name} رح يوصّل طلبك #${r.number} 🛵`,
+    titleEn: `${e.name} will deliver your order #${r.number} 🛵`,
+    bodyAr: e.phone ? `رقمه: ${e.phone}` : "",
+    bodyEn: e.phone ? `Phone: ${e.phone}` : "",
+    link: `/portal/orders/${r.id}`,
+    refId: r.id,
+  });
+}
+
+/** Who is bringing this order, for the client's own order page. Nothing once it is cancelled or for a pickup. */
+export function deliveryPersonOf(tx: Q, orderId: string | null) {
+  if (!orderId) return null;
+  const o = tx.select({ assignedTo: orders.assignedTo, fulfilment: orders.fulfilment, status: orders.status }).from(orders).where(eq(orders.id, orderId)).get();
+  if (!o?.assignedTo || o.fulfilment !== "delivery" || o.status === "cancelled") return null;
+  const e = tx.select({ name: employees.name, phone: employees.phone }).from(employees).where(eq(employees.id, o.assignedTo)).get();
+  return e ? { name: e.name, phone: e.phone } : null;
+}
+
+/* ---------- what clients report about their orders ---------- */
+/** A client can have a few reports open on one order at a time, so a stuck button cannot flood the staff bell. */
+const MAX_OPEN_REPORTS = 3;
+
+const REPORT_CATEGORY: Record<(typeof orderReports.$inferInsert)["category"], { ar: string; en: string }> = {
+  late: { ar: "الطلب تأخر", en: "Order is late" },
+  missing: { ar: "في شي ناقص", en: "Something is missing" },
+  wrong: { ar: "الطلب غلط", en: "Wrong order" },
+  quality: { ar: "مشكلة بالجودة", en: "Quality problem" },
+  payment: { ar: "مشكلة بالحساب", en: "Payment problem" },
+  other: { ar: "شي تاني", en: "Something else" },
+};
+
+export function createOrderReport(tx: Q, clientId: string, requestId: string, p: { category: (typeof orderReports.$inferInsert)["category"]; message: string }) {
+  const r = tx.select().from(orderRequests).where(and(eq(orderRequests.id, requestId), eq(orderRequests.clientId, clientId), isNull(orderRequests.deletedAt))).get();
+  if (!r) throw notFound("request");
+  const open = tx.select({ id: orderReports.id }).from(orderReports).where(and(eq(orderReports.requestId, r.id), eq(orderReports.status, "open"), isNull(orderReports.deletedAt))).all();
+  if (open.length >= MAX_OPEN_REPORTS) throw new HttpError(409, "too_many_reports", "The shop is still looking at your earlier reports on this order.");
+  const id = newId();
+  tx.insert(orderReports).values({ id, requestId: r.id, clientId, category: p.category, message: p.message }).run();
+  const name = clientName(tx, clientId);
+  const cat = REPORT_CATEGORY[p.category];
+  notifyStaff(tx, {
+    kind: "order_report",
+    titleAr: `⚠️ بلاغ من ${name}`,
+    titleEn: `⚠️ Report from ${name}`,
+    bodyAr: `طلب #${r.number} · ${cat.ar} · ${p.message}`.slice(0, 200),
+    bodyEn: `Order #${r.number} · ${cat.en} · ${p.message}`.slice(0, 200),
+    link: `/requests?tab=reports&id=${id}`,
+    refId: id,
+  });
+  return { id };
+}
+
+export function resolveOrderReport(tx: Q, id: string, userId: string, reply: string) {
+  const rep = tx.select().from(orderReports).where(and(eq(orderReports.id, id), isNull(orderReports.deletedAt))).get();
+  if (!rep) throw notFound("report");
+  if (rep.status !== "open") throw new HttpError(409, "report_closed", "This report was already answered.");
+  tx.update(orderReports).set({ status: "resolved", reply, resolvedBy: userId, resolvedAt: nowIso(), updatedAt: nowIso(), syncedAt: null }).where(eq(orderReports.id, id)).run();
+  const r = tx.select({ number: orderRequests.number }).from(orderRequests).where(eq(orderRequests.id, rep.requestId)).get();
+  notifyClient(tx, rep.clientId, {
+    kind: "report_answered",
+    titleAr: `رد المحل على بلاغك للطلب #${r?.number ?? ""}`,
+    titleEn: `The shop answered your report on order #${r?.number ?? ""}`,
+    bodyAr: reply,
+    bodyEn: reply,
+    link: `/portal/orders/${rep.requestId}`,
+    refId: rep.requestId,
+  });
 }
 
 /* ---------- subscriptions ---------- */

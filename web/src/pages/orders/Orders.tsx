@@ -9,6 +9,7 @@ import { openPrint } from "../../lib/print";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
 import type { Lookup } from "../../lib/types";
+import { DeliverDialog } from "../deliveries/Deliveries";
 import { ReturnDialog } from "../distribution/common";
 import { Confirm, discountWords, PortalBadge, payStatusLabel, statusLabel, timeOf, typeLabel, type OrderDetail, type OrderRow } from "./shared";
 
@@ -25,8 +26,9 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
   const { can, simple } = useAuth();
   const toast = useToast();
   const { data } = useData<{ order: OrderDetail }>(`/orders/${id}`);
-  const reps = useData<{ rows: { id: string; name: string }[] }>(can("orders", "edit") ? "/money/reps" : null);
-  const [assign, setAssign] = useState<string>("");
+  const reps = useData<{ rows: { id: string; name: string; phone: string }[] }>(can("orders", "edit") ? "/money/reps" : null);
+  const [assign, setAssign] = useState<string | null>(null);
+  const [delivering, setDelivering] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [reason, setReason] = useState("");
   const [returning, setReturning] = useState(false);
@@ -74,7 +76,7 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
               <button
                 className="btn"
                 disabled={busy}
-                onClick={() => act(() => post(`/orders/${o.id}/deliver`, { assignedTo: assign || o.assignedTo || null }), tr("تم التسليم", "Marked delivered"))}
+                onClick={() => setDelivering(true)}
               >
                 {tr("تم التسليم", "Mark delivered")}
               </button>
@@ -195,12 +197,26 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
           {o.note && <p className="rounded-lg bg-sunken p-2">{o.note}</p>}
           {o.status === "confirmed" && o.fulfilment === "delivery" && can("orders", "edit") && (reps.data?.rows.length ?? 0) > 0 && (
             <label className="flex items-center gap-2">
-              <span className="text-muted">{tr("مين وصّله؟", "Delivered by")}</span>
-              <Select className="max-w-[14rem]" value={assign || o.assignedTo || ""} onChange={(e) => setAssign(e.target.value)}>
+              <span className="text-muted">{tr("مين رح يوصّل؟", "Who delivers?")}</span>
+              <Select
+                className="max-w-[16rem]"
+                value={assign ?? o.assignedTo ?? ""}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setAssign(next);
+                  void post(`/orders/${o.id}/assign`, { assignedTo: next || null })
+                    .then(() => toast(next ? tr("تم التعيين، والزبون بيشوف الاسم والرقم", "Assigned: the client now sees the name and phone") : tr("تم إلغاء التعيين", "Assignment removed")))
+                    .catch((x) => {
+                      setAssign(null);
+                      toast(err(x), "error");
+                    });
+                }}
+              >
                 <option value="">—</option>
                 {reps.data!.rows.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
+                    {r.phone ? ` · ${r.phone}` : ""}
                   </option>
                 ))}
               </Select>
@@ -238,6 +254,16 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
           onYes={() => {
             setConfirmCancel(false);
             void act(() => post(`/orders/${o.id}/cancel`, { reason: reason.trim() }), tr("تم إلغاء الطلب", "Order cancelled"));
+          }}
+        />
+      )}
+      {delivering && o && (
+        <DeliverDialog
+          order={{ id: o.id, number: o.number, currency: o.currency, clientName: o.clientName, assignedTo: assign ?? o.assignedTo, remaining: o.paymentStatus === "credit" || o.paymentStatus === "partial" ? Math.max(0, o.total - (o.paidAmount ?? 0)) : 0 }}
+          onClose={() => setDelivering(false)}
+          onDone={() => {
+            setDelivering(false);
+            onChanged();
           }}
         />
       )}

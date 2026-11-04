@@ -2,6 +2,7 @@ import { toOrderQty } from "@shared/orderQty";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Stat, Tabs } from "../../components/Tabs";
+import { discountLabel } from "../../components/DiscountInput";
 import { ConfirmDialog, Empty, Field, Modal, PageHeader, QtySelect, Select, Spinner, TextInput } from "../../components/ui";
 import { del, get, post, put } from "../../lib/api";
 import { useAuth } from "../../lib/auth";
@@ -34,6 +35,7 @@ interface Plan extends Named {
   monthlyFee: number;
   currency: Currency;
   discountPct: number;
+  discountAmount: number;
   includedItems: number;
   active: boolean;
 }
@@ -485,7 +487,7 @@ function SpecialPrices({ d, onSaved }: { d: Detail; onSaved: () => void }) {
 }
 
 function SubscriptionTab({ d, onSaved }: { d: Detail; onSaved: () => void }) {
-  const { tr, pick, err } = useI18n();
+  const { tr, pick, err, lang } = useI18n();
   const { can } = useAuth();
   const toast = useToast();
   const plans = useData<{ rows: Plan[] }>("/clients/plans");
@@ -522,7 +524,7 @@ function SubscriptionTab({ d, onSaved }: { d: Detail; onSaved: () => void }) {
               <div className="mt-2">
                 {tr("القطع المشمولة الباقية:", "Included items left:")} <b className="num">{d.client.subscription.availableIncluded}</b> /{" "}
                 <span className="num">{active.plan.includedItems}</span>
-                {active.plan.discountPct > 0 && <span className="chip ms-2">{tr(`خصم ${active.plan.discountPct}%`, `${active.plan.discountPct}% off`)}</span>}
+                {discountLabel(active.plan.discountPct, active.plan.discountAmount, active.plan.currency, lang) && <span className="chip ms-2">{tr(`خصم ${discountLabel(active.plan.discountPct, active.plan.discountAmount, active.plan.currency, lang)}`, `${discountLabel(active.plan.discountPct, active.plan.discountAmount, active.plan.currency, lang)} off`)}</span>}
               </div>
             </div>
             {editable && (

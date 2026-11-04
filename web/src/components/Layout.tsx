@@ -34,10 +34,11 @@ export const pathFor = (m: Module) =>
   } as Record<Module, string>)[m];
 
 /** Screens that are not a permission module of their own: they follow another module's permission. */
-type Extra = "day" | "distribution" | "production" | "requests";
+type Extra = "day" | "deliveries" | "distribution" | "production" | "requests";
 type NavKey = Module | Extra;
 const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: string; en: string }> = {
   day: { module: "dashboard", to: "/day", ar: "يومي", en: "My day" },
+  deliveries: { module: "orders", action: "edit", to: "/deliveries", ar: "طلبات التسليم", en: "Deliveries" },
   distribution: { module: "orders", action: "edit", to: "/distribution", ar: "التوزيع", en: "Distribution" },
   production: { module: "warehouse", to: "/production", ar: "الإنتاج", en: "Production" },
   // answering client requests is for whoever may edit orders (admin, manager)
@@ -46,13 +47,13 @@ const EXTRA: Record<Extra, { module: Module; action?: "edit"; to: string; ar: st
 const isExtra = (k: NavKey): k is Extra => k in EXTRA;
 
 const FULL_GROUPS: NavKey[][] = [
-  ["home", "day", "dashboard"],
-  ["orders", "requests", "distribution", "daily_close", "clients"],
+  ["home", "day"],
+  ["orders", "deliveries", "requests", "distribution", "daily_close", "clients"],
   ["production", "menu", "warehouse", "purchasing", "costing"],
   ["expenses", "assets", "people", "reports"],
   ["users", "roles", "audit", "settings"],
 ];
-const SIMPLE_ITEMS: NavKey[] = ["home", "day", "orders", "requests", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
+const SIMPLE_ITEMS: NavKey[] = ["home", "day", "orders", "deliveries", "requests", "production", "warehouse", "distribution", "clients", "daily_close", "expenses", "reports"];
 
 function RateChip() {
   const { t } = useI18n();
@@ -122,7 +123,7 @@ export function Layout() {
 /** Pending client requests next to the nav label. */
 function NavBadge({ k }: { k: NavKey }) {
   const { pending } = useInbox();
-  const n = k === "requests" ? pending.orders + pending.subscriptions : 0;
+  const n = k === "requests" ? pending.orders + pending.subscriptions + pending.reports : 0;
   if (!n) return null;
   return <span className="ms-auto grid h-5 min-w-5 place-items-center rounded-full bg-bad px-1.5 text-[11px] font-bold text-white num">{n}</span>;
 }

@@ -19,8 +19,8 @@ const loadCosting = () => import("./pages/Costing");
 const CostingPage = lazy(() => loadCosting().then((m) => ({ default: m.CostingPage })));
 const loadDailyclose = () => import("./pages/DailyClose");
 const DailyClosePage = lazy(() => loadDailyclose().then((m) => ({ default: m.DailyClosePage })));
-const loadDashboard = () => import("./pages/Dashboard");
-const DashboardPage = lazy(() => loadDashboard().then((m) => ({ default: m.DashboardPage })));
+const loadDeliveries = () => import("./pages/deliveries/Deliveries");
+const DeliveriesPage = lazy(() => loadDeliveries().then((m) => ({ default: m.DeliveriesPage })));
 const loadExpenses = () => import("./pages/Expenses");
 const ExpensesPage = lazy(() => loadExpenses().then((m) => ({ default: m.ExpensesPage })));
 const loadMenu = () => import("./pages/menu/Menu");
@@ -103,9 +103,9 @@ export function App() {
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="day" element={g("dashboard", <MyDayPage />)} />
-            <Route path="dashboard" element={g("dashboard", <DashboardPage />)} />
             <Route path="orders" element={g("orders", <OrdersPage />)} />
             <Route path="orders/new" element={g("orders", <NewOrderPage />)} />
+            <Route path="deliveries" element={g("orders", <DeliveriesPage />, "edit")} />
             <Route path="requests" element={g("orders", <RequestsPage />, "edit")} />
             <Route path="close" element={g("daily_close", <DailyClosePage />)} />
             <Route path="distribution/*" element={g("orders", <DistributionPage />, "edit")} />

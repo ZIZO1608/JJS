@@ -23,22 +23,22 @@ export const INBOX_EVENT = "jjs:inbox";
 
 interface InboxCtx {
   unread: number;
-  pending: { orders: number; subscriptions: number };
+  pending: { orders: number; subscriptions: number; reports: number };
   refresh: () => Promise<void>;
 }
-const Ctx = createContext<InboxCtx>({ unread: 0, pending: { orders: 0, subscriptions: 0 }, refresh: async () => undefined });
+const Ctx = createContext<InboxCtx>({ unread: 0, pending: { orders: 0, subscriptions: 0, reports: 0 }, refresh: async () => undefined });
 
 /** Polls the bell and the pending client requests every 15 seconds. A new one rings. */
 export function InboxProvider({ children }: { children: ReactNode }) {
   const { pick } = useI18n();
   const toast = useToast();
   const [unread, setUnread] = useState(0);
-  const [pending, setPending] = useState({ orders: 0, subscriptions: 0 });
+  const [pending, setPending] = useState({ orders: 0, subscriptions: 0, reports: 0 });
   const last = useRef<number | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [{ unread: n }, counts] = await Promise.all([get<{ unread: number }>("/notifications/unread-count"), get<{ orders: number; subscriptions: number }>("/requests/counts")]);
+      const [{ unread: n }, counts] = await Promise.all([get<{ unread: number }>("/notifications/unread-count"), get<{ orders: number; subscriptions: number; reports: number }>("/requests/counts")]);
       if (last.current !== null && n > last.current) {
         const { rows } = await get<{ rows: StaffNotification[] }>("/notifications");
         const newest = rows[0];

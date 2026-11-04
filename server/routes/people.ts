@@ -39,6 +39,7 @@ peopleRouter.use(
       commissionPerClientUsd: z.number().min(0).default(0),
       commissionPct: z.number().min(0).max(100).default(0),
       staffDiscountPct: z.number().min(0).max(100).default(30),
+      staffDiscountAmount: z.number().min(0).max(1_000_000_000).default(0),
       isDeliveryRep: z.boolean().default(false),
       active: z.boolean().default(true),
     }),

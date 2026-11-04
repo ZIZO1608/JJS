@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { DataTable } from "../components/DataTable";
+import { DiscountInput, readDiscount, type DiscountMode } from "../components/DiscountInput";
 import { Tabs } from "../components/Tabs";
 import { Empty, Field, Modal, PageHeader, Select, Spinner, TextInput } from "../components/ui";
 import { get, post, put } from "../lib/api";
@@ -118,20 +119,49 @@ const usePlaces = () => {
 };
 
 /* ---------- list ---------- */
+/** Two buttons: pay in dollars or in Syrian pounds, whatever the bill was written in. */
+function PayCurrency({ value, rate, base, onChange }: { value: Currency; rate: number | null; base: Currency; onChange: (c: Currency) => void }) {
+  const { tr, lang } = useI18n();
+  return (
+    <div className="inline-flex w-full rounded-lg bg-sunken p-0.5" role="radiogroup" aria-label={tr("العملة", "Currency")}>
+      {(["USD", "SYP"] as const).map((c) => (
+        <button key={c} type="button" role="radio" aria-checked={value === c} disabled={c !== base && !rate} onClick={() => onChange(c)} className={`flex-1 rounded-md px-3 py-2 text-sm font-bold disabled:opacity-40 ${value === c ? "bg-surface text-brand shadow-sm" : "text-muted"}`}>
+          {c === "USD" ? tr("دولار $", "Dollars $") : lang === "ar" ? "سوري ل.س" : "Syrian SYP"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const swapCurrency = (v: number, from: Currency, to: Currency, rate: number | null) => (from === to ? v : !rate ? 0 : from === "USD" ? v * rate : v / rate);
+const roundFor = (v: number, c: Currency) => (c === "SYP" ? Math.ceil(v) : Math.round(v * 100) / 100);
+
 function PayDialog({ p, onClose, onDone }: { p: PurchaseRow; onClose: () => void; onDone: () => void }) {
   const { tr, pick, lang } = useI18n();
   const { busy, run } = useSaver();
   const boxes = useData<{ rows: CashBox[] }>("/money/boxes");
-  const [f, setF] = useState({ amount: String(p.due), boxId: "" });
+  const fx = useData<{ rate: number | null }>("/fx/current");
+  const rate = fx.data?.rate ?? null;
+  const [f, setF] = useState({ amount: String(p.due), currency: p.currency, boxId: "" });
+  const dueHere = roundFor(swapCurrency(p.due, p.currency, f.currency, rate), f.currency);
   const save = async () => {
-    if (await run(() => post(`/purchases/${p.id}/pay`, { amount: num(f.amount), boxId: f.boxId }), tr("انسجّلت الدفعة.", "Payment recorded."))) onDone();
+    if (await run(() => post(`/purchases/${p.id}/pay`, { amount: num(f.amount), currency: f.currency, boxId: f.boxId }), tr("انسجّلت الدفعة.", "Payment recorded."))) onDone();
   };
   return (
-    <ActionDialog title={tr(`دفع فاتورة #${p.number}`, `Pay purchase #${p.number}`)} onClose={onClose} onSave={save} busy={busy} disabled={!f.boxId || !(num(f.amount) > 0) || num(f.amount) > p.due + 0.001}>
+    <ActionDialog title={tr(`دفع فاتورة #${p.number}`, `Pay purchase #${p.number}`)} onClose={onClose} onSave={save} busy={busy} disabled={!f.boxId || !(num(f.amount) > 0) || num(f.amount) > dueHere + (f.currency === "SYP" ? 1 : 0.001)}>
       <p className="text-sm text-muted">
         {tr("الباقي:", "Remaining:")} <b className="num ltr">{money(p.due, p.currency, lang)}</b>
+        {f.currency !== p.currency && (
+          <>
+            {" = "}
+            <b className="num ltr">{money(dueHere, f.currency, lang)}</b>
+          </>
+        )}
       </p>
-      <Field label={`${tr("المبلغ", "Amount")} (${p.currency})`} htmlFor="pp-a">
+      <Field label={tr("الدفع بـ", "Pay in")}>
+        <PayCurrency value={f.currency} base={p.currency} rate={rate} onChange={(c) => setF({ ...f, currency: c, amount: String(roundFor(swapCurrency(p.due, p.currency, c, rate), c)) })} />
+      </Field>
+      <Field label={`${tr("المبلغ", "Amount")} (${f.currency})`} htmlFor="pp-a">
         <NumInput id="pp-a" value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />
       </Field>
       <Field label={tr("من صندوق", "From box")} htmlFor="pp-b">
@@ -324,13 +354,17 @@ function NewTab() {
   const suppliers = useData<{ rows: Supplier[] }>("/purchases/suppliers");
   const boxes = useData<{ rows: CashBox[] }>("/money/boxes");
   const places = usePlaces();
-  const [f, setF] = useState({ supplierId: "", supplierRef: "", currency: (s?.defaultCurrency ?? "SYP") as Currency, discount: "", transport: "", dueDate: "", paid: "", boxId: "", note: "", photo: "" });
+  const [f, setF] = useState({ supplierId: "", supplierRef: "", currency: (s?.defaultCurrency ?? "SYP") as Currency, discount: "", discountMode: "amount" as "pct" | "amount", transport: "", dueDate: "", paid: "", boxId: "", note: "", photo: "" });
   const [lines, setLines] = useState<Line[]>([emptyLine()]);
   const [busy, setBusy] = useState(false);
   const itemList = (items.data?.rows ?? []).filter((i) => i.kind !== "product" && i.active);
   const byId = new Map(itemList.map((i) => [i.id, i]));
   const sub = lines.reduce((t, l) => t + (num(l.qty) || 0) * (num(l.unitPrice) || 0), 0);
-  const total = Math.max(0, sub - (num(f.discount) || 0) + (num(f.transport) || 0));
+  const discountMode: DiscountMode = f.discountMode === "pct" ? "pct" : f.currency;
+  const discountRead = readDiscount(discountMode, f.discount, f.currency, sub);
+  // The server keeps the amount, so a percentage becomes money here.
+  const discountValue = discountRead.pct > 0 ? Math.round(sub * discountRead.pct) / 100 : discountRead.amount;
+  const total = Math.max(0, sub - discountValue + (num(f.transport) || 0));
   const valid = lines.filter((l) => l.itemId && num(l.qty) > 0 && l.unitPrice !== "" && l.locationId);
   const setLine = (i: number, p: Partial<Line>) => setLines(lines.map((l, j) => (j === i ? { ...l, ...p } : l)));
   const fx = useData<{ rate: number | null }>("/fx/current");
@@ -351,7 +385,7 @@ function NewTab() {
         supplierId: f.supplierId || null,
         supplierRef: f.supplierRef.trim(),
         currency: f.currency,
-        discount: num(f.discount) || 0,
+        discount: discountValue,
         transport: num(f.transport) || 0,
         dueDate: f.dueDate || null,
         paid: num(f.paid) || 0,
@@ -449,7 +483,7 @@ function NewTab() {
 
       <section className="card grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label={tr("خصم على الفاتورة", "Invoice discount")} htmlFor="np-d">
-          <NumInput id="np-d" value={f.discount} onChange={(v) => setF({ ...f, discount: v })} placeholder="0" />
+          <DiscountInput id="np-d" mode={discountMode} value={f.discount} currencies={[f.currency]} base={sub} baseCurrency={f.currency} onChange={(m, v) => setF({ ...f, discountMode: m === "pct" ? "pct" : "amount", discount: v })} />
         </Field>
         <Field label={tr("مصاريف النقل", "Transport cost")} htmlFor="np-t" hint={tr("بتنضاف على تكلفة المواد", "Added to the items' cost")}>
           <NumInput id="np-t" value={f.transport} onChange={(v) => setF({ ...f, transport: v })} placeholder="0" />
@@ -536,27 +570,42 @@ function SupplierDialog({ sup, onClose, onSaved }: { sup: Supplier | null; onClo
 }
 
 function PaySupplierDialog({ sup, onClose, onDone }: { sup: Supplier; onClose: () => void; onDone: () => void }) {
-  const { tr, pick } = useI18n();
+  const { tr, pick, lang } = useI18n();
   const { busy, run } = useSaver();
   const { s } = useAppSettings();
   const boxes = useData<{ rows: CashBox[] }>("/money/boxes");
+  const fx = useData<{ rate: number | null }>("/fx/current");
+  const rate = fx.data?.rate ?? null;
   const [f, setF] = useState({ amount: "", currency: (s?.defaultCurrency ?? "SYP") as Currency, boxId: "", note: "" });
+  const dueHere = roundFor(swapCurrency(sup.dueUsd, "USD", f.currency, rate), f.currency);
   const save = async () => {
     if (await run(() => post(`/purchases/suppliers/${sup.id}/pay`, { amount: num(f.amount), currency: f.currency, boxId: f.boxId, note: f.note || undefined }), tr("انسجّلت الدفعة.", "Payment recorded."))) onDone();
   };
   return (
     <ActionDialog title={tr(`دفع لـ ${sup.name}`, `Pay ${sup.name}`)} onClose={onClose} onSave={save} busy={busy} disabled={!f.boxId || !(num(f.amount) > 0)}>
       <p className="text-sm text-muted">
-        {tr("علينا:", "We owe:")} <b className="num ltr">{usd(sup.dueUsd)}</b> · {tr("بتنسدّ أقدم فاتورة أولاً.", "The oldest invoice is paid first.")}
+        {tr("علينا:", "We owe:")} <b className="num ltr">{usd(sup.dueUsd)}</b>
+        {rate ? (
+          <>
+            {" = "}
+            <b className="num ltr">{money(sup.dueUsd * rate, "SYP", lang)}</b>
+          </>
+        ) : null}{" "}
+        · {tr("بتنسدّ أقدم فاتورة أولاً.", "The oldest invoice is paid first.")}
       </p>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={tr("المبلغ", "Amount")} htmlFor="ps-a">
-          <NumInput id="ps-a" value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />
-        </Field>
-        <Field label={tr("العملة", "Currency")} htmlFor="ps-c">
-          <CurrencySelect id="ps-c" value={f.currency} onChange={(c) => setF({ ...f, currency: c })} />
-        </Field>
-      </div>
+      <Field label={tr("بدي أعطيه بـ", "Give the money in")}>
+        <PayCurrency value={f.currency} base={"USD"} rate={rate} onChange={(c) => setF({ ...f, currency: c, amount: "" })} />
+      </Field>
+      <Field label={`${tr("المبلغ", "Amount")} (${f.currency})`} htmlFor="ps-a">
+        <div className="flex gap-2">
+          <NumInput id="ps-a" className="min-w-0 flex-1" value={f.amount} onChange={(v) => setF({ ...f, amount: v })} />
+          {dueHere > 0 && (
+            <button type="button" className="btn shrink-0 text-sm" onClick={() => setF({ ...f, amount: String(dueHere) })}>
+              {tr("كل الدين", "All of it")}
+            </button>
+          )}
+        </div>
+      </Field>
       <Field label={tr("من صندوق", "From box")} htmlFor="ps-b">
         <Select id="ps-b" value={f.boxId} onChange={(e) => setF({ ...f, boxId: e.target.value })}>
           <option value="">—</option>
@@ -626,7 +675,8 @@ function StatementDialog({ sup, onClose }: { sup: Supplier; onClose: () => void 
 }
 
 function SuppliersTab() {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
+  const fx = useData<{ rate: number | null }>("/fx/current");
   const { can } = useAuth();
   const list = useData<{ rows: Supplier[] }>("/purchases/suppliers");
   const [dlg, setDlg] = useState<Supplier | "new" | null>(null);
@@ -665,7 +715,15 @@ function SuppliersTab() {
             key: "d",
             header: tr("علينا", "We owe"),
             align: "end",
-            render: (r) => (r.dueUsd > 0.009 ? <span className={`num ltr ${r.overdueUsd > 0.009 ? "font-semibold text-bad" : ""}`}>{usd(r.dueUsd)}</span> : <span className="text-faint">—</span>),
+            render: (r) =>
+              r.dueUsd > 0.009 ? (
+                <div>
+                  <div className={`num ltr ${r.overdueUsd > 0.009 ? "font-semibold text-bad" : ""}`}>{usd(r.dueUsd)}</div>
+                  {fx.data?.rate ? <div className="num ltr text-xs text-faint">{money(r.dueUsd * fx.data.rate, "SYP", lang)}</div> : null}
+                </div>
+              ) : (
+                <span className="text-faint">—</span>
+              ),
             sortValue: (r) => r.dueUsd,
           },
           {

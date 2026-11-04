@@ -87,10 +87,13 @@ export interface SettingsShape {
   "sync.status": SyncStatus;
 }
 
+/** The Syrian exchange-rates API. Its key is never in the code: Settings → Currency, or the JJS_FX_API_KEY environment variable. */
+export const SYRIAN_RATES_URL = "https://aumzkcizwfnvnncggfpq.supabase.co/functions/v1/exchange-rates?currency=USD";
+
 export const SETTING_DEFAULTS: SettingsShape = {
   business: { nameAr: "JJ's deli shop", nameEn: "JJ's deli shop", phone: "", address: "", logo: "" },
   "currency.default": "USD",
-  "fx.config": { apiUrl: "", apiKey: "", jsonPath: "rate" },
+  "fx.config": { apiUrl: SYRIAN_RATES_URL, apiKey: "", jsonPath: "rates.sell" },
   "fx.manualRate": null,
   "fx.lastCheckedAt": null,
   "fx.lastError": null,

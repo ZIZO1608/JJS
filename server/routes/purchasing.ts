@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { boxMoves, items, locations, priceChanges, purchaseLines, purchases, suppliers } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
-import { assertDayOpen, localDate, nextNumber, rateFor, roundMoney, round4, toUsd } from "../lib/biz.js";
+import { assertDayOpen, convert, localDate, nextNumber, rateFor, roundMoney, round4, toUsd } from "../lib/biz.js";
 import { crudRouter } from "../lib/crud.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 import { payFromBox } from "../services/money.js";
@@ -250,16 +250,21 @@ purchasingRouter.post(
   requirePerm("purchasing", "edit"),
   h((req, res) => {
     const id = String(req.params.id);
-    const body = parse(z.object({ amount: z.number().positive(), boxId: z.string().min(1) }), req.body);
+    // The money can be dollars or pounds, whatever the invoice was written in.
+    const body = parse(z.object({ amount: z.number().positive(), boxId: z.string().min(1), currency: z.enum(["USD", "SYP"]).optional() }), req.body);
     db.transaction((tx) => {
       const p = tx.select().from(purchases).where(and(eq(purchases.id, id), isNull(purchases.deletedAt))).get();
       if (!p) throw notFound("purchase");
-      if (body.amount > p.total - p.paid + 0.001) throw new HttpError(400, "overpaid", "That is more than what is still due.");
+      const paidIn = body.currency ?? p.currency;
+      const rate = rateFor(p.currency, paidIn);
+      const left = p.total - p.paid;
+      const inInvoiceCcy = convert(body.amount, paidIn, p.currency, rate);
+      // one unit of slack: a whole-pound amount cannot always land exactly on a dollar remainder
+      if (inInvoiceCcy > left + (paidIn === p.currency ? 0.001 : p.currency === "USD" ? 0.01 : 1)) throw new HttpError(400, "overpaid", "That is more than what is still due.");
       const date = localDate();
       assertDayOpen(tx, date);
-      const rate = rateFor(p.currency);
-      tx.update(purchases).set({ paid: round4(p.paid + body.amount), updatedAt: nowIso(), syncedAt: null }).where(eq(purchases.id, id)).run();
-      payFromBox(tx, { boxId: body.boxId, type: "purchase", amount: -body.amount, currency: p.currency, rate, refType: "purchase", refId: id, note: `Purchase #${p.number}`, userId: req.user!.id, date });
+      tx.update(purchases).set({ paid: round4(Math.min(p.total, p.paid + inInvoiceCcy)), updatedAt: nowIso(), syncedAt: null }).where(eq(purchases.id, id)).run();
+      payFromBox(tx, { boxId: body.boxId, type: "purchase", amount: -body.amount, currency: paidIn, rate, refType: "purchase", refId: id, note: `Purchase #${p.number}`, userId: req.user!.id, date });
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "purchase.payment", entityId: id, after: body });
     });
     res.json({ purchase: outOf(id) });

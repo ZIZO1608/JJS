@@ -97,8 +97,8 @@ export function discountWords(reason: string, tr: Tr) {
     .filter(Boolean)
     .map((part) => {
       const [k, v] = part.split(":");
-      // "subscription:2" / "loyalty:1" = free items; "subscription:5%" = a discount
-      if (v && !v.endsWith("%")) {
+      // "subscription:2" / "loyalty:1" = free items; "subscription:5%" or "manual:5 USD" = a discount
+      if (v && /^\d+$/.test(v)) {
         if (k === "subscription") return `${tr("ضمن الاشتراك", "Included in subscription")} ×${v}`;
         if (k === "loyalty") return `${tr("مجاني (ولاء)", "Free (loyalty)")} ×${v}`;
       }

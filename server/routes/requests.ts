@@ -2,13 +2,13 @@ import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db/client.js";
-import { clients, options, orderRequests, orders, products, subscriptionPlans, subscriptionRequests, users } from "../db/schema.js";
+import { clients, options, orderReports, orderRequests, orders, products, subscriptionPlans, subscriptionRequests, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePerm } from "../lib/auth.js";
 import { h, parse } from "../lib/util.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
-import { acceptOrderRequest, acceptSubscriptionRequest, declineOrderRequest, declineSubscriptionRequest, type RequestLine } from "../services/portal.js";
+import { acceptOrderRequest, acceptSubscriptionRequest, declineOrderRequest, declineSubscriptionRequest, resolveOrderReport, type RequestLine } from "../services/portal.js";
 
 /** Staff side of the client portal: the requests inbox. */
 export const requestsRouter = Router();
@@ -21,7 +21,8 @@ requestsRouter.get(
   h((_req, res) => {
     const pendingOrders = db.select({ n: count() }).from(orderRequests).where(and(eq(orderRequests.status, "pending"), isNull(orderRequests.deletedAt))).get()?.n ?? 0;
     const pendingSubscriptions = db.select({ n: count() }).from(subscriptionRequests).where(and(eq(subscriptionRequests.status, "pending"), isNull(subscriptionRequests.deletedAt))).get()?.n ?? 0;
-    res.json({ orders: pendingOrders, subscriptions: pendingSubscriptions });
+    const openReports = db.select({ n: count() }).from(orderReports).where(and(eq(orderReports.status, "open"), isNull(orderReports.deletedAt))).get()?.n ?? 0;
+    res.json({ orders: pendingOrders, subscriptions: pendingSubscriptions, reports: openReports });
   }),
 );
 
@@ -94,6 +95,40 @@ requestsRouter.post(
   }),
 );
 
+/* ---------- what clients reported about their orders ---------- */
+requestsRouter.get(
+  "/reports",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const q = parse(z.object({ status: z.enum(["open", "all"]).default("open") }), req.query);
+    const rows = db
+      .select({ r: orderReports, clientName: clients.name, clientPhone: clients.phone, requestNumber: orderRequests.number, orderId: orderRequests.orderId, resolvedByName: users.name })
+      .from(orderReports)
+      .innerJoin(clients, eq(orderReports.clientId, clients.id))
+      .innerJoin(orderRequests, eq(orderReports.requestId, orderRequests.id))
+      .leftJoin(users, eq(orderReports.resolvedBy, users.id))
+      .where(and(isNull(orderReports.deletedAt), q.status === "open" ? eq(orderReports.status, "open") : undefined))
+      .orderBy(desc(orderReports.createdAt))
+      .limit(200)
+      .all();
+    res.json({ rows: rows.map((x) => ({ ...x.r, clientName: x.clientName, clientPhone: x.clientPhone, requestNumber: x.requestNumber, orderId: x.orderId, resolvedByName: x.resolvedByName })) });
+  }),
+);
+
+requestsRouter.post(
+  "/reports/:id/resolve",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const { reply } = parse(z.object({ reply: z.string().trim().max(500).default("") }), req.body ?? {});
+    db.transaction((tx) => {
+      resolveOrderReport(tx, id, req.user!.id, reply);
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order_report", entityId: id, after: { status: "resolved", reply } });
+    });
+    res.json({ ok: true });
+  }),
+);
+
 requestsRouter.get(
   "/subscriptions",
   requirePerm("clients", "view"),
@@ -109,7 +144,7 @@ requestsRouter.get(
       .orderBy(desc(subscriptionRequests.createdAt))
       .limit(200)
       .all();
-    res.json({ rows: rows.map((x) => ({ ...x.r, clientName: x.clientName, clientPhone: x.clientPhone, decidedByName: x.decidedByName, plan: { nameAr: x.plan.nameAr, nameEn: x.plan.nameEn, monthlyFee: x.plan.monthlyFee, currency: x.plan.currency, includedItems: x.plan.includedItems, discountPct: x.plan.discountPct } })) });
+    res.json({ rows: rows.map((x) => ({ ...x.r, clientName: x.clientName, clientPhone: x.clientPhone, decidedByName: x.decidedByName, plan: { nameAr: x.plan.nameAr, nameEn: x.plan.nameEn, monthlyFee: x.plan.monthlyFee, currency: x.plan.currency, includedItems: x.plan.includedItems, discountPct: x.plan.discountPct, discountAmount: x.plan.discountAmount } })) });
   }),
 );
 

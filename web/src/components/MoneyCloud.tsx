@@ -83,6 +83,29 @@ function Line({ sign, label, value, tone, open, onToggle }: { sign: "+" | "−";
   );
 }
 
+/** One big side of the cloud: what comes in from clients, or what goes out to suppliers. */
+function Side({ tone, icon, title, hint, total, rate, children }: { tone: "good" | "bad"; icon: string; title: string; hint: string; total: number; rate: number | null; children: ReactNode }) {
+  const { lang } = useI18n();
+  return (
+    <section className={`rounded-2xl border p-4 ${tone === "good" ? "border-good/40 bg-good/5" : "border-bad/40 bg-bad/5"}`}>
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className={`flex items-center gap-1.5 font-bold ${tone === "good" ? "text-good" : "text-bad"}`}>
+            <span aria-hidden>{icon}</span>
+            {title}
+          </h3>
+          <p className="text-xs text-muted">{hint}</p>
+        </div>
+        <div className="shrink-0 text-end">
+          <div className={`num ltr text-2xl font-bold ${tone === "good" ? "text-good" : "text-bad"}`}>{usd(total)}</div>
+          {rate ? <div className="num ltr text-xs text-muted">{money(total * rate, "SYP", lang)}</div> : null}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function Details({ section }: { section: Section }) {
   const { tr, pick, lang, err, fmtDate } = useI18n();
   const { data, error } = useData<{ rows: Detail[]; total: number }>(`/reports/my-money/details/${section}`);
@@ -146,6 +169,19 @@ function MoneyCloudDialog({ onClose }: { onClose: () => void }) {
             {data.rate ? <div className="mt-1 text-sm text-muted num">{money(data.totalUsd * data.rate, "SYP", lang)}</div> : null}
           </div>
 
+          <div className="mb-4 grid gap-3">
+            <Side tone="good" icon="⬇️" title={tr("رح آخد من الزبائن", "To get from clients")} hint={tr("ديون الزبائن والبضاعة اللي عندهم", "What clients owe and goods they hold")} total={data.clientsOweUsd + data.goodsAtShopsUsd} rate={data.rate}>
+              <Line sign="+" label={tr("ديون على الزبائن", "Clients owe you")} value={data.clientsOweUsd} {...line("clients")} />
+              {opened === "clients" && <Details section="clients" />}
+              <Line sign="+" label={tr("بضاعة بالمحلات (أمانة)", "Goods at shops (consignment)")} value={data.goodsAtShopsUsd} {...line("goods")} />
+              {opened === "goods" && <Details section="goods" />}
+            </Side>
+            <Side tone="bad" icon="⬆️" title={tr("رح أعطي للموردين", "To give to suppliers")} hint={tr("اللي لازم ندفعو للموردين", "What we still have to pay suppliers")} total={data.weOweUsd} rate={data.rate}>
+              <Line sign="−" label={tr("علينا للموردين", "We owe suppliers")} value={data.weOweUsd} tone={data.weOweUsd > 0 ? "bad" : undefined} {...line("suppliers")} />
+              {opened === "suppliers" && <Details section="suppliers" />}
+            </Side>
+          </div>
+
           <Line sign="+" label={tr("بالصناديق", "In the boxes")} value={data.cashUsd} {...line("boxes")} />
           {data.boxes.map((b) => (
             <div key={b.id} className="flex justify-between gap-3 ps-5 text-sm text-muted">
@@ -154,12 +190,6 @@ function MoneyCloudDialog({ onClose }: { onClose: () => void }) {
             </div>
           ))}
           {opened === "boxes" && <Details section="boxes" />}
-          <Line sign="+" label={tr("ديون على الزبائن", "Clients owe you")} value={data.clientsOweUsd} {...line("clients")} />
-          {opened === "clients" && <Details section="clients" />}
-          <Line sign="+" label={tr("بضاعة بالمحلات (أمانة)", "Goods at shops (consignment)")} value={data.goodsAtShopsUsd} {...line("goods")} />
-          {opened === "goods" && <Details section="goods" />}
-          <Line sign="−" label={tr("علينا للموردين", "We owe suppliers")} value={data.weOweUsd} tone={data.weOweUsd > 0 ? "bad" : undefined} {...line("suppliers")} />
-          {opened === "suppliers" && <Details section="suppliers" />}
           <Line sign="−" label={tr("مصاريف لسا ما اندفعت", "Expenses not paid yet")} value={data.dueExpensesUsd} tone={data.dueExpensesUsd > 0 ? "bad" : undefined} {...line("expenses")} />
           {opened === "expenses" && <Details section="expenses" />}
         </div>

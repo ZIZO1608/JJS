@@ -5,7 +5,7 @@ import { db } from "../db/client.js";
 import { fxRates } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePerm } from "../lib/auth.js";
-import { getSetting, setSetting } from "../lib/settings.js";
+import { getSetting, setSetting, SYRIAN_RATES_URL } from "../lib/settings.js";
 import { h, parse } from "../lib/util.js";
 import { getCurrentRate, refreshRate, setManualRate } from "../services/fx.js";
 
@@ -36,7 +36,7 @@ fxRouter.get(
   requirePerm("settings", "view"),
   h((_req, res) => {
     const cfg = getSetting("fx.config");
-    res.json({ apiUrl: cfg.apiUrl, jsonPath: cfg.jsonPath, hasApiKey: !!cfg.apiKey });
+    res.json({ apiUrl: cfg.apiUrl || SYRIAN_RATES_URL, jsonPath: cfg.apiUrl ? cfg.jsonPath : "rates.sell", hasApiKey: !!(cfg.apiKey || process.env.JJS_FX_API_KEY) });
   }),
 );
 
@@ -56,7 +56,9 @@ fxRouter.put(
     const before = getSetting("fx.config");
     const next = { apiUrl: body.apiUrl, jsonPath: body.jsonPath || "rate", apiKey: body.apiKey ?? before.apiKey };
     setSetting("fx.config", next);
-    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "settings.fx.config", before, after: next });
+    // The audit log is copied to the cloud: it records that the key changed, never the key.
+    const safe = (c: typeof next) => ({ apiUrl: c.apiUrl, jsonPath: c.jsonPath, hasApiKey: !!c.apiKey });
+    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "settings.fx.config", before: safe(before), after: safe(next) });
     res.json(await refreshRate());
   }),
 );

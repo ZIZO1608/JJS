@@ -51,7 +51,7 @@ export const MODULE_STAGE: Record<Module, number> = {
 
 export const MODULE_LABEL: Record<Module, { ar: string; en: string }> = {
   home: { ar: "الرئيسية", en: "Home" },
-  dashboard: { ar: "لوحة التحكم", en: "Dashboard" },
+  dashboard: { ar: "يومي", en: "My day" },
   orders: { ar: "الطلبات", en: "Orders" },
   daily_close: { ar: "الإغلاق اليومي", en: "Daily close" },
   clients: { ar: "الزبائن", en: "Clients" },
@@ -71,8 +71,8 @@ export const MODULE_LABEL: Record<Module, { ar: string; en: string }> = {
 
 /** Sections with no row of their own: the permission that opens them. */
 export const MODULE_ALSO: Partial<Record<Module, { ar: string; en: string }>> = {
-  dashboard: { ar: "العرض يفتح كمان «يومي»", en: "View also opens My day" },
-  orders: { ar: "التعديل يفتح كمان «طلبات الزبائن» و«التوزيع»", en: "Edit also opens Client requests and Distribution" },
+  dashboard: { ar: "العرض يفتح كمان أرقام الرئيسية", en: "View also shows the numbers on Home" },
+  orders: { ar: "التعديل يفتح كمان «طلبات الزبائن» و«طلبات التسليم» و«التوزيع»", en: "Edit also opens Client requests, Deliveries and Distribution" },
   warehouse: { ar: "العرض يفتح كمان «الإنتاج»", en: "View also opens Production" },
 };
 
