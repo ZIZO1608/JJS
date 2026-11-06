@@ -85,6 +85,8 @@ export interface SettingsShape {
   network: NetworkSettings;
   sync: SyncSettings;
   "sync.status": SyncStatus;
+  /** Users whose password someone else chose (server variables, the admin): they are asked to pick their own. */
+  "auth.tempPasswords": string[];
 }
 
 /** The Syrian exchange-rates API. Its key is never in the code: Settings → Currency, or the JJS_FX_API_KEY environment variable. */
@@ -105,6 +107,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   network: { lanAccess: false },
   sync: { enabled: false, supabaseUrl: "", serviceKey: "" },
   "sync.status": { lastRunAt: null, lastOkAt: null, lastError: null, pushed: 0 },
+  "auth.tempPasswords": [],
 };
 
 export function getSetting<K extends keyof SettingsShape>(key: K): SettingsShape[K] {

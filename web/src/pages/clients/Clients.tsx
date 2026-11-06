@@ -64,14 +64,18 @@ function SimpleClients({ rows, onPay }: { rows: ClientSummary[]; onPay: (c: Clie
           {shown.map((c) => (
             <div key={c.id} className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-surface p-4">
               <button className="min-w-0 flex-1 text-start" onClick={() => navigate(`/clients/${c.id}`)}>
-                <div className="truncate text-lg font-bold">{c.name}</div>
-                <div className="text-sm text-muted">{c.contactPerson || c.phone || " "}</div>
+                {/* the name's own direction, so a long English name is cut at its end, still aligned with the Arabic ones */}
+                <div dir="auto" className="truncate text-lg font-bold rtl:text-right">
+                  {c.name}
+                </div>
+                {/* names and phone numbers keep their own reading order inside Arabic */}
+                <div className="text-sm text-muted">{c.contactPerson ? <bdi>{c.contactPerson}</bdi> : c.phone ? <span className="ltr num">{c.phone}</span> : " "}</div>
               </button>
               <div className="flex flex-col items-end gap-1">
                 <BalanceText usd={c.balanceUsd} />
                 <LateBadge c={c} />
               </div>
-              <button className="btn btn-primary px-5 py-3" onClick={() => onPay(c)}>
+              <button className="btn px-4 py-2.5" onClick={() => onPay(c)}>
                 {tr("سجّل دفعة", "Record payment")}
               </button>
             </div>

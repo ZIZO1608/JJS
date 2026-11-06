@@ -51,6 +51,32 @@ body {
   direction: ltr;
   unicode-bidi: isolate;
 }
+/* Numbers are written left-to-right, but on an Arabic page "end" and "start" still mean the page's
+   end and start: without this, amounts sit one column off their headings (receipts, tables). */
+[dir="rtl"] .ltr.text-end {
+  text-align: left;
+}
+[dir="rtl"] .ltr.text-start {
+  text-align: right;
+}
+/* Sideways menu bar on phones: no scrollbar, and the far edge fades so it's clear there is more. */
+.nav-scroll {
+  scrollbar-width: none;
+  mask-image: linear-gradient(to left, transparent, #000 28px);
+}
+.nav-scroll::-webkit-scrollbar {
+  display: none;
+}
+[dir="rtl"] .nav-scroll {
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
+@media (min-width: 768px) {
+  /* tablet and up: the full menu is a sidebar and the simple one fits, nothing to hint */
+  .nav-scroll,
+  [dir="rtl"] .nav-scroll {
+    mask-image: none;
+  }
+}
 :focus-visible {
   outline: 2px solid rgb(var(--ink));
   outline-offset: 2px;

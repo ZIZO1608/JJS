@@ -293,10 +293,11 @@ function ProductsTab() {
           {
             key: "photo",
             header: "",
-            className: "w-14",
+            // phone: photo and code make room for the product name
+            className: "hidden w-14 sm:table-cell",
             render: (p) => (p.photo ? <img src={p.photo} alt="" className="h-10 w-10 rounded-lg object-cover" /> : <div className="h-10 w-10 rounded-lg bg-sunken" />),
           },
-          { key: "code", header: tr("الكود", "Code"), render: (p) => <span className="num ltr text-muted">{p.code}</span>, sortValue: (p) => p.code },
+          { key: "code", header: tr("الكود", "Code"), className: "hidden sm:table-cell", render: (p) => <span className="num ltr text-muted">{p.code}</span>, sortValue: (p) => p.code },
           {
             key: "name",
             header: tr("المنتج", "Product"),
@@ -309,7 +310,7 @@ function ProductsTab() {
             sortValue: (p) => pick(p),
           },
           { key: "cat", header: tr("الصنف", "Category"), render: (p) => catName(p.categoryId), sortValue: (p) => catName(p.categoryId) },
-          { key: "price", header: tr("السعر", "Price"), align: "end", render: (p) => <span className="num ltr">{money(p.price, p.currency, lang)}</span>, sortValue: (p) => priceUsd(p) ?? 0 },
+          { key: "price", header: tr("السعر", "Price"), align: "end", className: "whitespace-nowrap", render: (p) => <span className="num ltr">{money(p.price, p.currency, lang)}</span>, sortValue: (p) => priceUsd(p) ?? 0 },
           ...(seeCost
             ? [
                 {

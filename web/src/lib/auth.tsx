@@ -11,6 +11,8 @@ export interface Me {
   language: Lang;
   role: { id: string; nameAr: string; nameEn: string; systemKey: "admin" | "manager" | "member" | null };
   permissions: string[];
+  /** The password was chosen by someone else (server variables, the admin): ask for their own. */
+  tempPassword?: boolean;
 }
 export interface Business {
   nameAr: string;
@@ -32,6 +34,7 @@ interface AuthCtx {
   setup: (body: Record<string, string>) => Promise<void>;
   logout: () => Promise<void>;
   setLanguage: (l: Lang) => Promise<void>;
+  changePassword: (current: string, next: string) => Promise<void>;
   refreshBusiness: () => Promise<void>;
 }
 
@@ -103,6 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLanguage: async (l) => {
         setLang(l);
         if (me) setMe((await put<{ user: Me }>("/auth/me/language", { language: l })).user);
+      },
+      changePassword: async (current, next) => {
+        setMe((await put<{ user: Me }>("/auth/me/password", { current, next })).user);
       },
       refreshBusiness: async () => {
         const s = await get<{ business: Business }>("/settings/public");

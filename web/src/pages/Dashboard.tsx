@@ -219,8 +219,8 @@ export function DashboardPage({ embedded }: { embedded?: boolean } = {}) {
                   <tr key={o.id} className={o.status === "cancelled" ? "text-faint line-through" : ""}>
                     <td className="td num">#{o.number}</td>
                     <td className="td">
-                      {o.clientName ?? tr("زبون عابر", "Walk-in")}
-                      <span className="ms-2 text-xs text-faint">{timeOf(o.createdAt, lang)}</span>
+                      <bdi>{o.clientName ?? tr("زبون عابر", "Walk-in")}</bdi>
+                      <span className="ms-2 whitespace-nowrap text-xs text-faint">{timeOf(o.createdAt, lang)}</span>
                     </td>
                     <td className="td text-xs text-muted">{payStatusLabel(o.paymentStatus, tr)}</td>
                     <td className="td text-end">

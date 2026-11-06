@@ -6,6 +6,7 @@ import { perm, type Action, type Module } from "../../shared/permissions.js";
 import { db } from "../db/client.js";
 import { permissions, roles, sessions, users } from "../db/schema.js";
 import { SESSION_DAYS } from "../env.js";
+import { getSetting, setSetting } from "./settings.js";
 import { HttpError } from "./util.js";
 
 export const SESSION_COOKIE = "jjs_session";
@@ -154,8 +155,16 @@ export function recordLoginFailure(username: string, ip?: string) {
 }
 export const clearLoginFailures = (username: string) => failures.delete(username.toLowerCase());
 
+/** A password someone else chose (server variables, the admin): the person is asked to pick their own after signing in. */
+export const hasTempPassword = (userId: string) => getSetting("auth.tempPasswords").includes(userId);
+export function markTempPassword(userId: string, temp: boolean, tx?: Parameters<typeof setSetting>[2]) {
+  const list = getSetting("auth.tempPasswords").filter((id) => id !== userId);
+  setSetting("auth.tempPasswords", temp ? [...list, userId] : list, tx);
+}
+
 export const publicUser = (u: AuthUser) => ({
   id: u.id,
+  tempPassword: hasTempPassword(u.id),
   name: u.name,
   username: u.username,
   language: u.language,

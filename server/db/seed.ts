@@ -1,6 +1,6 @@
 import { and, count, eq, inArray } from "drizzle-orm";
 import { DEFAULT_ROLE_PERMISSIONS, type SystemRoleKey } from "../../shared/permissions.js";
-import { hashPassword } from "../lib/auth.js";
+import { checkPassword, hashPassword, markTempPassword } from "../lib/auth.js";
 import { newId } from "../lib/util.js";
 import { db } from "./client.js";
 import { getSetting, setSetting } from "../lib/settings.js";
@@ -145,10 +145,17 @@ export function seedUsersFromEnv() {
 
   db.transaction((tx) => {
     for (const w of wanted) {
-      if (tx.select().from(users).where(eq(users.username, w.username)).get()) continue;
+      const existing = tx.select().from(users).where(eq(users.username, w.username)).get();
+      if (existing) {
+        // still on the password from the server variables: ask the person to choose their own
+        if (checkPassword(w.password, existing.passwordHash)) markTempPassword(existing.id, true, tx);
+        continue;
+      }
       const role = tx.select().from(roles).where(eq(roles.systemKey, w.key)).get();
       if (!role) throw new Error(`The ${w.key} role is missing`);
-      tx.insert(users).values({ id: newId(), name: w.name, username: w.username, passwordHash: hashPassword(w.password), roleId: role.id, language: "ar" }).run();
+      const id = newId();
+      tx.insert(users).values({ id, name: w.name, username: w.username, passwordHash: hashPassword(w.password), roleId: role.id, language: "ar" }).run();
+      markTempPassword(id, true, tx);
       console.log(`[jjs] ${w.key} "${w.username}" created from environment`);
     }
     const nameEn = process.env.JJS_BUSINESS_NAME_EN?.trim();

@@ -57,13 +57,16 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
       footer={
         o && (
           <>
-            {o.status !== "cancelled" && !o.consignmentId && can("orders", "delete") && (o.canCancel ? (
-              <button className="btn btn-ghost btn-danger me-auto" disabled={busy} onClick={() => setConfirmCancel(true)}>
-                {tr("إلغاء الطلب", "Cancel order")}
-              </button>
-            ) : (
-              <span className="me-auto self-center text-sm text-muted">{tr("إلغاء هالطلب عند المدير", "Ask a manager to cancel this order")}</span>
-            ))}
+            {o.status !== "cancelled" &&
+              !o.consignmentId &&
+              can("orders", "delete") &&
+              (o.canCancel ? (
+                <button className="btn btn-ghost btn-danger me-auto" disabled={busy} onClick={() => setConfirmCancel(true)}>
+                  {tr("إلغاء الطلب", "Cancel order")}
+                </button>
+              ) : (
+                <span className="me-auto self-center text-sm text-muted">{tr("إلغاء هالطلب عند المدير", "Ask a manager to cancel this order")}</span>
+              ))}
             {o.status !== "cancelled" && o.type === "normal" && can("orders", "edit") && (
               <button className="btn" disabled={busy} onClick={() => setReturning(true)}>
                 ↩ {tr("رجعت الطلبية", "Came back")}
@@ -73,11 +76,7 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
               {tr("إغلاق", "Close")}
             </button>
             {o.status === "confirmed" && can("orders", "edit") && (
-              <button
-                className="btn"
-                disabled={busy}
-                onClick={() => setDelivering(true)}
-              >
+              <button className="btn" disabled={busy} onClick={() => setDelivering(true)}>
                 {tr("تم التسليم", "Mark delivered")}
               </button>
             )}
@@ -205,7 +204,9 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
                   const next = e.target.value;
                   setAssign(next);
                   void post(`/orders/${o.id}/assign`, { assignedTo: next || null })
-                    .then(() => toast(next ? tr("تم التعيين، والزبون بيشوف الاسم والرقم", "Assigned: the client now sees the name and phone") : tr("تم إلغاء التعيين", "Assignment removed")))
+                    .then(() =>
+                      toast(next ? tr("تم التعيين، والزبون بيشوف الاسم والرقم", "Assigned: the client now sees the name and phone") : tr("تم إلغاء التعيين", "Assignment removed")),
+                    )
                     .catch((x) => {
                       setAssign(null);
                       toast(err(x), "error");
@@ -259,7 +260,14 @@ function OrderDialog({ id, onClose, onChanged }: { id: string; onClose: () => vo
       )}
       {delivering && o && (
         <DeliverDialog
-          order={{ id: o.id, number: o.number, currency: o.currency, clientName: o.clientName, assignedTo: assign ?? o.assignedTo, remaining: o.paymentStatus === "credit" || o.paymentStatus === "partial" ? Math.max(0, o.total - (o.paidAmount ?? 0)) : 0 }}
+          order={{
+            id: o.id,
+            number: o.number,
+            currency: o.currency,
+            clientName: o.clientName,
+            assignedTo: assign ?? o.assignedTo,
+            remaining: o.paymentStatus === "credit" || o.paymentStatus === "partial" ? Math.max(0, o.total - (o.paidAmount ?? 0)) : 0,
+          }}
           onClose={() => setDelivering(false)}
           onDone={() => {
             setDelivering(false);
@@ -357,80 +365,89 @@ export function OrdersPage() {
         <Spinner />
       ) : rows.length === 0 ? (
         <Empty text={tr("لا يوجد طلبات بهذا اليوم", "No orders on this day")} />
-      ) : simple ? (
-        <div className="grid gap-2">
-          {rows.map((o) => (
-            <button key={o.id} onClick={() => setOpen(o.id)} className={`card flex items-center gap-3 text-start hover:border-ink ${o.status === "cancelled" ? "opacity-50" : ""}`}>
-              <span className="num text-lg font-bold">#{o.number}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-semibold">
-                  {o.clientName ?? tr("زبون عابر", "Walk-in")}
-                  {o.source === "portal" && <PortalBadge label={tr("من التطبيق", "Portal")} />}
-                </span>
-                <span className="block text-sm text-muted">
-                  {timeOf(o.createdAt, lang)} · {o.itemsCount} {tr("قطعة", "items")} · {o.status === "cancelled" ? statusLabel(o.status, tr) : payStatusLabel(o.paymentStatus, tr)}
-                  {o.fulfilment === "delivery" && ` · ${tr("توصيل", "Delivery")}`}
-                </span>
-              </span>
-              <span className="num ltr text-lg font-bold">{money(o.total, o.currency, lang)}</span>
-            </button>
-          ))}
-        </div>
       ) : (
-        <div className="card overflow-x-auto p-0">
-          <table className="w-full text-sm">
-            <thead>
-              <tr>
-                <th className="th">#</th>
-                <th className="th">{tr("الوقت", "Time")}</th>
-                <th className="th">{tr("الزبون", "Client")}</th>
-                <th className="th">{tr("قطع", "Items")}</th>
-                <th className="th">{tr("التسليم", "Fulfilment")}</th>
-                <th className="th">{tr("الدفع", "Payment")}</th>
-                <th className="th text-end">{tr("الإجمالي", "Total")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((o) => (
-                <tr key={o.id} className={`cursor-pointer hover:bg-sunken ${o.status === "cancelled" ? "text-faint line-through" : ""}`} onClick={() => setOpen(o.id)}>
-                  <td className="td num font-semibold">{o.number}</td>
-                  <td className="td num">{timeOf(o.createdAt, lang)}</td>
-                  <td className="td">
-                    {o.clientName ?? <span className="text-muted">{tr("زبون عابر", "Walk-in")}</span>}
+        <>
+          {/* cards on phones (and always in the simple screens), the full table from tablet width up */}
+          <div className={simple ? "grid gap-2" : "grid gap-2 md:hidden"}>
+            {rows.map((o) => (
+              <button
+                key={o.id}
+                onClick={() => setOpen(o.id)}
+                className={`card flex items-center gap-3 text-start hover:border-ink ${o.status === "cancelled" ? "opacity-50" : ""}`}
+              >
+                <span className="num text-lg font-bold">#{o.number}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">
+                    {o.clientName ?? tr("زبون عابر", "Walk-in")}
                     {o.source === "portal" && <PortalBadge label={tr("من التطبيق", "Portal")} />}
-                    {o.type !== "normal" && <span className="chip ms-2">{typeLabel(o.type, tr)}</span>}
-                  </td>
-                  <td className="td num">
-                    {o.itemsCount}
-                    {o.freeItems > 0 && (
-                      <span className="ms-1 text-xs text-good">
-                        (+{o.freeItems} {tr("مجاني", "free")})
-                      </span>
-                    )}
-                  </td>
-                  <td className="td">
-                    {o.fulfilment === "delivery" ? (
-                      <>
-                        {tr("توصيل", "Delivery")}
-                        {o.assignedName && <span className="text-muted"> · {o.assignedName}</span>}
-                        {o.status === "delivered" && <span className="ms-1 text-good">✓</span>}
-                      </>
-                    ) : (
-                      <span className="text-muted">{tr("استلام", "Pickup")}</span>
-                    )}
-                  </td>
-                  <td className="td">
+                  </span>
+                  <span className="block text-sm text-muted">
+                    {timeOf(o.createdAt, lang)} · {o.itemsCount} {tr("قطعة", "items")} ·{" "}
                     {o.status === "cancelled" ? statusLabel(o.status, tr) : payStatusLabel(o.paymentStatus, tr)}
-                    {o.method && o.status !== "cancelled" && <span className="text-muted"> · {pick(o.method)}</span>}
-                  </td>
-                  <td className="td text-end font-semibold">
-                    <span className="num ltr">{money(o.total, o.currency, lang)}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    {o.fulfilment === "delivery" && ` · ${tr("توصيل", "Delivery")}`}
+                  </span>
+                </span>
+                <span className="num ltr whitespace-nowrap text-lg font-bold">{money(o.total, o.currency, lang)}</span>
+              </button>
+            ))}
+          </div>
+          {!simple && (
+            <div className="card hidden overflow-x-auto p-0 md:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="th">#</th>
+                    <th className="th">{tr("الوقت", "Time")}</th>
+                    <th className="th">{tr("الزبون", "Client")}</th>
+                    <th className="th">{tr("قطع", "Items")}</th>
+                    <th className="th">{tr("التسليم", "Fulfilment")}</th>
+                    <th className="th">{tr("الدفع", "Payment")}</th>
+                    <th className="th text-end">{tr("الإجمالي", "Total")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((o) => (
+                    <tr key={o.id} className={`cursor-pointer hover:bg-sunken ${o.status === "cancelled" ? "text-faint line-through" : ""}`} onClick={() => setOpen(o.id)}>
+                      <td className="td num font-semibold">{o.number}</td>
+                      <td className="td num whitespace-nowrap">{timeOf(o.createdAt, lang)}</td>
+                      <td className="td">
+                        {o.clientName ?? <span className="text-muted">{tr("زبون عابر", "Walk-in")}</span>}
+                        {o.source === "portal" && <PortalBadge label={tr("من التطبيق", "Portal")} />}
+                        {o.type !== "normal" && <span className="chip ms-2">{typeLabel(o.type, tr)}</span>}
+                      </td>
+                      <td className="td num">
+                        {o.itemsCount}
+                        {o.freeItems > 0 && (
+                          <span className="ms-1 text-xs text-good">
+                            (+{o.freeItems} {tr("مجاني", "free")})
+                          </span>
+                        )}
+                      </td>
+                      <td className="td">
+                        {o.fulfilment === "delivery" ? (
+                          <>
+                            {tr("توصيل", "Delivery")}
+                            {o.assignedName && <span className="text-muted"> · {o.assignedName}</span>}
+                            {o.status === "delivered" && <span className="ms-1 text-good">✓</span>}
+                          </>
+                        ) : (
+                          <span className="text-muted">{tr("استلام", "Pickup")}</span>
+                        )}
+                      </td>
+                      <td className="td">
+                        {o.status === "cancelled" ? statusLabel(o.status, tr) : payStatusLabel(o.paymentStatus, tr)}
+                        {o.method && o.status !== "cancelled" && <span className="text-muted"> · {pick(o.method)}</span>}
+                      </td>
+                      <td className="td text-end font-semibold">
+                        <span className="num ltr">{money(o.total, o.currency, lang)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {open && (

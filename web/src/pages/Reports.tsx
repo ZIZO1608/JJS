@@ -433,31 +433,31 @@ export function ReportsPage() {
               <Rows
                 rows={[
                   [tr("المبيعات قبل الخصم", "Sales before discount"), U(r.grossUsd)],
-                  [tr("الخصومات", "Discounts"), <>−{U(r.discountUsd)}</>],
+                  [tr("الخصومات", "Discounts"), <span className="ltr">−{U(r.discountUsd)}</span>],
                   [tr("الضرائب المحصّلة", "Tax collected"), U(r.taxUsd)],
                   [tr("أجور التوصيل", "Delivery fees"), U(r.deliveryUsd)],
                   [<b key="s">{tr("المبيعات", "Sales")}</b>, <b key="v">{U(r.salesUsd)}</b>],
                   ...((r.returnsUsd ?? 0) > 0
                     ? ([
-                        [`${tr("المرتجعات", "Returns")} (${r.returnsCount ?? 0})`, <>−{U(r.returnsUsd)}</>],
+                        [`${tr("المرتجعات", "Returns")} (${r.returnsCount ?? 0})`, <span className="ltr">−{U(r.returnsUsd)}</span>],
                         [<b key="ns">{tr("صافي المبيعات", "Net sales")}</b>, <b key="nsv">{U(r.netSalesUsd)}</b>],
                       ] as [ReactNode, ReactNode][])
                     : []),
                   ...(showCost
                     ? ([
-                        [tr("تكلفة البضاعة", "Cost of goods"), <>−{U(r.costUsd)}</>],
+                        [tr("تكلفة البضاعة", "Cost of goods"), <span className="ltr">−{U(r.costUsd)}</span>],
                         [<b key="g">{tr("الربح الإجمالي (بدون الضريبة)", "Gross profit (tax excluded)")}</b>, <b key="gv">{U(r.grossProfitUsd)}</b>],
                       ] as [ReactNode, ReactNode][])
                     : []),
-                  [tr("المصاريف", "Expenses"), <>−{U(r.expensesUsd)}</>],
-                  [tr("الهدر", "Waste"), <>−{U(r.wasteUsd)}</>],
+                  [tr("المصاريف", "Expenses"), <span className="ltr">−{U(r.expensesUsd)}</span>],
+                  [tr("الهدر", "Waste"), <span className="ltr">−{U(r.wasteUsd)}</span>],
                   ...(showCost
                     ? ([
-                        [tr("الرواتب المدفوعة", "Salaries paid"), <>−{U(r.salariesUsd)}</>],
+                        [tr("الرواتب المدفوعة", "Salaries paid"), <span className="ltr">−{U(r.salariesUsd)}</span>],
                         ...(r.operatingProfitUsd !== undefined
                           ? ([[<b key="op">{tr("الربح التشغيلي", "Operating profit")}</b>, <b key="opv">{U(r.operatingProfitUsd)}</b>]] as [ReactNode, ReactNode][])
                           : []),
-                        [tr("استهلاك الأصول", "Depreciation"), <>−{U(r.depreciationUsd)}</>],
+                        [tr("استهلاك الأصول", "Depreciation"), <span className="ltr">−{U(r.depreciationUsd)}</span>],
                         [
                           <b key="n">{tr("صافي الربح", "Net profit")}</b>,
                           <b key="nv" className={(r.netUsd ?? 0) < 0 ? "text-bad" : ""}>

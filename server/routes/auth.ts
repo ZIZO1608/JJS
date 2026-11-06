@@ -11,6 +11,7 @@ import {
   createSession,
   destroySession,
   endSessions,
+  markTempPassword,
   hashPassword,
   loadUser,
   publicUser,
@@ -121,7 +122,8 @@ authRouter.put(
     db.update(users).set({ passwordHash: hashPassword(body.next), updatedAt: nowIso(), syncedAt: null }).where(eq(users.id, u.id)).run();
     // other phones and computers signed in as this user are signed out; this one stays in
     endSessions(u.id, req);
+    markTempPassword(u.id, false);
     writeAudit(db, { userId: u.id, action: "edit", entity: "user", entityId: u.id, after: { password: "changed" } });
-    res.json({ ok: true });
+    res.json({ ok: true, user: publicUser(loadUser(u.id)!) });
   }),
 );

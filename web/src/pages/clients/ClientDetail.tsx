@@ -928,13 +928,13 @@ export function ClientDetailPage() {
               </button>
             )}
             {c.lat != null && c.lng != null && (
-              <a className="btn btn-ghost" href={`https://www.google.com/maps?q=${c.lat},${c.lng}`} target="_blank" rel="noreferrer">
+              <a className="btn" href={`https://www.google.com/maps?q=${c.lat},${c.lng}`} target="_blank" rel="noreferrer">
                 📍 {tr("الموقع", "Location")}
               </a>
             )}
             {c.phone && (
-              <a className="btn btn-ghost" href={waLink(c.phone, waText)} target="_blank" rel="noreferrer">
-                {tr("واتساب", "WhatsApp")}
+              <a className="btn border-[#25d366]/50 text-[#128c4b]" href={waLink(c.phone, waText)} target="_blank" rel="noreferrer">
+                💬 {tr("واتساب", "WhatsApp")}
               </a>
             )}
             {!simple && can("clients", "edit") && (
@@ -959,7 +959,7 @@ export function ClientDetailPage() {
         ))}
         {c.consignment && <span className="chip">{tr("بالأمانة", "Consignment")}</span>}
       </div>
-      <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="card">
           <div className="text-sm text-muted">{tr("الرصيد", "Balance")}</div>
           <BalanceText usd={c.balanceUsd} big />

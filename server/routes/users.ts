@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { roles, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { endSessions, hashPassword, requirePerm } from "../lib/auth.js";
+import { endSessions, hashPassword, markTempPassword, requirePerm } from "../lib/auth.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 
 export const usersRouter = Router();
@@ -72,6 +72,8 @@ usersRouter.post(
     const row = { id, name: body.name, username: body.username, passwordHash: hashPassword(body.password), roleId: body.roleId, language: body.language };
     db.transaction((tx) => {
       tx.insert(users).values(row).run();
+      // the admin chose this password: the new person is asked to pick their own after signing in
+      markTempPassword(id, true, tx);
       writeAudit(tx, { userId: req.user!.id, action: "create", entity: "user", entityId: id, after: row });
     });
     res.status(201).json({ user: userOut(db.select().from(users).where(eq(users.id, id)).get()!) });
@@ -109,7 +111,11 @@ usersRouter.put(
     db.transaction((tx) => {
       tx.update(users).set(patch).where(eq(users.id, id)).run();
       // a new password from the admin signs that person out everywhere
-      if (body.password) endSessions(id);
+      if (body.password) {
+        const self = id === req.user!.id;
+        endSessions(id, self ? req : undefined);
+        markTempPassword(id, !self, tx);
+      }
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "user", entityId: id, before, after: { ...before, ...patch } });
     });
     res.json({ user: userOut(db.select().from(users).where(eq(users.id, id)).get()!) });

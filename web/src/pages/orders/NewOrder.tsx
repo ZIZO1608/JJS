@@ -674,11 +674,11 @@ export function NewOrderPage() {
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{tr("طلب جديد", "New order")}</h1>
         <Link to="/orders" className="btn btn-ghost">
-          {tr("الطلبات", "Orders")}
+          {tr("→ الطلبات", "← Orders")}
         </Link>
       </div>
       <div className="mb-5 flex gap-2">
-        {stepTab(1, tr("مين الزبون؟", "Who"))}
+        {stepTab(1, tr("الزبون", "Who"))}
         {stepTab(2, tr("الأصناف", "Items"))}
         {stepTab(3, tr("الدفع", "Pay"))}
       </div>
@@ -686,7 +686,8 @@ export function NewOrderPage() {
       {/* ---------- step 1: who ---------- */}
       {step === 1 && (
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {/* phone: an odd last choice takes the whole row instead of sitting alone */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2">
             <Choice big active={who === "walkin"} onClick={() => (setWho("walkin"), setClientId(null), setStep(2))}>
               {tr("زبون عابر", "Walk-in")}
             </Choice>

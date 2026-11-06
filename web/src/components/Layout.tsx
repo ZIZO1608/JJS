@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { MODULE_LABEL, type Module } from "@shared/permissions";
 import { ApiError, get, put } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -71,35 +71,49 @@ function RateChip() {
   );
 }
 
-function PasswordDialog({ onClose }: { onClose: () => void }) {
-  const { t, err } = useI18n();
+/** `firstTime`: the password was chosen by someone else (server variables, the admin), so we ask for their own. */
+function PasswordDialog({ onClose, firstTime = false }: { onClose: () => void; firstTime?: boolean }) {
+  const { t, tr, err } = useI18n();
+  const { changePassword } = useAuth();
   const toast = useToast();
   const [f, setF] = useState({ current: "", next: "" });
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const save = async () => {
+    setBusy(true);
     try {
-      await put("/auth/me/password", f);
+      await changePassword(f.current, f.next);
       toast(t("auth.passwordChanged"));
       onClose();
     } catch (e) {
       setError(e instanceof ApiError && e.code === "invalid_input" ? t("auth.passwordHint") : err(e));
+    } finally {
+      setBusy(false);
     }
   };
   return (
     <Modal
-      title={t("auth.changePassword")}
+      title={firstTime ? tr("اختار كلمة مرور خاصة فيك", "Choose your own password") : t("auth.changePassword")}
       onClose={onClose}
       footer={
         <>
           <button className="btn" onClick={onClose}>
-            {t("common.cancel")}
+            {firstTime ? tr("لاحقاً", "Later") : t("common.cancel")}
           </button>
-          <button className="btn btn-primary" onClick={save} disabled={!f.current || f.next.length < 6}>
-            {t("common.save")}
+          <button className="btn btn-primary" onClick={save} disabled={busy || !f.current || f.next.length < 6}>
+            {busy ? t("common.saving") : t("common.save")}
           </button>
         </>
       }
     >
+      {firstTime && (
+        <p className="mb-3 rounded-lg bg-sunken p-3 text-sm text-muted">
+          {tr(
+            "كلمة المرور الحالية حدا تاني اختارها لك. اختار وحدة ما حدا بيعرفها غيرك، لحتى يضل حسابك إلك لحالك.",
+            "Your current password was chosen by someone else. Pick one only you know, so your account stays yours.",
+          )}
+        </p>
+      )}
       <div className="grid gap-3">
         <Field label={t("auth.currentPassword")} htmlFor="pw-cur">
           <TextInput id="pw-cur" type="password" value={f.current} onChange={(e) => setF({ ...f, current: e.target.value })} />
@@ -109,6 +123,27 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/** A calm nudge instead of a pop-up: staff can still serve the customer in front of them first. */
+function OwnPasswordBanner({ onChoose, onLater }: { onChoose: () => void; onLater: () => void }) {
+  const { tr } = useI18n();
+  return (
+    <div role="status" className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm">
+      <span className="text-lg" aria-hidden>
+        🔑
+      </span>
+      <p className="min-w-0 flex-1 basis-56">{tr("كلمة مرورك حدا تاني اختارها. اختار وحدة ما بيعرفها غيرك.", "Your password was chosen by someone else. Pick one only you know.")}</p>
+      <div className="flex w-full justify-end gap-2 sm:w-auto">
+        <button className="btn btn-ghost px-3 py-1.5" onClick={onLater}>
+          {tr("لاحقاً", "Later")}
+        </button>
+        <button className="btn btn-primary px-3 py-1.5" onClick={onChoose}>
+          {tr("اختار كلمة مرور", "Choose my own")}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -133,6 +168,30 @@ function LayoutInner() {
   const { me, business, can, simple, logout, setLanguage } = useAuth();
   const [menu, setMenu] = useState(false);
   const [pw, setPw] = useState(false);
+  // phone: the menu bar scrolls sideways; bring the open page's link into view
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || nav.scrollWidth <= nav.clientWidth) return;
+    nav.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [pathname]);
+  // once per session ("Later" waits until next time), until they pick their own password
+  const [askOwn, setAskOwn] = useState(() => {
+    try {
+      return sessionStorage.getItem("jjs.pwLater") !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const laterOwn = () => {
+    setAskOwn(false);
+    try {
+      sessionStorage.setItem("jjs.pwLater", "1");
+    } catch {
+      /* storage blocked: it just asks again next load */
+    }
+  };
   if (!me) return null;
 
   const visible = (k: NavKey) => (isExtra(k) ? can(EXTRA[k].module, EXTRA[k].action ?? "view") : can(k, "view"));
@@ -143,12 +202,13 @@ function LayoutInner() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
+      {/* one row on every screen, so the sticky menu bar below always sits right under it */}
+      <header className="sticky top-0 z-30 flex h-[57px] flex-nowrap items-center gap-2 border-b border-line bg-surface px-3 sm:gap-3 sm:px-4">
         <img src={business?.logo || "/logo.png"} alt="" className="h-8 w-auto" />
-        <div className="min-w-0 leading-tight">
+        <div className="hidden min-w-0 leading-tight sm:block">
           <div className="truncate font-bold">{business ? pick(business) : t("app.name")}</div>
         </div>
-        <div className="ms-auto flex flex-wrap items-center justify-end gap-x-2 gap-y-1 sm:gap-3">
+        <div className="ms-auto flex flex-nowrap items-center justify-end gap-1 sm:gap-3">
           {!simple && <RateChip />}
           <InstallButton compact className="px-2.5 py-1.5 text-sm sm:px-3" />
           {me.role.systemKey === "admin" && <MoneyCloud />}
@@ -191,7 +251,7 @@ function LayoutInner() {
 
       {simple ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <nav className="sticky top-[57px] z-20 flex gap-1.5 overflow-x-auto border-b border-line bg-surface px-4 py-2" aria-label="Sections">
+          <nav ref={navRef} className="nav-scroll sticky top-[57px] z-20 flex gap-1.5 overflow-x-auto border-b border-line bg-surface px-4 py-2" aria-label="Sections">
             {SIMPLE_ITEMS.filter(visible).map((m) => (
               <NavLink key={m} to={to(m)} end={m === "home"} className={({ isActive }) => `${navClass({ isActive })} whitespace-nowrap px-4 py-2.5 text-[15.5px]`}>
                 <Icon name={m} />
@@ -201,12 +261,13 @@ function LayoutInner() {
             ))}
           </nav>
           <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6 sm:px-6">
+            {askOwn && me.tempPassword && <OwnPasswordBanner onChoose={() => setPw(true)} onLater={laterOwn} />}
             <Outlet />
           </main>
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <nav className="flex gap-1 overflow-x-auto border-b border-line bg-surface p-2 md:w-60 md:flex-col md:overflow-visible md:border-b-0 md:border-e md:p-3" aria-label="Sections">
+          <nav ref={navRef} className="nav-scroll sticky top-[57px] z-20 flex gap-1 overflow-x-auto border-b border-line bg-surface p-2 md:static md:w-60 md:flex-col md:overflow-visible md:border-b-0 md:border-e md:p-3" aria-label="Sections">
             {FULL_GROUPS.map((g, i) => {
               const items = g.filter(visible);
               if (!items.length) return null;
@@ -225,12 +286,13 @@ function LayoutInner() {
           </nav>
           <main className="min-w-0 flex-1 px-4 py-6 sm:px-7">
             <div className="mx-auto max-w-6xl">
+              {askOwn && me.tempPassword && <OwnPasswordBanner onChoose={() => setPw(true)} onLater={laterOwn} />}
               <Outlet />
             </div>
           </main>
         </div>
       )}
-      {pw && <PasswordDialog onClose={() => setPw(false)} />}
+      {pw && <PasswordDialog firstTime={!!me.tempPassword} onClose={() => setPw(false)} />}
     </div>
   );
 }

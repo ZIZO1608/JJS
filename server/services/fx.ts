@@ -4,6 +4,7 @@ import { fxRates } from "../db/schema.js";
 import { FX_REFRESH_MS } from "../env.js";
 import { getSetting, setSetting, SYRIAN_RATES_URL } from "../lib/settings.js";
 import { newId, nowIso } from "../lib/util.js";
+import { notifyStaff } from "./notifications.js";
 
 export interface CurrentRate {
   /** 1 USD = rate SYP. null when nothing has been fetched or set yet. */
@@ -59,6 +60,25 @@ const readPath = (obj: unknown, path: string): unknown =>
 const OLD_POUND_RATE_FROM = 1000;
 export const toNewPounds = (rate: number) => (rate >= OLD_POUND_RATE_FROM ? Math.round((rate / 100) * 10_000) / 10_000 : rate);
 
+/** A move of 5% or more since the last rate: prices in pounds (or in dollars, for clients paying in pounds) may need a look. */
+const BIG_MOVE_PCT = 5;
+function warnOnBigMove(before: number | null, after: number) {
+  if (!before || !(before > 0)) return;
+  const pct = ((after - before) / before) * 100;
+  if (Math.abs(pct) < BIG_MOVE_PCT) return;
+  const up = pct > 0;
+  const p = Math.abs(pct).toFixed(1);
+  const fmt = (r: number) => r.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  notifyStaff(db, {
+    kind: "rate_move",
+    titleAr: up ? `💵 الدولار طلع ${p}%` : `💵 الدولار نزل ${p}%`,
+    titleEn: up ? `💵 The dollar went up ${p}%` : `💵 The dollar went down ${p}%`,
+    bodyAr: `من ${fmt(before)} إلى ${fmt(after)} ل.س. شيّك على أسعار الليرة.`,
+    bodyEn: `From ${fmt(before)} to ${fmt(after)} SYP. Check your prices in pounds.`,
+    link: "/menu/products",
+  });
+}
+
 /** Fetch USD→SYP from the user's own rate API. Keeps the last good rate on any failure. */
 export async function refreshRate(): Promise<CurrentRate> {
   const cfg = rateApi();
@@ -78,6 +98,7 @@ export async function refreshRate(): Promise<CurrentRate> {
     const last = latestApiRate();
     if (!last || last.rate !== value) {
       db.insert(fxRates).values({ id: newId(), fromCcy: "USD", toCcy: "SYP", rate: value, source: "api" }).run();
+      warnOnBigMove(last?.rate ?? null, value);
     }
     setSetting("fx.lastCheckedAt", nowIso());
     setSetting("fx.lastError", null);

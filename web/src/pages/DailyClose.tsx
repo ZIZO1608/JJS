@@ -291,7 +291,17 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
                   <Link to="/deliveries" className="font-semibold text-warn hover:underline">
                     🛵 {tr(`${h.notDelivered.length} طلب لسا ما تسلّم`, `${h.notDelivered.length} ${h.notDelivered.length === 1 ? "order" : "orders"} not delivered yet`)}
                   </Link>
-                  <div className="text-xs text-muted">{h.notDelivered.slice(0, 5).map((o) => `#${o.number} ${o.clientName ?? ""}`.trim()).join(" · ")}</div>
+                  <div className="flex flex-wrap gap-x-2 text-xs text-muted">
+                    {h.notDelivered.slice(0, 5).map((o, i) => (
+                      <span key={o.orderId}>
+                        {i > 0 && "· "}
+                        <bdi>
+                          #{o.number}
+                          {o.clientName ? ` ${o.clientName}` : ""}
+                        </bdi>
+                      </span>
+                    ))}
+                  </div>
                 </li>
               )}
               {h.unpaid.length > 0 && (
@@ -302,7 +312,7 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
                       <li key={o.orderId} className="flex justify-between gap-2">
                         {o.clientId ? (
                           <Link to={`/clients/${o.clientId}`} className="min-w-0 truncate hover:underline">
-                            {o.clientName} <span className="num text-xs text-faint">#{o.number}</span>
+                            <bdi>{o.clientName}</bdi> <span className="num text-xs text-faint">#{o.number}</span>
                           </Link>
                         ) : (
                           <span className="min-w-0 truncate">#{o.number}</span>
@@ -337,6 +347,23 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
 }
 
 /** Where the close stands: each step lights up when it is done. */
+/** The closed day as a short WhatsApp message for the owner. Sales and cash only, never costs, so a manager may send it too. */
+function dayText(date: string, r: PeriodReport, h: Highlights, cash: DayTotals["cash"] | undefined, tr: (ar: string, en: string) => string) {
+  const lines = [
+    tr(`JJ's · إقفال يوم ${date} 🔒`, `JJ's · day closed ${date} 🔒`),
+    tr(`🧾 ${r.orders} طلب · ${qty(r.items)} قطعة · مبيعات ${usd(r.salesUsd)}`, `🧾 ${r.orders} ${r.orders === 1 ? "order" : "orders"} · ${qty(r.items)} items · sales ${usd(r.salesUsd)}`),
+  ];
+  if (r.collectedUsd !== undefined) lines.push(tr(`💵 انقبض: ${usd(r.collectedUsd)}`, `💵 Collected: ${usd(r.collectedUsd)}`));
+  if (r.discountUsd > 0) lines.push(tr(`🏷️ خصومات: ${usd(r.discountUsd)}`, `🏷️ Discounts: ${usd(r.discountUsd)}`));
+  lines.push(h.unpaidCount ? tr(`⏳ ما اندفع: ${h.unpaidCount} طلب · ${usd(h.unpaidUsd)}`, `⏳ Not paid: ${h.unpaidCount} · ${usd(h.unpaidUsd)}`) : tr("✓ كلو مدفوع", "✓ All paid"));
+  if (h.notDelivered.length) lines.push(tr(`🛵 ما تسلّم: ${h.notDelivered.length}`, `🛵 Not delivered: ${h.notDelivered.length}`));
+  if (cash) {
+    const diff = Math.abs(cash.difference) < 0.005 ? tr("مطابق ✓", "matches ✓") : `${cash.difference > 0 ? "+" : "−"}${money(Math.abs(cash.difference), cash.currency)}`;
+    lines.push(tr(`📦 الصندوق: ${money(cash.counted, cash.currency)} · الفرق ${diff}`, `📦 Box: ${money(cash.counted, cash.currency)} · difference ${diff}`));
+  }
+  return lines.join("\n");
+}
+
 function CloseSteps({ steps }: { steps: { label: string; done: boolean }[] }) {
   const { tr } = useI18n();
   const doneCount = steps.filter((s) => s.done).length;
@@ -545,6 +572,9 @@ export function DailyClosePage() {
               {d.day.closedByName && ` · ${d.day.closedByName}`}
             </span>
             <div className="ms-auto flex gap-2">
+              <a className="btn" href={`https://wa.me/?text=${encodeURIComponent(dayText(date, d.day.totals ?? d.report, d.highlights, d.day.totals?.cash, tr))}`} target="_blank" rel="noreferrer">
+                {tr("ابعت ملخص اليوم واتساب", "Send the day on WhatsApp")}
+              </a>
               <button className="btn" onClick={() => openPrint(`/print/report?from=${date}&to=${date}`)}>
                 {tr("طباعة تقرير اليوم", "Print day report")}
               </button>
