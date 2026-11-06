@@ -18,7 +18,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=4310 \
     JJS_DATA_DIR=/data \
-    JJS_TRUST_PROXY=1 \
+    JJS_TRUST_PROXY=1 \n    JJS_ONLINE=1 \
     TZ=Asia/Damascus
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules

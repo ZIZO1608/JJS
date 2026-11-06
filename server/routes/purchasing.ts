@@ -30,7 +30,8 @@ purchasingRouter.use(
       openingCurrency: z.enum(["USD", "SYP"]).default("SYP"),
       paymentTermsDays: z.number().int().min(0).max(365).default(0),
     }),
-    beforeSave: (_tx, body) => ({ openingUsd: round4(toUsd(body.openingBalance, body.openingCurrency, body.openingBalance ? rateFor(body.openingCurrency) : null)) }),
+    // no opening balance needs no rate: a pounds supplier starting at 0 must save even before a rate is set
+    beforeSave: (_tx, body) => ({ openingUsd: body.openingBalance ? round4(toUsd(body.openingBalance, body.openingCurrency, rateFor(body.openingCurrency))) : 0 }),
     map: (r) => {
       const d = supplierDue(db, r.id);
       return { ...r, dueUsd: d.totalDueUsd, overdueUsd: d.overdueUsd, openInvoices: d.open.length };

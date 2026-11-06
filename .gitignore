@@ -8,3 +8,5 @@ user-guide/out/
 user-guide/.build-*
 .env
 .env.*
+qa/sweep*/
+qa/*.log

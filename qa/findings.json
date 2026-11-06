@@ -1,0 +1,504 @@
+{
+  "project": {
+    "name": "JJ's ERP",
+    "client": "JJ's deli shop",
+    "url": "local QA copy (production build) — target https://jjs.ahmad-zaven.io",
+    "version": "fixes on top of commit e4c1e01",
+    "date": "2026-11-06",
+    "report_language": "en"
+  },
+  "summary": "All blockers and majors are fixed and re-tested on a fresh server: no double credit or double collection, Syrian-pound debts settle exactly, the live rate is in new pounds, and pounds products and suppliers save. Build, type check, all 9 API suites, the browser tour and the click-through flows pass. Two product questions stay open for the client (orders in fives, sample data).",
+  "scope": {
+    "roles": [
+      "Admin (jabal)",
+      "Manager",
+      "Member",
+      "Portal client"
+    ],
+    "languages": [
+      "Arabic",
+      "English"
+    ],
+    "devices": [
+      "Desktop 1366px",
+      "Phone 390px"
+    ],
+    "areas": [
+      "Sign in",
+      "Orders",
+      "Deliveries",
+      "Returns",
+      "Daily close",
+      "Clients",
+      "Purchasing",
+      "Money / exchange rate",
+      "Reports & CSV",
+      "Users & roles",
+      "Client portal",
+      "Security & hygiene"
+    ],
+    "notes": "Tested on a throwaway copy (own data folder, production build) with the sample data and the same env-var logins as the Coolify deploy. Printers, barcode scanner, the real exchange-rate API (no key) and the live VPS were not tested. Some findings were found by reading the code and are marked as such in Cause."
+  },
+  "findings": [
+    {
+      "id": "QA-001",
+      "title": "Return then cancel gives the client the money and the stock back twice",
+      "severity": "blocker",
+      "status": "verified",
+      "area": "Orders → Cancel / Distribution → Returns",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/orders",
+      "steps": [
+        "Make an order of 5 items on credit for a client ($9.50)",
+        "Distribution → **Returns**: return all 5 against that invoice, settlement **credit**",
+        "Cancel the same order"
+      ],
+      "expected": "The cancel is refused (or only cancels what was not returned). The client ends at $0.",
+      "actual": "Cancel is accepted. Client balance went 0 → −9.50 → 0 → **+9.50** (free credit). Stock is added back twice. With a **refund** return, the cash box pays out twice.",
+      "cause": "`server/services/orders.ts:456-470` (`cancelOrder`) does not look at returns already recorded on the order. Reproduced: `qa/flows/money-bugs.mjs` step #1.",
+      "fix": "Refuse cancel when the order has returns (message: \"This invoice has returns — cancel the returns first\"), or cancel only the not-returned part.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: cancel after a return is refused (409 order_has_returns, Arabic + English message); client balance stays 0."
+    },
+    {
+      "id": "QA-002",
+      "title": "A delivery collects money the client already paid at the shop",
+      "severity": "blocker",
+      "status": "verified",
+      "area": "Deliveries → collect money",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/deliveries",
+      "steps": [
+        "Make a delivery order on credit ($12.50)",
+        "Client pays $12.50 on their account (client page → **Record payment**)",
+        "Open **Deliveries**: the order still says $12.50 to collect",
+        "Tick delivered → **paid all**"
+      ],
+      "expected": "The delivery shows nothing left to collect, because the client's debt is already paid.",
+      "actual": "The driver is told to collect $12.50 again; after collecting, the client is at **+$12.50** credit and the box has the money twice. The daily-close \"did not pay\" list has the same blind spot.",
+      "cause": "`orderRemaining` (`server/services/orders.ts:361`) only uses the order's own `paidAmount`; account payments (`server/routes/clients.ts:342`) are never linked to orders. Reproduced: `qa/flows/money-bugs.mjs` step #2.",
+      "fix": "Cap what is left to collect by the client's real debt (never more than what they owe), or apply account payments to their oldest open invoices.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: after an account payment the Deliveries screen shows 0 to collect, the driver collects 0, balance stays 0. Same rule in the daily-close unpaid list. Invoice-tied payments now settle their own invoice first (`openClientCharges`, server/services/money.ts)."
+    },
+    {
+      "id": "QA-003",
+      "title": "Syrian-pound debt paid in exact pounds still shows a small dollar debt",
+      "severity": "major",
+      "status": "verified",
+      "area": "Deliveries / client balance (SYP)",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/deliveries",
+      "steps": [
+        "Currency SYP, rate 13,000",
+        "Delivery order on credit: 146,250 SYP",
+        "Next rate 14,000",
+        "Deliver → **paid all** 146,250 SYP"
+      ],
+      "expected": "The client owes 0.",
+      "actual": "Order says paid, but the client still owes **$0.80**; it shows in ageing, the money cloud and statements. The same happens for any SYP part payment when the rate moves.",
+      "cause": "Charge is valued at the order's rate, payment at today's rate (`server/services/orders.ts:348` vs `:413`, `:429`). Reproduced: `qa/flows/money-bugs.mjs` step #3.",
+      "fix": "When a payment is in the same currency as the invoice, value it at the invoice's own rate (or keep SYP balances in SYP).",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: 1,950 SYP order at 130, rate moved to 140, paid 1,950 SYP → balance exactly 0."
+    },
+    {
+      "id": "QA-004",
+      "title": "Paying a supplier the exact Syrian-pound amount can leave a balance or be refused",
+      "severity": "major",
+      "status": "verified",
+      "area": "Purchasing → pay supplier (SYP)",
+      "role": [
+        "admin"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop"
+      ],
+      "route": "/purchasing/debts",
+      "steps": [
+        "Supplier invoice 1,000,000 SYP at rate 13,000",
+        "Rate changes",
+        "Supplier → **Pay** 1,000,000 SYP"
+      ],
+      "expected": "The invoice is fully paid, nothing left.",
+      "actual": "After a rate rise, part of the invoice stays due (536,924 SYP was left in our test across two invoices). After a rate fall the code would refuse it as overpaid.",
+      "cause": "Same cause as QA-003: `server/services/wholesale.ts:313-333` (`paySupplier`) converts at today's rate while the due amount uses the purchase-day rate. Partly reproduced: `qa/flows/supplier-syp.mjs`.",
+      "fix": "Same fix as QA-003 (settle same-currency payments in that currency).",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: 10,000 SYP invoice paid with 10,000 SYP after the rate fell (130→120) and rose (140→150): accepted, nothing left due."
+    },
+    {
+      "id": "QA-005",
+      "title": "Closing a past day counts cash from later days as \"short\"",
+      "severity": "major",
+      "status": "verified",
+      "area": "Daily close",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/close",
+      "steps": [
+        "Leave yesterday open",
+        "Sell $100 cash today",
+        "Go back to yesterday and close it, typing the amount the screen shows"
+      ],
+      "expected": "Difference 0.",
+      "actual": "The $100 from today is recorded as a cash difference on yesterday (found in code, not run — needs two calendar days).",
+      "cause": "`server/routes/days.ts:170` uses the whole box balance as expected; the screen (`days.ts:70-71,100`) uses opening + that day's moves.",
+      "fix": "Use the same formula on save as on screen (moves up to that date), or only allow closing days in order.",
+      "retest": "`qa/flows/close-past-day.mjs`: a $100 cash move dated tomorrow, today closed with the screen's amount → recorded difference 0."
+    },
+    {
+      "id": "QA-006",
+      "title": "Returns give back the wrong amount when the invoice had free items",
+      "severity": "major",
+      "status": "verified",
+      "area": "Distribution → Returns",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop"
+      ],
+      "route": "/distribution/returns",
+      "steps": [
+        "Invoice with 5 free items (loyalty or subscription) + 5 paid items at $3",
+        "Return the 5 free items"
+      ],
+      "expected": "Nothing is credited for free items; returning the paid ones credits $15.",
+      "actual": "Free items are credited ($3.75) and paid ones under-credited ($11.25), because every unit gets the same share of the discount (found in code).",
+      "cause": "`server/services/wholesale.ts:103-105` uses one ratio `1 − discount/subtotal` for every line.",
+      "fix": "Price each returned line from its own line total and free quantity.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: 5 free (loyalty) items returned → credit 0; 5 paid items → credit equals what was paid (16.25)."
+    },
+    {
+      "id": "QA-007",
+      "title": "Changing or resetting a staff password does not sign that person out",
+      "severity": "major",
+      "status": "verified",
+      "area": "Users / Change password",
+      "role": [
+        "admin"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/users",
+      "steps": [
+        "Sign in as member on phone A",
+        "Admin resets the member's password on Users",
+        "Use phone A"
+      ],
+      "expected": "Phone A is signed out (as the client portal already does).",
+      "actual": "Phone A stays signed in for up to 30 days. A lost phone or a fired employee keeps access until the admin deactivates the user.",
+      "cause": "`server/routes/users.ts:108` and `server/routes/auth.ts:120` don't delete the user's sessions (portal does: `server/routes/clients.ts:601`).",
+      "fix": "Delete that user's sessions on admin reset; on self-change keep only the current session.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: admin reset signs the old phone out (401); changing your own password keeps this device and signs the others out."
+    },
+    {
+      "id": "QA-008",
+      "title": "Cancelling a delivered order after the cash was handed over puts the driver's box negative",
+      "severity": "major",
+      "status": "verified",
+      "area": "Orders → Cancel / Daily close",
+      "role": [
+        "admin",
+        "manager"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop"
+      ],
+      "route": "/orders",
+      "steps": [
+        "Driver collects $30 on a delivery",
+        "Close: hand the driver's cash to the main box",
+        "Cancel that order"
+      ],
+      "expected": "The refund comes out of the box that now holds the money (main box), dated today.",
+      "actual": "The driver's box goes to −$30 and silently eats their next day's takings (found in code).",
+      "cause": "`server/services/orders.ts:464` reverses into the original box on the order's date.",
+      "fix": "Reverse into the main box when the driver's cash was handed over; date it today.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: delivery cash handed in, then order cancelled → refund taken from the main box, driver box stays 0."
+    },
+    {
+      "id": "QA-009",
+      "title": "Assets page goes blank on refresh or direct link",
+      "severity": "minor",
+      "status": "verified",
+      "area": "Assets (الأصول)",
+      "role": [
+        "admin"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "route": "/assets",
+      "steps": [
+        "Open **Assets** from the menu",
+        "Press refresh (or reopen the installed app on that page)"
+      ],
+      "expected": "The Assets page loads again.",
+      "actual": "White page, HTTP 404, no menu.",
+      "screenshot": "sweep-admin-ar/shots/017-admin-ar-desktop--assets.png",
+      "cause": "The page URL `/assets` is the same as the folder for the app's built files (`server/app.ts:45-47`).",
+      "fix": "Rename the page route to `/fixed-assets` (and its menu link), keep a redirect from the old link inside the app.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: page moved to /fixed-assets (200); old /assets links redirect there. UI tour passes."
+    },
+    {
+      "id": "QA-010",
+      "title": "Custom roles can see costs through the day summary and CSV export",
+      "severity": "minor",
+      "status": "verified",
+      "area": "Reports / Roles",
+      "role": [
+        "custom role"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop"
+      ],
+      "route": "/reports",
+      "steps": [
+        "Make a custom role with **reports: export** (or dashboard view) but no **see costs**",
+        "Export the orders or products CSV"
+      ],
+      "expected": "No cost or margin columns.",
+      "actual": "CSV has cost and margin; `/api/reports/five` returns goods cost and profit. Default Manager and Member are NOT affected.",
+      "cause": "`server/routes/reports.ts:131-195` and `server/services/reports.ts:383-387` don't check `see_cost`.",
+      "fix": "Drop cost columns/kinds without `see_cost`; mask the five-answers costs like `/reports/day`.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: five-answers needs see-costs (manager → 403); CSV drops cost/margin columns without see-costs; purchases, supplier debts, expenses and withdrawals exports need their own module permission."
+    },
+    {
+      "id": "QA-011",
+      "title": "Server libraries with known security fixes available",
+      "severity": "minor",
+      "status": "fixed",
+      "area": "Dependencies",
+      "steps": [
+        "Run `npm audit --omit=dev`"
+      ],
+      "expected": "No high issues.",
+      "actual": "4 high: body-parser, compression, on-headers (fix with `npm audit fix`, no breaking change); drizzle-orm and zod need a major upgrade (low real risk here: no user-built SQL identifiers).",
+      "fix": "Run `npm audit fix`, rebuild, run `npm test`. Leave drizzle/zod majors for later.",
+      "retest": "`npm audit fix`: body-parser, compression and on-headers updated (5 → 2 advisories). drizzle-orm and zod need major upgrades: left for later, they don't apply to how the app uses them."
+    },
+    {
+      "id": "QA-012",
+      "title": "Login has no per-IP limit and the server sends no security headers",
+      "severity": "minor",
+      "status": "verified",
+      "area": "Security (online server)",
+      "steps": [
+        "Try 5 wrong passwords for `jabal`"
+      ],
+      "expected": "The attacker is slowed, not the real admin.",
+      "actual": "The real admin is locked out for 60s, repeatably; one password can be tried against many usernames freely. No nosniff / frame / referrer headers.",
+      "cause": "`server/lib/auth.ts:110-127` locks per username in memory; `server/app.ts` adds no headers.",
+      "fix": "Add per-IP rate limit on `/auth/login` and `/portal/login`; add basic security headers (helmet).",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: nosniff / frame / referrer headers present; 20 wrong logins from one address in 10 min block that address for 10 min (per-username 60s lock kept)."
+    },
+    {
+      "id": "QA-013",
+      "title": "A product photo can be an SVG file that runs script",
+      "severity": "minor",
+      "status": "verified",
+      "area": "Menu → product photo",
+      "steps": [
+        "Upload an SVG with script as a product photo (needs menu create — admin only)"
+      ],
+      "expected": "Only PNG/JPEG/WebP accepted.",
+      "actual": "Any `data:image/...` accepted and served from the app's own address.",
+      "cause": "`server/routes/menu.ts:130` and photo routes `menu.ts:278-282`, `portal.ts:201-205`.",
+      "fix": "Allow png/jpeg/webp only; send `X-Content-Type-Options: nosniff`.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: saving an SVG product photo → 400; photo routes only serve PNG/JPEG/WebP/GIF."
+    },
+    {
+      "id": "QA-014",
+      "title": "Sample data cannot be removed once loaded",
+      "severity": "minor",
+      "status": "fixed",
+      "area": "Settings → Network & cloud → Load sample data",
+      "steps": [
+        "Load sample data on the live server to try things",
+        "Try to start fresh"
+      ],
+      "expected": "A way to clear sample data before going live.",
+      "actual": "No clear/reset; sample clients, products and stock stay in reports.",
+      "fix": "Either hide the button on the online server, or add **Remove sample data** (only before the first real order). Tell the client not to press it on the live server.",
+      "retest": "Docker image sets JJS_ONLINE=1: the Load sample data card is hidden there and the server refuses it (403). Laptop copies keep it. Not run under Docker here."
+    },
+    {
+      "id": "QA-015",
+      "title": "Orders \"in fives\" also applies to walk-in, staff and tasting — but not to accepted portal requests",
+      "severity": "minor",
+      "status": "needs_info",
+      "area": "New order / Client requests",
+      "steps": [
+        "New order → Walk-in → try 1 salad",
+        "Portal request with qty 7 → accept"
+      ],
+      "expected": "Rule as the client wants it.",
+      "actual": "Walk-in, staff purchase and tasting must be 5, 10, 15…; a portal request for 7 is accepted as 7.",
+      "cause": "`shared/orderQty.ts` applied to every staff order; `server/services/portal.ts:75` skips the check.",
+      "fix": "Ask the client which order types the fives rule is for, then apply it the same everywhere.",
+      "retest": ""
+    },
+    {
+      "id": "QA-016",
+      "title": "\"1 orders not delivered yet\" — plural on the close screen",
+      "severity": "polish",
+      "status": "verified",
+      "area": "Daily close",
+      "route": "/close",
+      "screenshot": "sweep-admin-ar/shots/038-admin-ar-mobile--close.png",
+      "fix": "Use singular for 1 (English).",
+      "retest": "Close screen uses \"1 order\" / \"2 orders\" in English (4 places). Arabic was already right."
+    },
+    {
+      "id": "QA-017",
+      "title": "CSV cells starting with = + - @ are not neutralised",
+      "severity": "polish",
+      "status": "fixed",
+      "area": "Reports → CSV",
+      "cause": "`server/routes/reports.ts:128`",
+      "fix": "Prefix such cells with an apostrophe.",
+      "retest": "CSV text cells starting with = + - @ get a leading apostrophe; numbers stay numbers."
+    },
+    {
+      "id": "QA-018",
+      "title": "A supplier or product in Syrian pounds could not be saved",
+      "severity": "blocker",
+      "status": "verified",
+      "area": "Purchasing → Suppliers / Menu → Products",
+      "role": [
+        "admin"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop",
+        "mobile"
+      ],
+      "steps": [
+        "Add a supplier with currency SYP and no opening balance (or a product priced in SYP)",
+        "Save"
+      ],
+      "expected": "It saves.",
+      "actual": "Refused with \"Set the USD → SYP exchange rate first\" — even when a rate was set. With prices in new pounds the menu could not be built.",
+      "cause": "`toUsd(0, \"SYP\", null)` threw: `server/routes/purchasing.ts:33` and `server/routes/menu.ts:197` passed no rate when the amount was 0.",
+      "fix": "Converting 0 needs no rate (`server/lib/biz.ts`), and the supplier opening balance only asks for a rate when there is one.",
+      "retest": "Re-run in `qa/flows/retest.mjs` on a fresh server: on a server with no rate at all, a SYP supplier and a SYP product both save (201)."
+    },
+    {
+      "id": "QA-019",
+      "title": "The rate API answers in old pounds; prices are in new pounds",
+      "severity": "blocker",
+      "status": "verified",
+      "area": "Settings → Currency & rate",
+      "role": [
+        "admin"
+      ],
+      "lang": [
+        "en",
+        "ar"
+      ],
+      "device": [
+        "desktop"
+      ],
+      "steps": [
+        "Connect the Syrian rate API",
+        "Sell a $3 item in SYP"
+      ],
+      "expected": "About 433 new SYP.",
+      "actual": "The API gives 14,425 (old pounds); every SYP amount would have been 100× too big.",
+      "screenshot": "fx-old-pound-warning.png",
+      "cause": "No handling of the 2026 redenomination (100 old = 1 new).",
+      "fix": "Rates of 1,000 or more from the API are divided by 100 (`server/services/fx.ts`); the manual-rate box refuses old-pound numbers with a clear message.",
+      "retest": "`qa/flows/fx-live.mjs` against the real API: 1 USD = 144.25 SYP; 5 × $3 salad = 2,165 SYP."
+    }
+  ],
+  "passed": [
+    "Re-tests of every fixed finding (`qa/flows/retest.mjs`, `close-past-day.mjs`, `fx-live.mjs`) — all pass",
+    "Browser tour of every screen (tests/ui-tour.py) and click-through flows (tests/ui-flows.py) after the fixes",
+    "Type check, production build and all 9 API suites (smoke, full day, sync, wholesale, portal, day & route, money, manager, member, deliveries)",
+    "First start online: admin, manager and member created from env variables; no open setup page",
+    "All screens for Admin, Manager, Member and portal client in Arabic and English on desktop and phone — no page errors, no failed requests (except QA-009)",
+    "Arabic is right-to-left everywhere with Arabic dates; phone layouts fit 390px with no sideways scrolling",
+    "Member blocked from every forbidden page by URL; manager blocked from users, roles, audit, settings, costing, purchasing, people",
+    "Portal clients only see their own orders, requests and notifications; portal and staff logins are separate",
+    "Discounts: % capped at 100, amount can't push a total below 0, members can't give discounts",
+    "Double deliver and double cancel are refused; quantity 0 and negatives refused",
+    "Part payment on an invoice puts the rest on the client's account correctly",
+    "Order, purchase and return numbers are unique; server runs on Damascus time (Dockerfile TZ)",
+    "No secrets in the repo or the web bundle; Supabase and rate-API keys never sent to the browser or audit log",
+    "CSV exports open in Excel with Arabic (UTF-8 BOM)",
+    "Deep links work after refresh (except /assets); unknown API routes give a clean 404 message",
+    "Backups restore only by exact backup name (no path tricks)"
+  ]
+}

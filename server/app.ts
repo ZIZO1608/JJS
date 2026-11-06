@@ -35,12 +35,21 @@ import { notificationsRouter, requestsRouter } from "./routes/requests.js";
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
+  // Basic browser protections: no guessing file types, no framing by other sites, no leaking our addresses.
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Referrer-Policy", "same-origin");
+    next();
+  });
   // Online, Coolify's proxy ends HTTPS in front of us; trust its X-Forwarded-* headers.
   if (process.env.JJS_TRUST_PROXY === "1") app.set("trust proxy", 1);
   // Slow connections: gzip every answer (JSON shrinks ~10×), and serve the built files before any session lookup.
   app.use(compression({ threshold: 1024 }));
   const hasWeb = fs.existsSync(path.join(WEB_DIST_DIR, "index.html"));
   if (hasWeb) {
+    // the Assets page used to live at /assets, the same name as the build folder: send old links to its new address
+    app.get("/assets", (_req, res) => res.redirect(302, "/fixed-assets"));
     // file names carry a content hash, so the browser may keep them for a year
     app.use("/assets", express.static(path.join(WEB_DIST_DIR, "assets"), { immutable: true, maxAge: "365d" }));
     // a file from an older version: a plain 404 (the page then reloads itself), never the app page

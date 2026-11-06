@@ -127,7 +127,12 @@ const productSchema = z.object({
   currency: currency,
   shelfLifeHours: z.number().int().min(1).max(24 * 365),
   allergens: z.string().max(200).default(""),
-  photo: z.string().max(300_000).default(""),
+  // photos are served from our own address, so only plain picture types (an SVG could carry script)
+  photo: z
+    .string()
+    .max(300_000)
+    .refine((s) => s === "" || /^data:image\/(png|jpeg|webp|gif);base64,/.test(s), "The photo must be a PNG, JPG or WEBP image")
+    .default(""),
   sort: z.number().int().min(0).default(0),
   active: z.boolean().default(true),
   optionGroupIds: z.array(z.string()).max(30).default([]),
@@ -275,7 +280,7 @@ menuRouter.get(
   requireAuth,
   h((req, res) => {
     const p = db.select({ photo: products.photo }).from(products).where(eq(products.id, String(req.params.id))).get();
-    const m = p?.photo.match(/^data:(image\/[a-z+]+);base64,(.*)$/);
+    const m = p?.photo.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,(.*)$/);
     if (!m) throw notFound("photo");
     res.setHeader("Content-Type", m[1]!);
     res.setHeader("Cache-Control", "max-age=300");

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { roles, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
-import { hashPassword, requirePerm } from "../lib/auth.js";
+import { endSessions, hashPassword, requirePerm } from "../lib/auth.js";
 import { h, HttpError, newId, notFound, nowIso, parse } from "../lib/util.js";
 
 export const usersRouter = Router();
@@ -108,6 +108,8 @@ usersRouter.put(
     if (body.password) patch.passwordHash = hashPassword(body.password);
     db.transaction((tx) => {
       tx.update(users).set(patch).where(eq(users.id, id)).run();
+      // a new password from the admin signs that person out everywhere
+      if (body.password) endSessions(id);
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "user", entityId: id, before, after: { ...before, ...patch } });
     });
     res.json({ user: userOut(db.select().from(users).where(eq(users.id, id)).get()!) });

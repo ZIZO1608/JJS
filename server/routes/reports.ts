@@ -87,7 +87,11 @@ reportsRouter.get(
 reportsRouter.get(
   "/five",
   requirePerm("dashboard", "view"),
-  h((req, res) => res.json(fiveAnswers(db, String(req.query.date ?? localDate())))),
+  h((req, res) => {
+    // goods cost, profit and margins: only for roles that may see costs
+    if (!req.user!.permissions.has("costing:see_cost")) throw new HttpError(403, "forbidden", "Your role cannot see costs.");
+    res.json(fiveAnswers(db, String(req.query.date ?? localDate())));
+  }),
 );
 
 /** Made vs sold vs returned vs wasted vs left, per product. */
@@ -124,8 +128,21 @@ reportsRouter.get(
   }),
 );
 
-const csv = (rows: (string | number | null | undefined)[][]) =>
-  "﻿" + rows.map((r) => r.map((v) => (v === null || v === undefined ? "" : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v))).join(",")).join("\r\n");
+/** Text starting with = + - @ would run as a formula in Excel: an apostrophe keeps it plain text. Numbers stay numbers. */
+const cell = (v: string | number | null | undefined) => {
+  if (v === null || v === undefined) return "";
+  const s = typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? `'${v}` : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const csv = (rows: (string | number | null | undefined)[][]) => "﻿" + rows.map((r) => r.map(cell).join(",")).join("\r\n");
+
+/** Which exports need more than reports:export: money the owner keeps to himself, supplier debts. */
+const EXPORT_NEEDS: Record<string, string> = {
+  purchases: "purchasing:view",
+  "supplier-debts": "purchasing:view",
+  expenses: "expenses:view",
+  withdrawals: "daily_close:edit",
+};
 
 /** CSV files that open in Excel (UTF-8 with BOM so Arabic shows correctly). */
 reportsRouter.get(
@@ -134,6 +151,9 @@ reportsRouter.get(
   h((req, res) => {
     const q = parse(range, req.query);
     const kind = String(req.params.kind);
+    const need = EXPORT_NEEDS[kind];
+    if (need && !req.user!.permissions.has(need)) throw new HttpError(403, "forbidden", "Your role cannot export this.");
+    const seeCost = req.user!.permissions.has("costing:see_cost");
     let rows: (string | number | null)[][];
     if (kind === "orders") {
       const list = db
@@ -146,10 +166,12 @@ reportsRouter.get(
         .all();
       rows = [["Number", "Date", "Client", "Type", "Status", "Payment", "Method", "Items", "Free items", "Subtotal", "Discount", "Tax", "Delivery", "Total", "Currency", "Total USD", "Cost USD"]];
       for (const r of list) rows.push([r.o.number, r.o.businessDate, r.client ?? "Walk-in", r.o.type, r.o.status, r.o.paymentStatus, r.method, r.o.itemsCount, r.o.freeItems, r.o.subtotal, r.o.discount, r.o.taxTotal, r.o.deliveryFee, r.o.total, r.o.currency, r.o.totalUsd, r.o.costUsd]);
+      if (!seeCost) rows = rows.map((r) => r.slice(0, -1));
     } else if (kind === "products") {
       const rep = periodReport(db, q.from, q.to);
       rows = [["Product (EN)", "Product (AR)", "Qty", "Revenue USD", "Cost USD", "Margin %"]];
       for (const p of rep.byProduct) rows.push([p.nameEn, p.nameAr, p.qty, p.revenueUsd, p.costUsd, p.marginPct]);
+      if (!seeCost) rows = rows.map((r) => r.slice(0, 4));
     } else if (kind === "clients") {
       const rep = periodReport(db, q.from, q.to);
       rows = [["Client", "Orders", "Items", "Sales USD", "Balance USD"]];

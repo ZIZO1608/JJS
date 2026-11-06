@@ -16,13 +16,14 @@ import {
   payments,
   priceListItems,
   products,
+  returns,
   taxes,
 } from "../db/schema.js";
 import { getSetting } from "../lib/settings.js";
 import { assertDayOpen, convert, localDate, nextNumber, rateFor, roundMoney, round4, toUsd, type Q } from "../lib/biz.js";
 import { HttpError, newId, nowIso } from "../lib/util.js";
 import { loyaltyStatus, subscriptionStatus } from "./clients.js";
-import { addBoxMove, addClientMove, clientBalanceUsd, getMethod } from "./money.js";
+import { addBoxMove, addClientMove, boxBalance, clientBalanceUsd, getMethod, openClientCharges, systemBox } from "./money.js";
 import { notifyStaff } from "./notifications.js";
 import { reverseStock, takeProductStock } from "./stock.js";
 
@@ -360,6 +361,29 @@ export function createOrder(tx: Q, input: OrderInput, userId: string, opts: Orde
 /** What the client still owes on this order, in the order currency. */
 export const orderRemaining = (o: typeof orders.$inferSelect) => (o.paymentStatus === "credit" || o.paymentStatus === "partial" ? Math.max(0, roundMoney(o.total - o.paidAmount, o.currency)) : 0);
 
+/**
+ * What is really left to collect on this order: never more than the client still owes for it.
+ * A client who paid on their account (or got a return credited) has settled their oldest invoices,
+ * so the driver must not collect that money again. Pass `open` when checking many orders of one client.
+ */
+export function orderOwed(tx: Q, o: typeof orders.$inferSelect, open?: ReturnType<typeof openClientCharges>) {
+  const left = orderRemaining(o);
+  if (!(left > 0) || !o.clientId) return left;
+  const usd = (open ?? openClientCharges(tx, o.clientId)).filter((c) => c.orderId === o.id).reduce((s, c) => s + c.usd, 0);
+  const inOrderCcy = o.currency === "USD" ? usd : usd * (o.fxRate ?? 0);
+  return Math.max(0, Math.min(left, roundMoney(inOrderCcy, o.currency)));
+}
+
+/** orderOwed for a list of orders: each client's open charges are read once. */
+export function owedLookup(tx: Q) {
+  const byClient = new Map<string, ReturnType<typeof openClientCharges>>();
+  return (o: typeof orders.$inferSelect) => {
+    if (!o.clientId || !(orderRemaining(o) > 0)) return orderRemaining(o);
+    if (!byClient.has(o.clientId)) byClient.set(o.clientId, openClientCharges(tx, o.clientId));
+    return orderOwed(tx, o, byClient.get(o.clientId));
+  };
+}
+
 /** The rule for "who may carry an order": an active delivery person. */
 function assertDeliveryPerson(tx: Q, employeeId: string) {
   const e = tx.select().from(employees).where(and(eq(employees.id, employeeId), eq(employees.isDeliveryRep, true), eq(employees.active, true), isNull(employees.deletedAt))).get();
@@ -395,7 +419,7 @@ export function deliverOrder(tx: Q, orderId: string, input: { assignedTo?: strin
   if (o.status === "cancelled") throw new HttpError(409, "cancelled", "This order was cancelled.");
   if (o.status === "delivered") throw new HttpError(409, "already_delivered", "This order was already marked delivered.");
   const assignedTo = input.assignedTo ?? o.assignedTo;
-  const owed = orderRemaining(o);
+  const owed = orderOwed(tx, o);
   const c = input.collection ?? { mode: "none" as const };
   let paidInOrderCcy = 0;
   let paidStatus = o.paymentStatus;
@@ -410,7 +434,8 @@ export function deliverOrder(tx: Q, orderId: string, input: { assignedTo?: strin
     const boxId = repBox?.id ?? method.boxId;
     const currency = c.currency ?? o.currency;
     const box = tx.select({ currency: cashBoxes.currency }).from(cashBoxes).where(eq(cashBoxes.id, boxId)).get();
-    const rate = rateFor(currency, o.currency, box?.currency ?? currency) ?? o.fxRate;
+    // Paying in the invoice's own currency settles it at the invoice's rate: 146,250 SYP owed and paid is 0 left, whatever the dollar did since.
+    const rate = currency === o.currency && o.fxRate ? o.fxRate : (rateFor(currency, o.currency, box?.currency ?? currency) ?? o.fxRate);
     let amount: number;
     if (c.mode === "full") {
       paidInOrderCcy = owed;
@@ -458,10 +483,20 @@ export function cancelOrder(tx: Q, orderId: string, userId: string, reason = "")
   if (!o) throw new HttpError(404, "not_found", "Order not found");
   if (o.status === "cancelled") throw new HttpError(409, "already_cancelled", "This order is already cancelled.");
   assertDayOpen(tx, o.businessDate);
+  // Goods already returned from this invoice were credited or refunded then; cancelling would pay them back twice.
+  const returned = tx.select({ id: returns.id }).from(returns).where(and(eq(returns.orderId, o.id), isNull(returns.deletedAt))).get();
+  if (returned) throw new HttpError(409, "order_has_returns", "Goods from this invoice were already returned, so it cannot be cancelled. Record a return for the rest instead.");
   const date = o.businessDate;
   reverseStock(tx, "order", o.id, { userId, date });
   for (const p of tx.select().from(payments).where(and(eq(payments.orderId, o.id), isNull(payments.deletedAt))).all()) {
-    if (p.boxId) addBoxMove(tx, { boxId: p.boxId, type: "sale", amount: -p.amount, currency: p.currency, rate: p.fxRate, refType: "order_cancel", refId: o.id, note: `Cancel #${o.number}`, userId, date });
+    if (p.boxId) {
+      // Cash the delivery person already handed in sits in the main box now: give it back from there,
+      // or the driver's box would go negative and swallow their next takings.
+      const box = tx.select({ kind: cashBoxes.kind }).from(cashBoxes).where(eq(cashBoxes.id, p.boxId)).get();
+      const handedIn = box?.kind === "rep" && boxBalance(tx, p.boxId) < p.amount - 0.001;
+      const fromBox = handedIn ? systemBox(tx, "main_cash").id : p.boxId;
+      addBoxMove(tx, { boxId: fromBox, type: "sale", amount: -p.amount, currency: p.currency, rate: p.fxRate, refType: "order_cancel", refId: o.id, note: `Cancel #${o.number}`, userId, date });
+    }
     tx.update(payments).set({ deletedAt: nowIso(), syncedAt: null }).where(eq(payments.id, p.id)).run();
   }
   if (o.consignmentId) throw new HttpError(409, "consignment_order", "This invoice came from a consignment. Record a return instead.");

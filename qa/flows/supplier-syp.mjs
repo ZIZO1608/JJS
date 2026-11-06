@@ -1,0 +1,31 @@
+// Supplier invoice in SYP, rate falls, pay the exact SYP amount.
+import { login } from "./lib.mjs";
+const a = await login("jabal", "qaAdmin123");
+const j = (r, k) => r.json?.[k] ?? r.json?.rows ?? r.json;
+const items = j(await a("GET", "/stock/items"), "items");
+const locs = j(await a("GET", "/stock/locations"), "locations");
+const sups = j(await a("GET", "/purchases/suppliers"), "suppliers");
+const boxes = j(await a("GET", "/money/boxes"), "boxes");
+const box = boxes.find((b) => b.kind === "main") ?? boxes[0];
+await a("PUT", "/fx/manual", { rate: 13000 });
+const loc = locs[0]?.places?.[0]?.id ?? locs[0]?.id;
+const p = await a("POST", "/purchases", { supplierId: sups[0].id, currency: "SYP", lines: [{ itemId: items[0].id, qty: 10, unitPrice: 100000, locationId: loc }] });
+console.log("purchase", p.status, JSON.stringify(p.json).slice(0, 160));
+await a("PUT", "/fx/manual", { rate: 12000 });
+console.log("deposit", (await a("POST", "/money/deposit", { boxId: box.id, amount: 1000 })).status, box.currency);
+const r = await a("POST", `/purchases/${p.json.id ?? p.json.purchase?.id}/pay`, { amount: 1000000, currency: "SYP", boxId: box.id });
+console.log("pay exact 1,000,000 SYP after rate fell:", r.status, JSON.stringify(r.json).slice(0, 200));
+await a("PUT", "/fx/manual", { rate: 13000 });
+// supplier-level pay (pay oldest first)
+await a("PUT", "/fx/manual", { rate: 13000 });
+const p2 = await a("POST", "/purchases", { supplierId: sups[1].id, currency: "SYP", lines: [{ itemId: items[0].id, qty: 10, unitPrice: 100000, locationId: loc }] });
+await a("PUT", "/fx/manual", { rate: 12000 });
+const r2 = await a("POST", `/purchases/suppliers/${sups[1].id}/pay`, { amount: 1000000, currency: "SYP", boxId: box.id });
+console.log("supplier pay exact SYP after rate fell:", r2.status, JSON.stringify(r2.json).slice(0, 200));
+await a("PUT", "/fx/manual", { rate: 14000 });
+const p3 = await a("POST", "/purchases", { supplierId: sups[1].id, currency: "SYP", lines: [{ itemId: items[0].id, qty: 10, unitPrice: 100000, locationId: loc }] });
+await a("PUT", "/fx/manual", { rate: 15000 });
+const r3 = await a("POST", `/purchases/suppliers/${sups[1].id}/pay`, { amount: 1000000, currency: "SYP", boxId: box.id });
+const after = (await a("GET", `/purchases/${p3.json.purchase.id}`)).json;
+console.log("supplier pay after rate rose:", r3.status, "invoice due now:", (after.purchase ?? after).due, (after.purchase ?? after).currency);
+await a("PUT", "/fx/manual", { rate: 13000 });

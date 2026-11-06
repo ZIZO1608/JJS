@@ -50,6 +50,15 @@ export function getCurrentRate(): CurrentRate {
 const readPath = (obj: unknown, path: string): unknown =>
   path.split(".").filter(Boolean).reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), obj);
 
+/**
+ * The shop prices in the new Syrian pound (two zeros removed: 100 old = 1 new).
+ * The rate API still answers in old pounds (about 14,000 per dollar), so a rate of
+ * 1,000 or more is old pounds and is divided by 100. If the API moves to new pounds,
+ * its numbers (about 140) pass through unchanged.
+ */
+const OLD_POUND_RATE_FROM = 1000;
+export const toNewPounds = (rate: number) => (rate >= OLD_POUND_RATE_FROM ? Math.round((rate / 100) * 10_000) / 10_000 : rate);
+
 /** Fetch USD→SYP from the user's own rate API. Keeps the last good rate on any failure. */
 export async function refreshRate(): Promise<CurrentRate> {
   const cfg = rateApi();
@@ -63,8 +72,9 @@ export async function refreshRate(): Promise<CurrentRate> {
     const res = await fetch(cfg.apiUrl, { headers, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error(`The rate API answered ${res.status}`);
     const json = (await res.json()) as unknown;
-    const value = Number(readPath(json, cfg.jsonPath || "rate"));
-    if (!(value > 0)) throw new Error(`No positive number found at "${cfg.jsonPath || "rate"}" in the API response`);
+    const raw = Number(readPath(json, cfg.jsonPath || "rate"));
+    if (!(raw > 0)) throw new Error(`No positive number found at "${cfg.jsonPath || "rate"}" in the API response`);
+    const value = toNewPounds(raw);
     const last = latestApiRate();
     if (!last || last.rate !== value) {
       db.insert(fxRates).values({ id: newId(), fromCcy: "USD", toCcy: "SYP", rate: value, source: "api" }).run();

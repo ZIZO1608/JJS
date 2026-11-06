@@ -59,12 +59,13 @@ export function rateFor(...currencies: Currency[]): number | null {
 }
 
 export function toUsd(amount: number, currency: Currency, rate: number | null): number {
-  if (currency === "USD") return amount;
+  // nothing to convert needs no rate (a pounds product with no extra cost, a supplier starting at 0)
+  if (currency === "USD" || amount === 0) return amount;
   if (!rate) throw new HttpError(409, "no_rate", "Set the USD → SYP exchange rate first.");
   return amount / rate;
 }
 export function fromUsd(usd: number, currency: Currency, rate: number | null): number {
-  if (currency === "USD") return usd;
+  if (currency === "USD" || usd === 0) return usd;
   if (!rate) throw new HttpError(409, "no_rate", "Set the USD → SYP exchange rate first.");
   return usd * rate;
 }

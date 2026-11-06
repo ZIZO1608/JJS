@@ -1,0 +1,197 @@
+{
+  "base_url": "http://127.0.0.1:4420",
+  "routes": [
+    "/",
+    "/day",
+    "/dashboard",
+    "/orders",
+    "/orders/new",
+    "/deliveries",
+    "/requests",
+    "/close",
+    "/distribution",
+    "/production",
+    "/clients",
+    "/menu",
+    "/warehouse",
+    "/purchasing",
+    "/costing",
+    "/expenses",
+    "/assets",
+    "/people",
+    "/reports",
+    "/users",
+    "/roles",
+    "/audit",
+    "/settings"
+  ],
+  "discover": true,
+  "max_pages": 30,
+  "viewports": [
+    "desktop",
+    "mobile"
+  ],
+  "settle_ms": 700,
+  "click_test": true,
+  "max_clicks_per_page": 20,
+  "max_inner_clicks": 6,
+  "skip_clicks_matching": "delete|remove|logout|sign out|log out|close the day|close day|restore|reset|stop access|new password|withdraw|حذف|إزالة|خروج|إغلاق اليوم|استعادة|print|طباعة|install|تثبيت|whatsapp|واتساب",
+  "untranslated_allow": "JJ|SYP|USD|CSV|Excel|WhatsApp|Sham Cash|PDF|API|LAN|Supabase|kg|ml|mm|A4|ID|QR|OK|Al-Noor|Bean|Book|Café|City|Distributor|Corner|Market|Focus|Study|Zone|Lina|Jabal|Manager|Member|jabal|manager|member|qaclient",
+  "blocked_text": "not allowed|غير مسموح|لا يسمح|لا تسمح",
+  "languages": {
+    "ar": {
+      "setup": [
+        {
+          "set_local_storage": {
+            "jjs.lang": "ar"
+          }
+        }
+      ],
+      "locale": "ar-SY",
+      "after_login": [
+        {
+          "click": "header button:has-text(\"عربي\")",
+          "optional": true
+        },
+        {
+          "wait": 900
+        }
+      ]
+    }
+  },
+  "roles": {
+    "admin": {
+      "login": {
+        "url": "/",
+        "actions": [
+          {
+            "fill": {
+              "selector": "#login-user",
+              "value": "jabal"
+            }
+          },
+          {
+            "fill": {
+              "selector": "#login-pass",
+              "value": "$ENV:QA_PASS_ADMIN"
+            }
+          },
+          {
+            "click": "button.btn-primary"
+          }
+        ],
+        "wait_for": "header"
+      }
+    },
+    "manager": {
+      "login": {
+        "url": "/",
+        "actions": [
+          {
+            "fill": {
+              "selector": "#login-user",
+              "value": "manager"
+            }
+          },
+          {
+            "fill": {
+              "selector": "#login-pass",
+              "value": "$ENV:QA_PASS_MANAGER"
+            }
+          },
+          {
+            "click": "button.btn-primary"
+          }
+        ],
+        "wait_for": "header"
+      },
+      "forbidden_routes": [
+        "/users",
+        "/roles",
+        "/audit",
+        "/settings",
+        "/costing",
+        "/purchasing",
+        "/people",
+        "/assets"
+      ]
+    },
+    "member": {
+      "login": {
+        "url": "/",
+        "actions": [
+          {
+            "fill": {
+              "selector": "#login-user",
+              "value": "member"
+            }
+          },
+          {
+            "fill": {
+              "selector": "#login-pass",
+              "value": "$ENV:QA_PASS_MEMBER"
+            }
+          },
+          {
+            "click": "button.btn-primary"
+          }
+        ],
+        "wait_for": "header"
+      },
+      "forbidden_routes": [
+        "/users",
+        "/roles",
+        "/audit",
+        "/settings",
+        "/costing",
+        "/purchasing",
+        "/people",
+        "/assets",
+        "/reports",
+        "/clients",
+        "/menu",
+        "/warehouse",
+        "/expenses",
+        "/close",
+        "/production"
+      ]
+    },
+    "client": {
+      "login": {
+        "url": "/portal",
+        "actions": [
+          {
+            "fill": {
+              "selector": "#p-user",
+              "value": "qaclient"
+            }
+          },
+          {
+            "fill": {
+              "selector": "#p-pass",
+              "value": "$ENV:QA_PASS_CLIENT"
+            }
+          },
+          {
+            "click": "button.btn-primary"
+          }
+        ],
+        "wait_for": "header"
+      },
+      "routes": [
+        "/portal",
+        "/portal/order",
+        "/portal/orders",
+        "/portal/subscription",
+        "/portal/notifications",
+        "/portal/account"
+      ],
+      "forbidden_routes": [
+        "/orders",
+        "/clients",
+        "/settings",
+        "/reports"
+      ]
+    }
+  }
+}

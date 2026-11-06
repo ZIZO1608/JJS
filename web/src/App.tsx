@@ -117,7 +117,7 @@ export function App() {
             <Route path="purchasing/*" element={g("purchasing", <PurchasingPage />)} />
             <Route path="costing/*" element={g("costing", <CostingPage />)} />
             <Route path="expenses" element={g("expenses", <ExpensesPage />)} />
-            <Route path="assets" element={g("assets", <AssetsPage />)} />
+            <Route path="fixed-assets" element={g("assets", <AssetsPage />)} />
             <Route path="people/*" element={g("people", <PeoplePage />)} />
             <Route path="reports" element={g("reports", <ReportsPage />)} />
             <Route path="users" element={g("users", <UsersPage />)} />

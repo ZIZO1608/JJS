@@ -10,7 +10,7 @@ import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
-import { assertOrderQtys, assignDelivery, cancelOrder, createOrder, deliverOrder, orderRemaining, priceOrder } from "../services/orders.js";
+import { assertOrderQtys, assignDelivery, cancelOrder, createOrder, deliverOrder, owedLookup, priceOrder } from "../services/orders.js";
 import { notifyDeliveryAssigned, notifyOrderStatus } from "../services/portal.js";
 
 export const ordersRouter = Router();
@@ -83,6 +83,7 @@ ordersRouter.get(
       .limit(200)
       .all();
     const lines = rows.length ? db.select({ orderId: orderLines.orderId, nameAr: orderLines.nameAr, nameEn: orderLines.nameEn, qty: orderLines.qty }).from(orderLines).where(inArray(orderLines.orderId, rows.map((r) => r.o.id))).all() : [];
+    const owed = owedLookup(db);
     res.json({
       myEmployeeId: mine?.id ?? null,
       rows: rows.map((r) => ({
@@ -96,7 +97,7 @@ ordersRouter.get(
         total: r.o.total,
         currency: r.o.currency,
         paidAmount: r.o.paidAmount,
-        remaining: orderRemaining(r.o),
+        remaining: owed(r.o),
         deliveredAt: r.o.deliveredAt,
         deliveryCollected: r.o.deliveryCollected,
         note: r.o.note,

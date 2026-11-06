@@ -5,9 +5,9 @@ import { db } from "../db/client.js";
 import { batches, businessDays, cashBoxes, clients, orderReports, orderRequests, orders, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { can, requirePerm, type AuthUser } from "../lib/auth.js";
-import { currentRate, getDay, localDate, round4 } from "../lib/biz.js";
+import { currentRate, getDay, localDate, round4, type Q } from "../lib/biz.js";
 import { h, HttpError, nowIso, parse } from "../lib/util.js";
-import { orderRemaining } from "../services/orders.js";
+import { owedLookup } from "../services/orders.js";
 import { addBoxMove, boxBalance, handOverRepCash, systemBox } from "../services/money.js";
 import { takeFromBatch } from "../services/stock.js";
 import { periodReport, productionVsSales, reportFor } from "../services/reports.js";
@@ -44,10 +44,11 @@ function dayHighlights(date: string) {
     .where(and(eq(orders.businessDate, date), isNull(orders.deletedAt), ne(orders.status, "cancelled"), ne(orders.type, "internal")))
     .orderBy(desc(orders.number))
     .all();
-  const row = (x: (typeof dayOrders)[number]) => ({ orderId: x.o.id, number: x.o.number, clientId: x.o.clientId, clientName: x.clientName, assignedName: x.assignedName, total: x.o.total, currency: x.o.currency, remaining: orderRemaining(x.o) });
+  const owed = owedLookup(db);
+  const row = (x: (typeof dayOrders)[number]) => ({ orderId: x.o.id, number: x.o.number, clientId: x.o.clientId, clientName: x.clientName, assignedName: x.assignedName, total: x.o.total, currency: x.o.currency, remaining: owed(x.o) });
   const notDelivered = dayOrders.filter((x) => x.o.status === "confirmed");
-  const unpaid = dayOrders.filter((x) => orderRemaining(x.o) > 0);
-  const owedUsd = (x: (typeof dayOrders)[number]) => (x.o.total > 0 ? (orderRemaining(x.o) / x.o.total) * x.o.totalUsd : 0);
+  const unpaid = dayOrders.filter((x) => owed(x.o) > 0);
+  const owedUsd = (x: (typeof dayOrders)[number]) => (x.o.total > 0 ? (owed(x.o) / x.o.total) * x.o.totalUsd : 0);
   return {
     previous: { date: previousDate(date), salesUsd: prev.salesUsd, orders: prev.orders, items: prev.items },
     deliveries: { done: dayOrders.length - notDelivered.length, total: dayOrders.length },
@@ -60,6 +61,10 @@ function dayHighlights(date: string) {
     rate: currentRate(),
   };
 }
+
+/** The box as it stood at the end of `date`: later days are left out. */
+const boxUpTo = (tx: Q, boxId: string, date: string) =>
+  tx.get<{ s: number }>(sql`select coalesce(sum(amount),0) as s from box_moves where box_id = ${boxId} and deleted_at is null and business_date <= ${date}`)?.s ?? 0;
 
 function dayView(date: string, user: AuthUser | undefined) {
   const day = getDay(db, date);
@@ -102,7 +107,7 @@ function dayView(date: string, user: AuthUser | undefined) {
     production: productionVsSales(db, date, date).map(({ itemId: _i, ...r }) => r),
     day: { ...dayOut(day, user), closedByName: day.closedBy ? (db.select({ n: users.name }).from(users).where(eq(users.id, day.closedBy)).get()?.n ?? null) : null },
     report: reportFor(user, periodReport(db, date, date)),
-    mainBox: { id: main.id, nameAr: main.nameAr, nameEn: main.nameEn, currency: main.currency, expected: blind ? null : round4(boxBalance(db, main.id)) },
+    mainBox: { id: main.id, nameAr: main.nameAr, nameEn: main.nameEn, currency: main.currency, expected: blind ? null : round4(boxUpTo(db, main.id, date)) },
     // ready products still in the fridge: kept for tomorrow, or thrown away at close
     leftovers: db
       .all<{ id: string; batch_code: string; name_ar: string; name_en: string; qty_left: number; expires_at: string | null }>(
@@ -167,7 +172,8 @@ daysRouter.post(
         writeAudit(tx, { userId: req.user!.id, action: "create", entity: "stock.waste", entityId: b.id, after: { batch: b.batchCode, qty: b.qtyLeft, costUsd: r.costUsd, at: "day close" } });
       }
       const main = systemBox(tx, "main_cash");
-      const expected = round4(boxBalance(tx, main.id));
+      // only money up to this day: closing yesterday must not count today's sales
+      const expected = round4(boxUpTo(tx, main.id, date));
       const diff = round4(body.counted - expected);
       if (Math.abs(diff) > 0.001) addBoxMove(tx, { boxId: main.id, type: "count_adjust", amount: diff, currency: main.currency, rate: currentRate(), refType: "day_close", refId: day.id, note: diff < 0 ? "Cash short at close" : "Cash over at close", userId: req.user!.id, date });
       const rate = currentRate();

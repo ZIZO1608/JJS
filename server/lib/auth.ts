@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, ne } from "drizzle-orm";
 import type { NextFunction, Request, Response } from "express";
 import { perm, type Action, type Module } from "../../shared/permissions.js";
 import { db } from "../db/client.js";
@@ -44,6 +44,13 @@ export function destroySession(req: Request, res: Response) {
   const token = req.cookies?.[SESSION_COOKIE];
   if (token) db.delete(sessions).where(eq(sessions.tokenHash, hashToken(token))).run();
   res.clearCookie(SESSION_COOKIE, { path: "/" });
+}
+
+/** Sign a user out everywhere (after a password change or reset), except the session in `keep` if given. */
+export function endSessions(userId: string, keep?: Request) {
+  const token = keep?.cookies?.[SESSION_COOKIE];
+  const kept = token ? hashToken(token) : null;
+  db.delete(sessions).where(kept ? and(eq(sessions.userId, userId), ne(sessions.tokenHash, kept)) : eq(sessions.userId, userId)).run();
 }
 
 export function rolePermissions(roleId: string): Set<string> {
@@ -108,21 +115,42 @@ export const requireAnyPerm =
 
 /** Simple brute-force brake: 5 wrong passwords lock that username for 60 seconds. */
 const failures = new Map<string, { count: number; until: number }>();
-export function checkLoginLock(username: string) {
+/**
+ * And per address: 20 wrong passwords from one IP within 10 minutes block that IP for 10 minutes,
+ * so nobody can try many usernames or keep the admin locked out. Loose enough for a shop on one Wi-Fi.
+ */
+const ipFailures = new Map<string, { count: number; since: number; until: number }>();
+const IP_MAX = 20;
+const IP_WINDOW_MS = 10 * 60_000;
+export function checkLoginLock(username: string, ip?: string) {
+  const now = Date.now();
+  const byIp = ip ? ipFailures.get(ip) : undefined;
+  if (byIp && byIp.until > now) {
+    throw new HttpError(429, "locked", "Too many wrong passwords. Wait a few minutes and try again.", { seconds: Math.ceil((byIp.until - now) / 1000) });
+  }
   const f = failures.get(username.toLowerCase());
-  if (f && f.until > Date.now()) {
-    throw new HttpError(429, "locked", "Too many wrong passwords. Wait a minute and try again.", { seconds: Math.ceil((f.until - Date.now()) / 1000) });
+  if (f && f.until > now) {
+    throw new HttpError(429, "locked", "Too many wrong passwords. Wait a minute and try again.", { seconds: Math.ceil((f.until - now) / 1000) });
   }
 }
-export function recordLoginFailure(username: string) {
+export function recordLoginFailure(username: string, ip?: string) {
+  const now = Date.now();
   const key = username.toLowerCase();
   const f = failures.get(key) ?? { count: 0, until: 0 };
   f.count += 1;
   if (f.count >= 5) {
-    f.until = Date.now() + 60_000;
+    f.until = now + 60_000;
     f.count = 0;
   }
   failures.set(key, f);
+  if (!ip) return;
+  const g = ipFailures.get(ip);
+  const cur = g && now - g.since < IP_WINDOW_MS ? g : { count: 0, since: now, until: 0 };
+  cur.count += 1;
+  if (cur.count >= IP_MAX) cur.until = now + IP_WINDOW_MS;
+  ipFailures.set(ip, cur);
+  // keep the map small on a long-running server
+  if (ipFailures.size > 5000) for (const [k, v] of ipFailures) if (now - v.since > IP_WINDOW_MS && v.until < now) ipFailures.delete(k);
 }
 export const clearLoginFailures = (username: string) => failures.delete(username.toLowerCase());
 

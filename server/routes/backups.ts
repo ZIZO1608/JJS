@@ -27,6 +27,18 @@ backupsRouter.post(
   }),
 );
 
+/** Download one backup file, so a copy can live off the server. Only names from the backup list are served. */
+backupsRouter.get(
+  "/download/:name",
+  requirePerm("settings", "edit"),
+  h((req, res) => {
+    const b = listBackups().find((x) => x.name === String(req.params.name));
+    if (!b) throw new HttpError(404, "not_found", "That backup does not exist.");
+    writeAudit(db, { userId: req.user!.id, action: "backup", entity: "system.download", after: { file: b.name } });
+    res.download(path.join(BACKUP_DIR, b.name), b.name);
+  }),
+);
+
 /**
  * Choose a backup to bring back. It takes effect when the app is closed and opened again;
  * the current data is kept as one more backup, so this can be undone the same way.

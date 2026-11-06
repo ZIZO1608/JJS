@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Currency } from "../../shared/money.js";
 import { boxMoves, cashBoxes, clientMoves, paymentMethods } from "../db/schema.js";
 import { convert, roundMoney, round4, toUsd, type Q } from "../lib/biz.js";
@@ -100,4 +100,60 @@ export function handOverRepCash(tx: Q, boxId: string, userId: string, date: stri
   addBoxMove(tx, { boxId: rep.id, type: "handover", amount: -amount, currency: rep.currency, rate, refType: "handover", userId, date });
   addBoxMove(tx, { boxId: main.id, type: "handover", amount, currency: rep.currency, rate, refType: "handover", userId, date });
   return { amount, currency: rep.currency };
+}
+
+/**
+ * The charges a client has not paid yet, oldest first, with what is left of each. They add up to what the client owes.
+ * Money tied to an invoice (paid at the door, a cancel or a return) settles that invoice first;
+ * account payments and whatever is left over settle the oldest charges.
+ */
+export function openClientCharges(tx: Q, clientId: string) {
+  const moves = tx.select().from(clientMoves).where(and(eq(clientMoves.clientId, clientId), isNull(clientMoves.deletedAt))).orderBy(asc(clientMoves.createdAt)).all();
+  const chargedTo = new Map<string, number>();
+  const paidTo = new Map<string, number>();
+  for (const m of moves) {
+    if (!m.orderId) continue;
+    const into = m.amountUsd < 0 ? chargedTo : paidTo;
+    into.set(m.orderId, (into.get(m.orderId) ?? 0) + Math.abs(m.amountUsd));
+  }
+  // per invoice: how much of its own money goes to its own charge (used once on each side)
+  const ownForCharge = new Map<string, number>();
+  const ownFromPay = new Map<string, number>();
+  for (const [orderId, charged] of chargedTo) {
+    const own = Math.min(charged, paidTo.get(orderId) ?? 0);
+    ownForCharge.set(orderId, own);
+    ownFromPay.set(orderId, own);
+  }
+  const open: { id: string; date: string; at: string; type: string; orderId: string | null; note: string; usd: number }[] = [];
+  let credit = 0;
+  for (const m of moves) {
+    if (m.amountUsd < 0) {
+      let owed = -m.amountUsd;
+      if (m.orderId) {
+        const own = Math.min(owed, ownForCharge.get(m.orderId) ?? 0);
+        ownForCharge.set(m.orderId, (ownForCharge.get(m.orderId) ?? 0) - own);
+        owed -= own;
+      }
+      const use = Math.min(credit, owed);
+      credit -= use;
+      owed -= use;
+      if (owed > 0.0001) open.push({ id: m.id, date: m.businessDate, at: m.createdAt, type: m.type, orderId: m.orderId, note: m.note, usd: owed });
+    } else {
+      let pay = m.amountUsd;
+      if (m.orderId) {
+        const own = Math.min(pay, ownFromPay.get(m.orderId) ?? 0);
+        ownFromPay.set(m.orderId, (ownFromPay.get(m.orderId) ?? 0) - own);
+        pay -= own;
+      }
+      while (pay > 0.0001 && open.length) {
+        const first = open[0]!;
+        const use = Math.min(pay, first.usd);
+        first.usd -= use;
+        pay -= use;
+        if (first.usd <= 0.0001) open.shift();
+      }
+      credit += pay;
+    }
+  }
+  return open;
 }

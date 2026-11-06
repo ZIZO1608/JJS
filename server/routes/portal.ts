@@ -27,10 +27,10 @@ portalRouter.post(
   "/login",
   h((req, res) => {
     const { username, password } = parse(z.object({ username: z.string().trim().min(1).max(60), password: z.string().min(1).max(100) }), req.body);
-    checkLoginLock(lockKey(username));
+    checkLoginLock(lockKey(username), req.ip);
     const a = db.select().from(clientAccounts).where(and(eq(clientAccounts.username, username.toLowerCase()), isNull(clientAccounts.deletedAt))).get();
     if (!a || !checkPassword(password, a.passwordHash)) {
-      recordLoginFailure(lockKey(username));
+      recordLoginFailure(lockKey(username), req.ip);
       throw new HttpError(401, "wrong_credentials", "The username or password is wrong.");
     }
     const client = loadClient(a.id);
@@ -198,7 +198,7 @@ portalRouter.get(
   "/products/:id/photo",
   h((req, res) => {
     const p = db.select({ photo: products.photo }).from(products).where(and(eq(products.id, String(req.params.id)), eq(products.active, true), isNull(products.deletedAt))).get();
-    const m = p?.photo.match(/^data:(image\/[a-z+]+);base64,(.*)$/);
+    const m = p?.photo.match(/^data:(image\/(?:png|jpeg|webp|gif));base64,(.*)$/);
     if (!m) throw notFound("photo");
     res.setHeader("Content-Type", m[1]!);
     res.setHeader("Cache-Control", "max-age=300");

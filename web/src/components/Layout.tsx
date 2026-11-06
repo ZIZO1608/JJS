@@ -24,7 +24,7 @@ export const pathFor = (m: Module) =>
     purchasing: "/purchasing",
     costing: "/costing",
     expenses: "/expenses",
-    assets: "/assets",
+    assets: "/fixed-assets",
     people: "/people",
     reports: "/reports",
     users: "/users",

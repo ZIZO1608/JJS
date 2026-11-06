@@ -10,6 +10,7 @@ import {
   clearLoginFailures,
   createSession,
   destroySession,
+  endSessions,
   hashPassword,
   loadUser,
   publicUser,
@@ -67,14 +68,14 @@ authRouter.post(
   "/login",
   h((req, res) => {
     const { username, password } = parse(loginSchema, req.body);
-    checkLoginLock(username);
+    checkLoginLock(username, req.ip);
     const u = db
       .select()
       .from(users)
       .where(and(eq(users.username, username.toLowerCase()), isNull(users.deletedAt)))
       .get();
     if (!u || !checkPassword(password, u.passwordHash)) {
-      recordLoginFailure(username);
+      recordLoginFailure(username, req.ip);
       throw new HttpError(401, "wrong_credentials", "The username or password is wrong.");
     }
     if (!u.active) throw new HttpError(403, "user_inactive", "This user is deactivated. Ask the admin to activate it.");
@@ -118,6 +119,8 @@ authRouter.put(
     const u = db.select().from(users).where(eq(users.id, req.user!.id)).get()!;
     if (!checkPassword(body.current, u.passwordHash)) throw new HttpError(400, "wrong_password", "The current password is wrong.");
     db.update(users).set({ passwordHash: hashPassword(body.next), updatedAt: nowIso(), syncedAt: null }).where(eq(users.id, u.id)).run();
+    // other phones and computers signed in as this user are signed out; this one stays in
+    endSessions(u.id, req);
     writeAudit(db, { userId: u.id, action: "edit", entity: "user", entityId: u.id, after: { password: "changed" } });
     res.json({ ok: true });
   }),

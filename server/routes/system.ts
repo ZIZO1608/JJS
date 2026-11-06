@@ -9,7 +9,7 @@ import { writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePerm } from "../lib/auth.js";
 import { getSetting, setSetting } from "../lib/settings.js";
 import { DATA_DIR, PORT } from "../env.js";
-import { h, newId, parse } from "../lib/util.js";
+import { h, HttpError, newId, parse } from "../lib/util.js";
 import { pendingCount, syncNow } from "../services/sync.js";
 
 export const systemRouter = Router();
@@ -66,7 +66,7 @@ systemRouter.get(
       .flat()
       .filter((a): a is os.NetworkInterfaceInfo => !!a && a.family === "IPv4" && !a.internal)
       .map((a) => `http://${a.address}:${PORT}`);
-    res.json({ ...getSetting("network"), addresses, port: PORT, dataDir: DATA_DIR, listeningOnLan: process.env.JJS_LAN_ACTIVE === "1" });
+    res.json({ ...getSetting("network"), addresses, port: PORT, dataDir: DATA_DIR, listeningOnLan: process.env.JJS_LAN_ACTIVE === "1", online: ONLINE });
   }),
 );
 systemRouter.put(
@@ -106,11 +106,15 @@ systemRouter.post(
   h(async (_req, res) => res.json(await syncNow())),
 );
 
-/** Load the sample menu, stock and clients (only on an empty system). */
+/** The online server (Docker image) holds the real shop: sample data is for trying things on a laptop copy. */
+const ONLINE = process.env.JJS_ONLINE === "1";
+
+/** Load the sample menu, stock and clients (only on an empty system, never on the online server). */
 systemRouter.post(
   "/demo-data",
   requirePerm("settings", "edit"),
   h((req, res) => {
+    if (ONLINE) throw new HttpError(403, "sample_data_online", "Sample data cannot be loaded on the online server: it would mix with the shop's real data.");
     const out = db.transaction((tx) => {
       const r = loadDemoData(tx, req.user!.id);
       if (r.loaded) {

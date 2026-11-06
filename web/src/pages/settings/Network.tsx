@@ -14,6 +14,7 @@ interface NetworkInfo {
   port: number;
   dataDir: string;
   listeningOnLan: boolean;
+  online?: boolean;
 }
 interface SyncInfo {
   enabled: boolean;
@@ -136,7 +137,7 @@ export function NetworkTab() {
         )}
       </section>
 
-      {edit && (
+      {edit && net.data && !net.data.online && (
         <section className="card grid gap-3">
           <h2 className="text-lg font-bold">{tr("بيانات تجريبية", "Sample data")}</h2>
           <p className="text-sm text-muted">{tr("منيو، مواد، زبائن، مورّدين، قوائم أسعار ومندوب للتجربة. بتشتغل بس إذا القائمة فاضية، وفيك تعدّلها أو تحذفها بعدين.", "A menu, stock, clients, suppliers, price lists and a rep to try things with. Works only on an empty menu; edit or delete it later.")}</p>

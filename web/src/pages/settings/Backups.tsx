@@ -106,9 +106,15 @@ export function BackupsTab() {
                   <td className="td text-end ltr num">{size(b.sizeBytes)}</td>
                   <td className="td text-end">
                     {can("settings", "edit") && (
-                      <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setRestore(b)}>
-                        {tr("استرجاع", "Restore")}
-                      </button>
+                      <>
+                        {/* a copy on the owner's own computer survives even if the server is lost */}
+                        <a className="btn btn-ghost px-2 py-1 text-sm" href={`/api/backups/download/${encodeURIComponent(b.name)}`} download={b.name}>
+                          {tr("تنزيل", "Download")}
+                        </a>
+                        <button className="btn btn-ghost px-2 py-1 text-sm" onClick={() => setRestore(b)}>
+                          {tr("استرجاع", "Restore")}
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

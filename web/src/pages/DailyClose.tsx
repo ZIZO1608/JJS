@@ -218,7 +218,7 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
   const best = top[0];
   const headline = !r.orders
     ? tr("ما في طلبات بهاليوم لهلأ.", "No orders on this day yet.")
-    : tr(`${r.orders} طلب و${qty(r.items)} قطعة بـ ${usd(r.salesUsd)}${best ? `، والأكتر مبيعاً ${pick(best)}` : ""}.`, `${r.orders} orders and ${qty(r.items)} items for ${usd(r.salesUsd)}${best ? `. Best seller: ${pick(best)}` : ""}.`);
+    : tr(`${r.orders} طلب و${qty(r.items)} قطعة بـ ${usd(r.salesUsd)}${best ? `، والأكتر مبيعاً ${pick(best)}` : ""}.`, `${r.orders} ${r.orders === 1 ? "order" : "orders"} and ${qty(r.items)} items for ${usd(r.salesUsd)}${best ? `. Best seller: ${pick(best)}` : ""}.`);
   const attention = h.notDelivered.length + h.unpaidCount + h.openReports + h.waitingRequests;
   return (
     <section className="grid gap-3" aria-label={tr("ملخص اليوم", "Summary of the day")}>
@@ -238,9 +238,9 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
           {showCollected ? (
             <HeroNumber label={tr("انقبض اليوم", "Collected today")} value={usd(r.collectedUsd ?? 0)} sub={<span className="text-xs text-muted">{h.rate ? money((r.collectedUsd ?? 0) * h.rate, "SYP", lang) : ""}</span>} tone="good" />
           ) : (
-            <HeroNumber label={tr("القطع", "Items")} value={qty(r.items)} sub={<span className="text-xs text-muted">{tr(`${r.orders} طلب`, `${r.orders} orders`)}</span>} />
+            <HeroNumber label={tr("القطع", "Items")} value={qty(r.items)} sub={<span className="text-xs text-muted">{tr(`${r.orders} طلب`, `${r.orders} ${r.orders === 1 ? "order" : "orders"}`)}</span>} />
           )}
-          <HeroNumber label={tr("ما اندفع لسا", "Not paid yet")} value={usd(h.unpaidUsd)} tone={h.unpaidCount ? "bad" : "good"} sub={<span className="text-xs text-muted">{h.unpaidCount ? tr(`${h.unpaidCount} طلب بالغيمة`, `${h.unpaidCount} orders in the cloud`) : tr("كلو مدفوع ✓", "All paid ✓")}</span>} />
+          <HeroNumber label={tr("ما اندفع لسا", "Not paid yet")} value={usd(h.unpaidUsd)} tone={h.unpaidCount ? "bad" : "good"} sub={<span className="text-xs text-muted">{h.unpaidCount ? tr(`${h.unpaidCount} طلب بالغيمة`, `${h.unpaidCount} ${h.unpaidCount === 1 ? "order" : "orders"} in the cloud`) : tr("كلو مدفوع ✓", "All paid ✓")}</span>} />
           <HeroNumber label={r.netUsd !== undefined ? tr("الصافي", "Net") : tr("مصاريف وهدر", "Expenses & waste")} value={usd(r.netUsd ?? r.expensesUsd + r.wasteUsd)} tone={r.netUsd !== undefined ? (r.netUsd < 0 ? "bad" : "good") : undefined} sub={<span className="text-xs text-muted">{tr(`خصومات ${usd(r.discountUsd)}`, `Discounts ${usd(r.discountUsd)}`)}</span>} />
         </div>
       </div>
@@ -289,7 +289,7 @@ function DayStory({ r, h, date, closed, showCollected }: { r: PeriodReport; h: H
               {h.notDelivered.length > 0 && (
                 <li>
                   <Link to="/deliveries" className="font-semibold text-warn hover:underline">
-                    🛵 {tr(`${h.notDelivered.length} طلب لسا ما تسلّم`, `${h.notDelivered.length} orders not delivered yet`)}
+                    🛵 {tr(`${h.notDelivered.length} طلب لسا ما تسلّم`, `${h.notDelivered.length} ${h.notDelivered.length === 1 ? "order" : "orders"} not delivered yet`)}
                   </Link>
                   <div className="text-xs text-muted">{h.notDelivered.slice(0, 5).map((o) => `#${o.number} ${o.clientName ?? ""}`.trim()).join(" · ")}</div>
                 </li>

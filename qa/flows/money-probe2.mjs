@@ -1,0 +1,20 @@
+import { login } from "./lib.mjs";
+const a = await login("jabal", "qaAdmin123");
+const P = (await a("GET", "/menu/products")).json; const prods = P.products ?? P.rows ?? P;
+const M = (await a("GET", "/money/methods")).json; const ms = M.methods ?? M.rows ?? M;
+const cj = (await a("GET", "/clients")).json; const clients = cj.clients ?? cj.rows ?? cj;
+const cash = ms[0];
+const line = [{ productId: prods[0].id, qty: 5 }];
+const pick = (j) => { const { lines, ...rest } = j ?? {}; return JSON.stringify(rest).slice(0, 500); };
+for (const [tag, extra] of [["amount>total", { manualDiscountAmount: 999999 }], ["pct100", { manualDiscountPct: 100 }], ["pct50+amt1", { manualDiscountPct: 50, manualDiscountAmount: 1 }], ["amt 1.005", { manualDiscountAmount: 1.005 }]])
+  console.log(tag, pick((await a("POST", "/orders/quote", { lines: line, methodId: cash.id, ...extra })).json));
+const box = async () => JSON.stringify(((await a("GET", "/money/boxes")).json.boxes ?? []).map((b) => [b.nameEn, b.balance ?? b.balanceUsd]));
+console.log("boxes before", await box());
+const o = await a("POST", "/orders", { lines: line, clientId: clients[1].id, methodId: ms.find((m) => m.kind === "credit").id, fulfilment: "delivery" });
+console.log("credit order", o.status, o.json?.receipt?.payment, o.json?.receipt?.account);
+const id = o.json.id;
+console.log("deliver part", (await a("POST", `/orders/${id}/deliver`, { collection: { mode: "part", amount: 5, currency: "USD", methodId: cash.id } })).json);
+console.log("deliver again full", (await a("POST", `/orders/${id}/deliver`, { collection: { mode: "full", methodId: cash.id } })).json);
+console.log("boxes after", await box());
+const c = (await a("GET", `/clients/${clients[1].id}`)).json.client;
+console.log("client bal", c.balanceUsd ?? c.balance, JSON.stringify(c).slice(0,200));

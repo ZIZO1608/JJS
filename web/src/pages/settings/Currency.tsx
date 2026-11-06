@@ -21,13 +21,15 @@ interface HistoryRow {
 }
 
 export function CurrencyTab() {
-  const { t, err, fmtDate } = useI18n();
+  const { t, tr, err, fmtDate } = useI18n();
   const { can } = useAuth();
   const toast = useToast();
   const editable = can("settings", "edit");
   const [cur, setCur] = useState<Current | null>(null);
   const [def, setDef] = useState<"USD" | "SYP">("USD");
   const [manual, setManual] = useState("");
+  // The shop uses the new pound (about 140 per dollar); 1,000 or more is an old-pound rate typed by habit.
+  const oldPounds = Number(manual) >= 1000;
   const [cfg, setCfg] = useState({ apiUrl: "", jsonPath: "rate", apiKey: "", hasApiKey: false });
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [busy, setBusy] = useState(false);
@@ -119,7 +121,7 @@ export function CurrencyTab() {
           </div>
           {editable && (
             <>
-              <button className="btn btn-primary" disabled={busy || !(Number(manual) > 0)} onClick={() => run(() => put("/fx/manual", { rate: Number(manual) }))}>
+              <button className="btn btn-primary" disabled={busy || !(Number(manual) > 0) || oldPounds} onClick={() => run(() => put("/fx/manual", { rate: Number(manual) }))}>
                 {t("currency.setManual")}
               </button>
               {cur.manualRate && (
@@ -137,6 +139,14 @@ export function CurrencyTab() {
             </>
           )}
         </div>
+        {oldPounds && (
+          <p className="mt-2 text-sm text-bad">
+            {tr(
+              `هذا سعر بالليرة القديمة. اكتب السعر بالليرة الجديدة (بدون الصفرين)، مثلاً ${Math.round(Number(manual) / 100)}.`,
+              `This is an old-pound rate. Type the new-pound rate (two zeros removed), e.g. ${Math.round(Number(manual) / 100)}.`,
+            )}
+          </p>
+        )}
       </div>
 
       <div className="card">

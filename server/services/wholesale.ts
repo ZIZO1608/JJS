@@ -17,10 +17,10 @@ import {
   returns,
   suppliers,
 } from "../db/schema.js";
-import { assertDayOpen, currentRate, localDate, nextNumber, rateFor, roundMoney, round4, toUsd, type Q } from "../lib/biz.js";
+import { assertDayOpen, convert, currentRate, localDate, nextNumber, rateFor, roundMoney, round4, toUsd, type Q } from "../lib/biz.js";
 import { getSetting } from "../lib/settings.js";
 import { HttpError, newId, nowIso } from "../lib/util.js";
-import { addClientMove, clientBalanceUsd, payFromBox } from "./money.js";
+import { addClientMove, clientBalanceUsd, openClientCharges, payFromBox } from "./money.js";
 import { createOrder, priceOrder } from "./orders.js";
 import { ensureProductItem, itemQty, produceBatch, recipeCostUsd, recipeOf, returnProductStock, reverseStock, takeProductStock } from "./stock.js";
 
@@ -44,32 +44,6 @@ export function clientAging(tx: Q, clientId: string, today = localDate()) {
   return { balanceUsd, oldestUnpaidDate: oldest, daysOutstanding: days, termsDays: terms, overdueDays: oldest && balanceUsd < -0.009 ? Math.max(0, days - terms) : 0 };
 }
 
-/** The charges a client has not paid yet, oldest first, with what is left of each. They add up to what the client owes. */
-export function openClientCharges(tx: Q, clientId: string) {
-  const moves = tx.select().from(clientMoves).where(and(eq(clientMoves.clientId, clientId), isNull(clientMoves.deletedAt))).orderBy(asc(clientMoves.createdAt)).all();
-  const open: { id: string; date: string; at: string; type: string; orderId: string | null; note: string; usd: number }[] = [];
-  let credit = 0;
-  for (const m of moves) {
-    if (m.amountUsd < 0) {
-      let owed = -m.amountUsd;
-      const use = Math.min(credit, owed);
-      credit -= use;
-      owed -= use;
-      if (owed > 0.0001) open.push({ id: m.id, date: m.businessDate, at: m.createdAt, type: m.type, orderId: m.orderId, note: m.note, usd: owed });
-    } else {
-      let pay = m.amountUsd;
-      while (pay > 0.0001 && open.length) {
-        const first = open[0]!;
-        const use = Math.min(pay, first.usd);
-        first.usd -= use;
-        pay -= use;
-        if (first.usd <= 0.0001) open.shift();
-      }
-      credit += pay;
-    }
-  }
-  return open;
-}
 
 /* =====================================================================
    Returns
@@ -102,10 +76,16 @@ export function createReturn(tx: Q, input: ReturnInput, userId: string) {
     currency = o.currency;
     rate = o.fxRate;
     clientId = clientId ?? o.clientId;
-    const ratio = o.subtotal > 0 ? 1 - o.discount / o.subtotal : 1;
-    for (const l of tx.select().from(orderLines).where(eq(orderLines.orderId, o.id)).all()) {
+    // Credit what the client really paid: free units (loyalty, subscription) are worth nothing,
+    // and the % or amount discount is shared over the paid units only.
+    const oLines = tx.select().from(orderLines).where(eq(orderLines.orderId, o.id)).all();
+    const freeValue = oLines.reduce((s, l) => s + l.freeQty * l.unitPrice, 0);
+    const discountable = o.subtotal - freeValue;
+    const ratio = discountable > 0 ? Math.max(0, 1 - Math.max(0, o.discount - freeValue) / discountable) : 0;
+    for (const l of oLines) {
       const already = tx.get<{ q: number }>(sql`select coalesce(sum(rl.qty),0) as q from return_lines rl join returns r on r.id = rl.return_id where r.order_id = ${o.id} and rl.product_id = ${l.productId} and r.deleted_at is null`)?.q ?? 0;
-      priceOf.set(l.productId, { unit: roundMoney((l.lineTotal / l.qty) * ratio, currency), costUsd: l.unitCostUsd, nameAr: l.nameAr, nameEn: l.nameEn });
+      const paidOnLine = (l.qty - l.freeQty) * l.unitPrice * ratio;
+      priceOf.set(l.productId, { unit: roundMoney(l.qty > 0 ? paidOnLine / l.qty : 0, currency), costUsd: l.unitCostUsd, nameAr: l.nameAr, nameEn: l.nameEn });
       const wanted = input.lines.filter((x) => x.productId === l.productId).reduce((s, x) => s + x.qty, 0);
       if (wanted > l.qty - already) throw new HttpError(400, "return_too_many", `Only ${l.qty - already} of ${l.nameEn} can still be returned from this invoice.`);
     }
@@ -315,20 +295,28 @@ export function paySupplier(tx: Q, supplierId: string, p: { amount: number; curr
   if (!s) throw new HttpError(404, "not_found", "Supplier not found");
   const due = supplierDue(tx, supplierId);
   const rate = rateFor(p.currency, ...due.open.map((o) => o.currency), s.openingCurrency);
-  let leftUsd = round4(toUsd(p.amount, p.currency, rate));
-  if (leftUsd > due.totalDueUsd + 0.01) throw new HttpError(400, "overpaid", "That is more than what we owe this supplier.");
-  if (due.openingDueUsd > 0 && leftUsd > 0) {
-    const use = Math.min(leftUsd, due.openingDueUsd);
-    tx.update(suppliers).set({ openingPaidUsd: round4(s.openingPaidUsd + use), updatedAt: nowIso(), syncedAt: null }).where(eq(suppliers.id, s.id)).run();
-    leftUsd -= use;
+  // Work in the payment's own currency: pounds against a pounds invoice count one for one,
+  // so paying the exact invoice amount always clears it, whatever the rate did since.
+  const fromUsd = (usd: number) => roundMoney(p.currency === "USD" ? usd : convert(usd, "USD", p.currency, rate ?? 0), p.currency);
+  const dueIn = (o: (typeof due.open)[number]) => (o.currency === p.currency ? o.due : fromUsd(o.dueUsd));
+  const openingIn = due.openingDueUsd > 0 ? fromUsd(due.openingDueUsd) : 0;
+  const totalIn = roundMoney(openingIn + due.open.reduce((sum, o) => sum + dueIn(o), 0), p.currency);
+  if (p.amount > totalIn + (p.currency === "USD" ? 0.01 : 1)) throw new HttpError(400, "overpaid", "That is more than what we owe this supplier.");
+  let left = p.amount;
+  if (openingIn > 0 && left > 0) {
+    const use = Math.min(left, openingIn);
+    const useUsd = use >= openingIn ? due.openingDueUsd : round4(toUsd(use, p.currency, rate));
+    tx.update(suppliers).set({ openingPaidUsd: round4(s.openingPaidUsd + useUsd), updatedAt: nowIso(), syncedAt: null }).where(eq(suppliers.id, s.id)).run();
+    left -= use;
   }
   for (const o of due.open) {
-    if (leftUsd <= 0.0001) break;
-    const useUsd = Math.min(leftUsd, o.dueUsd);
+    if (left <= (p.currency === "USD" ? 0.0001 : 0.5)) break;
+    const owed = dueIn(o);
+    const use = Math.min(left, owed);
     const pr = tx.select().from(purchases).where(eq(purchases.id, o.id)).get()!;
-    const inCcy = useUsd >= o.dueUsd - 0.0001 ? o.due : roundMoney(useUsd * (pr.total / pr.totalUsd), pr.currency);
+    const inCcy = use >= owed ? o.due : o.currency === p.currency ? use : roundMoney(toUsd(use, p.currency, rate) * (pr.total / pr.totalUsd), pr.currency);
     tx.update(purchases).set({ paid: round4(pr.paid + inCcy), updatedAt: nowIso(), syncedAt: null }).where(eq(purchases.id, o.id)).run();
-    leftUsd -= useUsd;
+    left -= use;
   }
   payFromBox(tx, { boxId: p.boxId, type: "purchase", amount: -p.amount, currency: p.currency, rate, refType: "supplier", refId: supplierId, note: p.note || `Payment to ${s.name}`, userId, date });
   return supplierDue(tx, supplierId);
@@ -347,4 +335,4 @@ export function consignmentOpenValueUsd(tx: Q) {
 }
 
 export const productItemId = (tx: Q, productId: string) => ensureProductItem(tx, productId);
-export { currentRate };
+export { currentRate, openClientCharges };
