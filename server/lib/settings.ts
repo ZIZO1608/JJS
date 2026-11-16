@@ -58,6 +58,8 @@ export interface PrintSettings {
   labelPaddingMm: number;
   /** Empty space on each side of a thermal receipt (mm). */
   receiptSideMm: number;
+  /** Shift the whole receipt (mm): + right, − left. For a 3-inch head printing on 58 mm paper. */
+  receiptOffsetXMm: number;
 }
 /** Which roll is in the shared label/receipt printer, so every PC can say "swap the roll first". */
 export interface PrinterRoll {
@@ -116,7 +118,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 2 },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 2, receiptOffsetXMm: 0 },
   "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },

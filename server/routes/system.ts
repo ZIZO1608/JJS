@@ -40,6 +40,7 @@ const printingSchema = z.object({
   labelOffsetYMm: z.number().min(-15).max(15).default(0),
   labelPaddingMm: z.number().min(0).max(8).default(1.2),
   receiptSideMm: z.number().min(0).max(10).default(2),
+  receiptOffsetXMm: z.number().min(-15).max(15).default(0),
 });
 
 for (const [key, schema] of [

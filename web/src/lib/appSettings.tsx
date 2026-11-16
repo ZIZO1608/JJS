@@ -13,6 +13,7 @@ export interface AppSettings {
     labelOffsetYMm: number;
     labelPaddingMm: number;
     receiptSideMm: number;
+    receiptOffsetXMm: number;
   };
   business: { nameAr: string; nameEn: string; phone?: string; address?: string; logo?: string };
 }
