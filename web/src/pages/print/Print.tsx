@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useAppSettings, type AppSettings } from "../../lib/appSettings";
 import { money, qty as fq, today, usd, type Currency } from "../../lib/format";
 import { useI18n, type Lang } from "../../lib/i18n";
+import { desktop, getRoll, readDevicePrinters, setRoll, type PrintKind, type RollState } from "../../lib/print";
 import { useData } from "../../lib/useData";
 import type { Batch, PeriodReport } from "../../lib/types";
 import { waLink } from "../distribution/common";
@@ -34,19 +35,198 @@ function usePrintOnce(ready: boolean, page: string) {
   }, [page]);
   useEffect(() => {
     if (!ready || done.current) return;
-    done.current = true;
-    const t = setTimeout(() => window.print(), 450);
+    const t = setTimeout(() => {
+      if (done.current) return;
+      done.current = true;
+      window.print();
+    }, 450);
     return () => clearTimeout(t);
   }, [ready]);
 }
 
-function Toolbar({ children }: { children?: ReactNode }) {
+/** A label or receipt job: which printer it needs and its paper size. `heightMm: "auto"` measures the receipt. */
+interface Job {
+  kind: PrintKind;
+  widthMm: number;
+  heightMm: number | "auto";
+}
+type Stage = "idle" | "swap" | "printing" | "done" | "error";
+
+/**
+ * Like usePrintOnce, but in the desktop app a label or receipt goes straight to this PC's chosen printer.
+ * When labels and receipts share one printer and the other roll is in, it first asks to swap the roll.
+ * Anywhere else (a browser, no printer chosen, A4) it opens the normal print window.
+ */
+function useSmartPrint(ready: boolean, page: string, job: Job | null) {
+  const styleRef = useRef<HTMLStyleElement | null>(null);
+  const done = useRef(false);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState<RollState | null>(null);
+  const cfg = useMemo(readDevicePrinters, []);
+  const api = desktop();
+  const device = job ? cfg[job.kind] : "";
+  const direct = !!(api && job && device && cfg.direct);
+
+  useEffect(() => {
+    const st = document.createElement("style");
+    st.textContent = `@page { ${page} } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    document.head.appendChild(st);
+    styleRef.current = st;
+    return () => st.remove();
+  }, [page]);
+
+  const send = async () => {
+    if (!api || !job) return;
+    setStage("printing");
+    let height = job.heightMm;
+    if (height === "auto") {
+      const root = document.getElementById("print-root");
+      // px → mm, plus a little paper so the last line clears the tear bar
+      height = Math.ceil(((root?.offsetHeight ?? 400) * 25.4) / 96) + 10;
+    }
+    if (styleRef.current) styleRef.current.textContent = `@page { size: ${job.widthMm}mm ${height}mm; margin: 0 } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    const r = await api.print({ deviceName: device, widthMm: job.widthMm, heightMm: height });
+    if (r.ok) {
+      setStage("done");
+      if (window.opener) setTimeout(() => window.close(), 1500);
+    } else {
+      setError(r.error ?? "");
+      setStage("error");
+    }
+  };
+
+  const start = async () => {
+    if (!direct || !job) {
+      window.print();
+      return;
+    }
+    if (cfg.sharedRoll) {
+      try {
+        const r = await getRoll();
+        if (r.roll !== job.kind) {
+          setLoaded(r);
+          setStage("swap");
+          return;
+        }
+      } catch {
+        /* server unreachable: print anyway rather than block the sale */
+      }
+    }
+    await send();
+  };
+
+  const swapped = async () => {
+    if (!job) return;
+    try {
+      await setRoll(job.kind);
+    } catch {
+      /* the print still goes out; the next job will ask again */
+    }
+    await send();
+  };
+
+  useEffect(() => {
+    if (!ready || done.current) return;
+    // mark "done" only when the timer fires: a cleared timer (React re-running effects) must not eat the print
+    const t = setTimeout(() => {
+      if (done.current) return;
+      done.current = true;
+      void start();
+    }, 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  const panel = <PrintStatus stage={stage} job={job} device={device} loaded={loaded} error={error} onSwapped={swapped} onCancel={() => setStage("idle")} />;
+  return { print: () => void start(), dialog: () => window.print(), direct, panel };
+}
+
+const ROLL_NAME: Record<PrintKind, [string, string]> = { label: ["رول الملصقات", "label roll"], receipt: ["رول الفواتير 58 ملم", "58 mm receipt roll"] };
+
+function PrintStatus({
+  stage,
+  job,
+  device,
+  loaded,
+  error,
+  onSwapped,
+  onCancel,
+}: {
+  stage: Stage;
+  job: Job | null;
+  device: string;
+  loaded: RollState | null;
+  error: string;
+  onSwapped: () => void;
+  onCancel: () => void;
+}) {
+  const { tr } = useI18n();
+  if (stage === "idle" || !job) return null;
+  if (stage === "swap") {
+    const need = ROLL_NAME[job.kind];
+    const have = ROLL_NAME[loaded?.roll ?? (job.kind === "label" ? "receipt" : "label")];
+    return (
+      <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+        <div className="card grid w-full max-w-sm gap-3 text-center">
+          <div className="text-4xl" aria-hidden>
+            🔄
+          </div>
+          <h2 className="text-lg font-bold">{tr("بدّل الرول أولاً", "Swap the roll first")}</h2>
+          <p className="text-sm">
+            {tr(`بالطابعة هلق ${have[0]}. هالطباعة بدها ${need[0]}.`, `The ${have[1]} is in the printer. This print needs the ${need[1]}.`)}
+          </p>
+          <ol className="grid gap-1 text-start text-sm">
+            <li>1. {tr(`طلّع ${have[0]} وحط ${need[0]}`, `Take out the ${have[1]} and put in the ${need[1]}`)}</li>
+            <li>2. {tr("سكّر الغطا واضغط FEED لحتى تزمّر", "Close the cover and hold FEED until it beeps")}</li>
+            <li>3. {tr("اضغط «بدّلت، اطبع»", "Press “Swapped, print”")}</li>
+          </ol>
+          {loaded?.changedBy && (
+            <p className="text-xs text-faint">
+              {tr(`آخر تبديل: ${loaded.changedBy}`, `Last swapped by ${loaded.changedBy}`)}
+            </p>
+          )}
+          <div className="grid gap-2">
+            <button className="btn btn-primary min-h-[48px] text-base" onClick={onSwapped}>
+              {tr("بدّلت، اطبع", "Swapped, print")}
+            </button>
+            <button className="btn btn-ghost" onClick={onCancel}>
+              {tr("إلغاء", "Cancel")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const tone = stage === "error" ? "text-bad" : stage === "done" ? "text-good" : "text-muted";
+  return (
+    <div className={`no-print mx-2 mb-3 rounded-lg bg-sunken px-3 py-2 text-center text-sm font-semibold ${tone}`} role="status">
+      {stage === "printing" && tr(`عم يطبع على ${device}…`, `Printing on ${device}…`)}
+      {stage === "done" && tr(`انبعتت على ${device} ✓`, `Sent to ${device} ✓`)}
+      {stage === "error" && (
+        <>
+          {tr("ما زبطت الطباعة", "Printing didn't work")}: {error || "—"}
+          <button className="btn ms-2 px-2 py-1 text-xs" onClick={() => window.print()}>
+            {tr("افتح نافذة الطباعة", "Open print window")}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Toolbar({ children, onPrint, onDialog }: { children?: ReactNode; onPrint?: () => void; onDialog?: () => void }) {
   const { tr } = useI18n();
   return (
     <div className="no-print mb-4 flex flex-wrap items-center gap-2 border-b border-line bg-surface p-2">
-      <button className="btn btn-primary px-3 py-1.5" onClick={() => window.print()}>
+      <button className="btn btn-primary px-3 py-1.5" onClick={onPrint ?? (() => window.print())}>
         {tr("اطبع", "Print")}
       </button>
+      {onDialog && (
+        <button className="btn px-3 py-1.5" onClick={onDialog} title={tr("اختار الطابعة بنفسك", "Pick the printer yourself")}>
+          {tr("نافذة الطباعة…", "Print window…")}
+        </button>
+      )}
       {children}
       <button className="btn btn-ghost ms-auto px-3 py-1.5" onClick={() => (window.opener ? window.close() : window.history.back())}>
         {tr("إغلاق", "Close")}
@@ -87,7 +267,11 @@ export function PrintReceipt() {
   const rc = r.data?.receipt;
   const size = (sp.get("size") ?? s?.printing.invoiceSize ?? rc?.printing.invoiceSize ?? "thermal") === "a4" ? "a4" : "thermal";
   const width = rc?.printing.receiptWidthMm ?? 80;
-  usePrintOnce(!!rc, size === "a4" ? "size: A4; margin: 12mm" : `size: ${width}mm auto; margin: 2mm`);
+  const sp2 = useSmartPrint(
+    !!rc,
+    size === "a4" ? "size: A4; margin: 12mm" : `size: ${width}mm auto; margin: 2mm`,
+    size === "a4" ? null : { kind: "receipt", widthMm: width, heightMm: "auto" },
+  );
   if (r.error) return <p className="p-6 text-bad">{ui.err(r.error)}</p>;
   if (!rc) return <Loading />;
   const lang: Lang = rc.client?.language ?? ui.lang;
@@ -104,8 +288,8 @@ export function PrintReceipt() {
     .filter(Boolean)
     .join("\n");
   return (
-    <div className={size === "a4" ? "bg-white" : "bg-white"} dir={lang === "ar" ? "rtl" : "ltr"}>
-      <Toolbar>
+    <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
         <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group">
           {(["thermal", "a4"] as const).map((k) => (
             <button
@@ -127,6 +311,7 @@ export function PrintReceipt() {
           </a>
         )}
       </Toolbar>
+      {sp2.panel}
       {size === "a4" ? <InvoiceA4 rc={rc} lang={lang} s={s} /> : <ReceiptThermal rc={rc} lang={lang} s={s} width={width} />}
     </div>
   );
@@ -162,7 +347,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
     </div>
   );
   return (
-    <div className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
+    <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
       <div className="text-center">
         <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />
         <div className="text-[15px] font-bold">{pk(rc.business)}</div>
@@ -386,14 +571,15 @@ export function PrintLabels() {
     const n = copiesParam ? Math.max(1, Math.min(500, Number(copiesParam) || 1)) : b.item.kind === "product" ? Math.max(1, Math.min(200, Math.round(b.qtyLeft || b.qtyIn))) : 1;
     return Array.from({ length: n }, (_, i) => ({ b, key: `${b.id}-${i}` }));
   });
-  usePrintOnce(!!all.data && !!s, `size: ${w}mm ${h}mm; margin: 0`);
+  const sp2 = useSmartPrint(!!all.data && !!s && labels.length > 0, `size: ${w}mm ${h}mm; margin: 0`, { kind: "label", widthMm: w, heightMm: h });
   if (!all.data || !s) return <Loading />;
   const fmt = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   return (
     <div className="bg-white">
-      <Toolbar>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
         <span className="text-sm text-muted">{ui.tr(`${labels.length} ملصق · ${w}×${h} ملم`, `${labels.length} labels · ${w}×${h} mm`)}</span>
       </Toolbar>
+      {sp2.panel}
       {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في دفعات", "No batches")}</p>}
       <div className="flex flex-col items-center gap-2 print:block print:gap-0">
         {labels.map(({ b, key }) => (
@@ -425,7 +611,7 @@ export function PrintLabels() {
                 {b.allergens}
               </div>
             )}
-            <Barcode value={b.batchCode} height={Math.max(14, Math.round(h * 0.9))} />
+            <Barcode value={b.batchCode} height={Math.max(12, Math.round(h * 0.45))} />
           </div>
         ))}
       </div>
@@ -451,7 +637,11 @@ export function PrintTest() {
   const width = clamp(sp.get("width"), 58, 80, s?.printing.receiptWidthMm ?? 58) === 80 ? 80 : 58;
   const w = clamp(sp.get("w"), 20, 120, s?.printing.labelWidthMm ?? 50);
   const h = clamp(sp.get("h"), 15, 120, s?.printing.labelHeightMm ?? 30);
-  usePrintOnce(!!s, kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm auto; margin: 2mm`);
+  const sp2 = useSmartPrint(
+    !!s,
+    kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm auto; margin: 2mm`,
+    kind === "label" ? { kind: "label", widthMm: w, heightMm: h } : { kind: "receipt", widthMm: width, heightMm: "auto" },
+  );
   if (!s) return <Loading />;
   const now = new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const row = (a: ReactNode, b: ReactNode, bold = false) => (
@@ -462,11 +652,12 @@ export function PrintTest() {
   );
   return (
     <div className="bg-white" dir={ui.lang === "ar" ? "rtl" : "ltr"}>
-      <Toolbar>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
         <span className="text-sm text-muted">
           {kind === "label" ? tr(`ملصق تجربة · ${w}×${h} ملم`, `Test label · ${w}×${h} mm`) : tr(`فاتورة تجربة · ${width} ملم`, `Test invoice · ${width} mm`)}
         </span>
       </Toolbar>
+      {sp2.panel}
       {kind === "label" ? (
         <div className="flex justify-center">
           <div
@@ -490,7 +681,7 @@ export function PrintTest() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
+        <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
           <div className="flex justify-between text-[10px]" dir="ltr">
             <span>|◄ edge</span>
             <span>edge ►|</span>
@@ -517,6 +708,75 @@ export function PrintTest() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Product price labels                                                */
+/* ------------------------------------------------------------------ */
+
+interface LabelProduct {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  price: number;
+  currency: Currency;
+}
+
+/** `?items=<productId>:<copies>,…` — name, price and the product code as a barcode that New Order scans. */
+export function PrintProductLabels() {
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { s } = useAppSettings();
+  const wanted = useMemo(
+    () =>
+      (sp.get("items") ?? "")
+        .split(",")
+        .map((x) => x.split(":"))
+        .filter(([id]) => !!id)
+        .map(([id, n]) => ({ id: id ?? "", n: Math.max(1, Math.min(500, Math.round(Number(n) || 1))) })),
+    [sp],
+  );
+  const prods = useData<{ rows: LabelProduct[] }>("/menu/products");
+  const w = s?.printing.labelWidthMm ?? 50;
+  const h = s?.printing.labelHeightMm ?? 30;
+  const byId = new Map((prods.data?.rows ?? []).map((p) => [p.id, p]));
+  const labels = wanted.flatMap(({ id, n }) => {
+    const p = byId.get(id);
+    return p ? Array.from({ length: n }, (_, i) => ({ p, key: `${id}-${i}` })) : [];
+  });
+  const sp2 = useSmartPrint(!!prods.data && !!s && labels.length > 0, `size: ${w}mm ${h}mm; margin: 0`, { kind: "label", widthMm: w, heightMm: h });
+  if (prods.error) return <p className="p-6 text-bad">{ui.err(prods.error)}</p>;
+  if (!prods.data || !s) return <Loading />;
+  return (
+    <div className="bg-white">
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
+        <span className="text-sm text-muted">{ui.tr(`${labels.length} ملصق سعر · ${w}×${h} ملم`, `${labels.length} price labels · ${w}×${h} mm`)}</span>
+      </Toolbar>
+      {sp2.panel}
+      {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في منتجات", "No products")}</p>}
+      <div className="flex flex-col items-center gap-2 print:block print:gap-0">
+        {labels.map(({ p, key }) => (
+          <div
+            key={key}
+            className="flex flex-col justify-between overflow-hidden border border-dashed border-gray-400 bg-white p-[1.2mm] text-black print:border-0"
+            style={{ width: `${w}mm`, height: `${h}mm`, pageBreakAfter: "always", breakAfter: "page" }}
+          >
+            <div className="text-center leading-tight">
+              <div className="truncate text-[9pt] font-bold" dir="rtl">
+                {p.nameAr}
+              </div>
+              <div className="truncate text-[7pt]" dir="ltr">
+                {p.nameEn}
+              </div>
+            </div>
+            <div className="text-center text-[13pt] font-black leading-none num ltr">{money(p.price, p.currency, "en")}</div>
+            <Barcode value={p.code} height={Math.max(12, Math.round(h * 0.4))} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

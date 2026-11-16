@@ -1,7 +1,7 @@
 {
   "appId": "com.jjs.erp",
   "productName": "JJ's ERP",
-  "files": ["electron/client.cjs", "dist/web/logo.png", "package.json", "!node_modules/**/*"],
+  "files": ["electron/client.cjs", "electron/printing.cjs", "electron/preload.cjs", "dist/web/logo.png", "package.json", "!node_modules/**/*"],
   "extraMetadata": { "name": "jjs-erp", "main": "electron/client.cjs" },
   "npmRebuild": false,
   "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "build/icon.ico" },

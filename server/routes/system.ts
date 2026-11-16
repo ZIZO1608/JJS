@@ -57,6 +57,26 @@ for (const [key, schema] of [
   );
 }
 
+/**
+ * The roll in the shared label/receipt printer. Anyone who prints can say they swapped it,
+ * so it only needs a login, not settings rights.
+ */
+systemRouter.get(
+  "/printer-roll",
+  requireAuth,
+  h((_req, res) => res.json(getSetting("printing.roll"))),
+);
+systemRouter.put(
+  "/printer-roll",
+  requireAuth,
+  h((req, res) => {
+    const { roll } = parse(z.object({ roll: z.enum(["label", "receipt"]) }), req.body);
+    const value = { roll, changedAt: new Date().toISOString(), changedBy: req.user!.name };
+    setSetting("printing.roll", value);
+    res.json(value);
+  }),
+);
+
 /** Network: let the admin's phone on the same Wi-Fi open the system. */
 systemRouter.get(
   "/network",

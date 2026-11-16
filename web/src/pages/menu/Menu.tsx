@@ -8,6 +8,7 @@ import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { money, num, pct, usd, type Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
+import { openPrint } from "../../lib/print";
 import { useData } from "../../lib/useData";
 import type { Category, Option, StockItem } from "../../lib/types";
 import { ActionDialog, Check, CurrencySelect, DeleteConfirm, NameFields, NumInput, RecipeEditor, RowActions, recipeBody, recipeLinesFrom, useSaver, type RecipeLine } from "../kit";
@@ -249,6 +250,8 @@ function ProductsTab() {
   const [cat, setCat] = useState("");
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [toDelete, setToDelete] = useState<Product | null>(null);
+  const [labelsFor, setLabelsFor] = useState<Product | null>(null);
+  const [copies, setCopies] = useState("1");
 
   if (!prods.data || !cats.data || !groups.data) return <Spinner />;
   const catName = (id: string) => {
@@ -347,7 +350,22 @@ function ProductsTab() {
               </span>
             ),
           },
-          ...(can("menu", "delete") ? [{ key: "x", header: "", render: (p: Product) => <RowActions canEdit={false} canDelete onDelete={() => setToDelete(p)} /> }] : []),
+          {
+            key: "x",
+            header: "",
+            render: (p: Product) => (
+              <RowActions
+                canEdit={false}
+                canDelete={can("menu", "delete")}
+                onDelete={() => setToDelete(p)}
+                extra={
+                  <button className="btn btn-ghost px-2 py-1 text-sm" title={tr("ملصقات سعر بباركود", "Price labels with barcode")} onClick={(e) => (e.stopPropagation(), setLabelsFor(p))}>
+                    🏷️ {tr("ملصق", "Label")}
+                  </button>
+                }
+              />
+            ),
+          },
         ]}
       />
       {editing && (
@@ -365,6 +383,29 @@ function ProductsTab() {
         />
       )}
       {toDelete && <DeleteConfirm name={pick(toDelete)} path={`/menu/products/${toDelete.id}`} onClose={() => setToDelete(null)} onDone={reload} />}
+      {labelsFor && (
+        <ActionDialog
+          title={tr(`ملصقات سعر: ${pick(labelsFor)}`, `Price labels: ${pick(labelsFor)}`)}
+          saveLabel={tr("اطبع", "Print")}
+          disabled={!(num(copies) >= 1)}
+          onClose={() => setLabelsFor(null)}
+          onSave={() => {
+            openPrint(`/print/product-labels?items=${labelsFor.id}:${Math.min(500, Math.round(num(copies)))}`);
+            setLabelsFor(null);
+          }}
+        >
+          <Field label={tr("كم ملصق؟", "How many labels?")} htmlFor="pl-n" hint={tr(`الباركود = كود المنتج ${labelsFor.code}، بينقرا بشاشة الطلب الجديد`, `Barcode = product code ${labelsFor.code}, scans in New Order`)}>
+            <NumInput id="pl-n" step="1" value={copies} onChange={setCopies} />
+          </Field>
+          <div className="flex gap-2">
+            {[1, 5, 10, 20].map((n) => (
+              <button key={n} type="button" className={`btn px-3 py-1 text-sm num ${copies === String(n) ? "btn-primary" : ""}`} onClick={() => setCopies(String(n))}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </ActionDialog>
+      )}
     </>
   );
 }

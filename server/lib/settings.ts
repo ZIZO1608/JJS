@@ -52,6 +52,12 @@ export interface PrintSettings {
   /** Default size for sales invoices; the print screen lets you switch. */
   invoiceSize: "thermal" | "a4";
 }
+/** Which roll is in the shared label/receipt printer, so every PC can say "swap the roll first". */
+export interface PrinterRoll {
+  roll: "label" | "receipt";
+  changedAt: string | null;
+  changedBy: string | null;
+}
 export interface NetworkSettings {
   /** Let phones on the same Wi-Fi open the system (needs a restart). */
   lanAccess: boolean;
@@ -80,6 +86,7 @@ export interface SettingsShape {
   orders: OrderSettings;
   costing: CostingSettings;
   printing: PrintSettings;
+  "printing.roll": PrinterRoll;
   /** Bumped when new default lists are added for existing installs. */
   "seed.version": number;
   network: NetworkSettings;
@@ -103,6 +110,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
   printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal" },
+  "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },
   sync: { enabled: false, supabaseUrl: "", serviceKey: "" },

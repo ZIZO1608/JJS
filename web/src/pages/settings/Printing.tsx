@@ -4,9 +4,119 @@ import { put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { num } from "../../lib/format";
-import { openPrint } from "../../lib/print";
+import { desktop, getRoll, guessDevicePrinters, openPrint, readDevicePrinters, setRoll, writeDevicePrinters, type DesktopPrinter, type DevicePrinters, type PrintKind, type RollState } from "../../lib/print";
 import { useI18n } from "../../lib/i18n";
-import { NumInput, useSaver } from "../kit";
+import { Check, NumInput, useSaver } from "../kit";
+
+const readAutoPrint = () => {
+  try {
+    return localStorage.getItem("jjs.autoPrint") === "1";
+  } catch {
+    return false;
+  }
+};
+
+/** This PC's printers, the roll in the shared printer, and auto-print after a sale. Saved as soon as you change them. */
+function ThisComputer() {
+  const { tr } = useI18n();
+  const api = desktop();
+  const [list, setList] = useState<DesktopPrinter[] | null>(null);
+  const [cfg, setCfg] = useState<DevicePrinters>(readDevicePrinters);
+  const [roll, setRollState] = useState<RollState | null>(null);
+  const [auto, setAuto] = useState(readAutoPrint);
+  useEffect(() => {
+    void getRoll()
+      .then(setRollState)
+      .catch(() => undefined);
+    if (!api) return;
+    void api.printers().then((ps) => {
+      setList(ps);
+      const guessed = guessDevicePrinters(ps, readDevicePrinters());
+      setCfg(guessed);
+      writeDevicePrinters(guessed);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const change = (v: Partial<DevicePrinters>) => {
+    const next = { ...cfg, ...v };
+    setCfg(next);
+    writeDevicePrinters(next);
+  };
+  const pickRoll = async (r: PrintKind) => {
+    try {
+      setRollState(await setRoll(r));
+    } catch {
+      /* offline: leave as it was */
+    }
+  };
+  const printerSelect = (kind: PrintKind, id: string, label: string) => (
+    <Field label={label} htmlFor={id}>
+      <Select id={id} value={cfg[kind]} onChange={(e) => change({ [kind]: e.target.value })}>
+        <option value="">{tr("— افتح نافذة الطباعة —", "— Open the print window —")}</option>
+        {(list ?? []).map((p) => (
+          <option key={p.name} value={p.name}>
+            {p.displayName}
+          </option>
+        ))}
+        {cfg[kind] && list && !list.some((p) => p.name === cfg[kind]) && <option value={cfg[kind]}>{tr(`${cfg[kind]} (مو موجودة)`, `${cfg[kind]} (not found)`)}</option>}
+      </Select>
+    </Field>
+  );
+  return (
+    <section className="card grid gap-3 md:col-span-2">
+      <h2 className="text-lg font-bold">{tr("هالكمبيوتر", "This computer")}</h2>
+      {api ? (
+        <>
+          <p className="text-sm text-muted">
+            {tr(
+              "اختار طابعة لكل نوع. لما تضغط اطبع، بتروح الفاتورة أو الملصق دغري عالطابعة الصح بالحجم الصح، بلا نافذة.",
+              "Pick a printer for each kind. When you press Print, the invoice or label goes straight to the right printer at the right size, no window.",
+            )}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {printerSelect("label", "dp-label", tr("طابعة الملصقات والباركود", "Labels & barcodes printer"))}
+            {printerSelect("receipt", "dp-receipt", tr("طابعة الفواتير (حراري)", "Invoices printer (thermal)"))}
+          </div>
+          <Check checked={cfg.direct} onChange={(v) => change({ direct: v })}>
+            {tr("اطبع دغري بلا نافذة الطباعة", "Print straight away, without the print window")}
+          </Check>
+          <Check checked={cfg.sharedRoll} onChange={(v) => change({ sharedRoll: v })}>
+            {tr("الملصقات والفواتير على نفس الطابعة (ذكّرني بدّل الرول)", "Labels and invoices share one printer (remind me to swap the roll)")}
+          </Check>
+        </>
+      ) : (
+        <p className="text-sm text-muted">
+          {tr(
+            "من المتصفح بتطلع نافذة الطباعة كل مرة. لتطبع دغري، افتح برنامج JJ's ERP على الكمبيوتر الموصول عليه الطابعة.",
+            "In a browser the print window opens every time. To print straight away, use the JJ's ERP desktop app on the PC the printer is plugged into.",
+          )}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted">{tr("الرول اللي بالطابعة هلق:", "Roll in the printer now:")}</span>
+        {(["label", "receipt"] as const).map((r) => (
+          <button key={r} className={`btn px-3 py-1 text-sm ${roll?.roll === r ? "btn-primary" : ""}`} onClick={() => void pickRoll(r)}>
+            {r === "label" ? tr("🏷️ ملصقات", "🏷️ Labels") : tr("🧾 فواتير 58 ملم", "🧾 Receipts 58 mm")}
+          </button>
+        ))}
+        {roll?.changedBy && <span className="text-xs text-faint">{tr(`آخر تبديل: ${roll.changedBy}`, `Last swapped by ${roll.changedBy}`)}</span>}
+      </div>
+      <Check
+        checked={auto}
+        onChange={(v) => {
+          setAuto(v);
+          try {
+            localStorage.setItem("jjs.autoPrint", v ? "1" : "0");
+          } catch {
+            /* storage unavailable */
+          }
+        }}
+      >
+        {tr("اطبع الفاتورة لحالها بعد كل بيعة (على هالكمبيوتر)", "Print the invoice by itself after every sale (on this computer)")}
+      </Check>
+    </section>
+  );
+}
 
 export function PrintingTab() {
   const { tr, t } = useI18n();
@@ -92,6 +202,7 @@ export function PrintingTab() {
           )}
         </p>
       </section>
+      <ThisComputer />
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("الفواتير", "Invoices")}</h2>
         <Field label={tr("الحجم الافتراضي", "Default size")} htmlFor="pr-s" hint={tr("فيك تغيّر وقت الطباعة", "You can switch when printing")}>

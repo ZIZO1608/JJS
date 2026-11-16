@@ -4,6 +4,7 @@ const { app, BrowserWindow, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { registerPrinting, webPreferences } = require("./printing.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const PORT = Number(process.env.PORT || 4310);
@@ -57,6 +58,7 @@ async function openWhenReady() {
 }
 
 function boot() {
+  registerPrinting(URL);
   win = new BrowserWindow({
     width: 1366,
     height: 820,
@@ -65,12 +67,12 @@ function boot() {
     title: "JJ's ERP",
     icon: path.join(ROOT, "dist", "web", "logo.png"),
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: webPreferences(),
   });
   // Receipts, labels and statements open in a small window of the app itself;
   // anything else (help links) opens in the normal browser.
   win.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (target.startsWith(URL)) return { action: "allow", overrideBrowserWindowOptions: { width: 480, height: 760, autoHideMenuBar: true, title: "JJ's ERP" } };
+    if (target.startsWith(URL)) return { action: "allow", overrideBrowserWindowOptions: { width: 480, height: 760, autoHideMenuBar: true, title: "JJ's ERP", webPreferences: webPreferences() } };
     void shell.openExternal(target);
     return { action: "deny" };
   });
