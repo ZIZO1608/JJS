@@ -4,6 +4,7 @@ import { put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { num } from "../../lib/format";
+import { openPrint } from "../../lib/print";
 import { useI18n } from "../../lib/i18n";
 import { NumInput, useSaver } from "../kit";
 
@@ -34,8 +35,63 @@ export function PrintingTab() {
     );
     if (ok) await reload();
   };
+  /** Xprinter XP-236B: 2-inch head, 58 mm paper at most, so invoices go thermal 58 mm and labels can't be wider. */
+  const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
+    setF({ ...f, receiptWidthMm: "58", invoiceSize: "thermal", labelWidthMm: String(Math.min(58, num(lw) || 50)), labelHeightMm: lh });
+  const test = (kind: "receipt" | "label") =>
+    openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}`);
+  const tooWide = w > 58 || f.receiptWidthMm === "80";
   return (
     <div className="grid max-w-4xl gap-5 md:grid-cols-2">
+      <section className="card grid gap-3 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{tr("الطابعة: Xprinter XP-236B", "Printer: Xprinter XP-236B")}</h2>
+          <button className="btn" onClick={() => applyXp236b()}>
+            {tr("اضبط الإعدادات لهالطابعة", "Use settings for this printer")}
+          </button>
+        </div>
+        <p className="text-sm text-muted">
+          {tr(
+            "نفس الطابعة للفواتير والباركود. ورقها أعرض شي 58 ملم. بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
+            "One printer for invoices and barcodes. Paper is 58 mm wide at most. After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
+          )}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">{tr("حجم الملصق:", "Label size:")}</span>
+          {[
+            [40, 30],
+            [50, 30],
+            [58, 40],
+          ].map(([lw, lh]) => (
+            <button
+              key={`${lw}x${lh}`}
+              className={`btn px-2.5 py-1 text-sm num ltr ${w === lw && h === lh ? "btn-primary" : ""}`}
+              onClick={() => applyXp236b(String(lw), String(lh))}
+            >
+              {lw}×{lh}
+            </button>
+          ))}
+        </div>
+        {tooWide && (
+          <p className="text-sm font-semibold text-bad">
+            {tr("انتبه: هالطابعة ما بتطبع أعرض من 58 ملم.", "Careful: this printer can't print wider than 58 mm.")}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button className="btn" onClick={() => test("receipt")}>
+            {tr("اطبع فاتورة تجربة", "Print test invoice")}
+          </button>
+          <button className="btn" onClick={() => test("label")}>
+            {tr("اطبع ملصق تجربة", "Print test label")}
+          </button>
+        </div>
+        <p className="text-xs text-faint">
+          {tr(
+            "بنافذة الطباعة: اختار XP-236B، الهوامش «بلا»، وشيل «الرأس والتذييل». التجربة بتطبع بالأحجام اللي هون حتى لو ما حفظت بعد.",
+            "In the print window: pick XP-236B, Margins “None”, and untick “Headers and footers”. The test uses the sizes on this screen even before you save.",
+          )}
+        </p>
+      </section>
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("الفواتير", "Invoices")}</h2>
         <Field label={tr("الحجم الافتراضي", "Default size")} htmlFor="pr-s" hint={tr("فيك تغيّر وقت الطباعة", "You can switch when printing")}>

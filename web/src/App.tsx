@@ -40,6 +40,7 @@ const PrintLabels = lazy(() => loadPrint().then((m) => ({ default: m.PrintLabels
 const PrintReceipt = lazy(() => loadPrint().then((m) => ({ default: m.PrintReceipt })));
 const PrintReport = lazy(() => loadPrint().then((m) => ({ default: m.PrintReport })));
 const PrintStatement = lazy(() => loadPrint().then((m) => ({ default: m.PrintStatement })));
+const PrintTest = lazy(() => loadPrint().then((m) => ({ default: m.PrintTest })));
 const loadPurchasing = () => import("./pages/Purchasing");
 const PurchasingPage = lazy(() => loadPurchasing().then((m) => ({ default: m.PurchasingPage })));
 const loadReports = () => import("./pages/Reports");
@@ -99,7 +100,8 @@ export function App() {
           <Route path="print/report" element={g("reports", <PrintReport />)} />
           <Route path="print/client-report/:id" element={g("clients", <PrintClientReport />)} />
           <Route path="print/clients-sheet" element={g("reports", <PrintClientsSheet />)} />
-          <Route path="print/route" element={g("orders", <PrintRouteSheet />, "edit")} />
+          <Route path="print/test" element={g("settings", <PrintTest />)} />
+          <Route path="print/route"element={g("orders", <PrintRouteSheet />, "edit")} />
           <Route element={<Layout />}>
             <Route index element={<HomePage />} />
             <Route path="day" element={g("dashboard", <MyDayPage />)} />

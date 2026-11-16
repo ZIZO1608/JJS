@@ -434,6 +434,94 @@ export function PrintLabels() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Printer test (receipt or label)                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One sample receipt or label at the sizes in the URL (so a size can be tried before saving).
+ * The edge marks show whether anything is cut off; the barcode shows whether it scans.
+ */
+export function PrintTest() {
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { tr } = ui;
+  const { s } = useAppSettings();
+  const kind = sp.get("kind") === "label" ? "label" : "receipt";
+  const clamp = (v: string | null, lo: number, hi: number, d: number) => Math.min(hi, Math.max(lo, Number(v) || d));
+  const width = clamp(sp.get("width"), 58, 80, s?.printing.receiptWidthMm ?? 58) === 80 ? 80 : 58;
+  const w = clamp(sp.get("w"), 20, 120, s?.printing.labelWidthMm ?? 50);
+  const h = clamp(sp.get("h"), 15, 120, s?.printing.labelHeightMm ?? 30);
+  usePrintOnce(!!s, kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm auto; margin: 2mm`);
+  if (!s) return <Loading />;
+  const now = new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const row = (a: ReactNode, b: ReactNode, bold = false) => (
+    <div className={`flex justify-between gap-2 ${bold ? "text-[15px] font-bold" : ""}`}>
+      <span>{a}</span>
+      <span className="num ltr">{b}</span>
+    </div>
+  );
+  return (
+    <div className="bg-white" dir={ui.lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar>
+        <span className="text-sm text-muted">
+          {kind === "label" ? tr(`ملصق تجربة · ${w}×${h} ملم`, `Test label · ${w}×${h} mm`) : tr(`فاتورة تجربة · ${width} ملم`, `Test invoice · ${width} mm`)}
+        </span>
+      </Toolbar>
+      {kind === "label" ? (
+        <div className="flex justify-center">
+          <div
+            className="flex flex-col justify-between overflow-hidden border border-black bg-white p-[1.2mm] text-black"
+            style={{ width: `${w}mm`, height: `${h}mm` }}
+          >
+            <div className="flex justify-between text-[6pt] leading-none" dir="ltr">
+              <span>┌ TEST</span>
+              <span>{w}×{h}</span>
+              <span>┐</span>
+            </div>
+            <div className="text-center leading-tight">
+              <div className="truncate text-[9pt] font-bold" dir="rtl">
+                كرواسان زعتر
+              </div>
+              <div className="truncate text-[7pt]" dir="ltr">
+                Zaatar croissant · $1.50
+              </div>
+            </div>
+            <Barcode value="TEST-123456" height={Math.max(14, Math.round(h * 0.5))} />
+          </div>
+        </div>
+      ) : (
+        <div className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
+          <div className="flex justify-between text-[10px]" dir="ltr">
+            <span>|◄ edge</span>
+            <span>edge ►|</span>
+          </div>
+          <div className="text-center">
+            <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />
+            <div className="text-[15px] font-bold">{ui.pick(s.business)}</div>
+            <div className="font-bold">{tr("فاتورة تجربة", "TEST INVOICE")}</div>
+            <div className="num ltr">{now}</div>
+          </div>
+          <div className="my-1.5 border-t border-dashed border-black" />
+          {row("2 × كرواسان زعتر", "$3.00")}
+          {row("1 × Turkey & Cheddar", "$4.25")}
+          {row("3 × قهوة عربية", "45,000 ل.س")}
+          <div className="my-1.5 border-t border-dashed border-black" />
+          {row(tr("المجموع", "Total"), "$10.75", true)}
+          <div className="my-1.5 border-t border-dashed border-black" />
+          <div className="text-center text-[11px]">{tr("إذا شايف الحافتين والباركود واضح، الإعداد صح ✓", "If you can see both edges and the barcode scans, setup is right ✓")}</div>
+          <div className="mt-1">
+            <Barcode value="TEST-123456" height={30} />
+          </div>
+          <div className="mt-1 text-center text-[10px] num ltr">
+            Xprinter XP-236B · {width} mm · 203 dpi
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Client statement                                                    */
 /* ------------------------------------------------------------------ */
 
