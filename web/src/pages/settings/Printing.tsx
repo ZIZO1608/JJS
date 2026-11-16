@@ -136,6 +136,7 @@ export function PrintingTab() {
   const { can } = useAuth();
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
+  const [seen, setSeen] = useState({ left: "0", right: "72" });
   const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0", wa: "", social: "", qr: true });
   useEffect(() => {
     if (!s) return;
@@ -164,7 +165,7 @@ export function PrintingTab() {
   const ox = clampMm(f.ox, -15, 15);
   const oy = clampMm(f.oy, -15, 15);
   const pad = clampMm(f.pad, 0, 8);
-  const rm = clampMm(f.rm, 0, 10);
+  const rm = clampMm(f.rm, 0, 25);
   const rx = clampMm(f.rx, -15, 15);
   const save = async () => {
     const ok = await run(() =>
@@ -202,6 +203,18 @@ export function PrintingTab() {
     </Field>
   );
   const PX = 4; // preview scale: px per mm
+  /** Auto-centre: from the first and last ruler numbers the printer burned, centre the receipt in that strip, 1 mm clear each side. */
+  const paperW = f.receiptWidthMm === "58" ? 58 : 80;
+  const pageW = paperW === 58 ? 48 : 72;
+  const autoCentre = () => {
+    const a = Math.min(pageW, Math.max(0, num(seen.left) || 0));
+    const b = Math.min(pageW, Math.max(0, num(seen.right) || pageW));
+    if (b - a < 20) return;
+    const content = Math.max(30, Math.min(pageW, b - a - 2));
+    const side = Math.round(((paperW - content) / 2) * 10) / 10;
+    const x = Math.round(((a + b) / 2 - pageW / 2) * 2) / 2;
+    setF({ ...f, rm: String(side), rx: String(x) });
+  };
   /** This shop's printer takes 80 mm receipt paper; receipts use the full 72 mm the head can print (4 mm clear on each side). Labels up to 80 mm. */
   const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
     setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", rm: "4", rx: "0", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
@@ -277,7 +290,27 @@ export function PrintingTab() {
             {stepper("ox", "pm-ox", tr("الملصق: يمين / يسار (ملم)", "Label: right / left (mm)"), tr("+ يمين · − يسار", "+ right · − left"), -15, 15)}
             {stepper("oy", "pm-oy", tr("الملصق: تحت / فوق (ملم)", "Label: down / up (mm)"), tr("+ لتحت · − لفوق", "+ down · − up"), -15, 15)}
             {stepper("pad", "pm-pad", tr("هامش جوّا الملصق (ملم)", "Margin inside the label (mm)"), tr("فراغ حوالين الكتابة", "Space around the print"), 0, 8)}
-            {stepper("rm", "pm-rm", tr("هامش الفاتورة من الجنبين (ملم)", "Invoice side margin (mm)"), tr("إذا الكتابة مقصوصة من الجنب، زيدها", "Raise it if text is cut at the sides"), 0, 10)}
+            {stepper("rm", "pm-rm", tr("هامش الفاتورة من الجنبين (ملم)", "Invoice side margin (mm)"), tr("إذا الكتابة مقصوصة من الجنب، زيدها", "Raise it if text is cut at the sides"), 0, 25)}
+            <div className="grid gap-2 rounded-xl border border-line p-3 sm:col-span-2">
+              <div className="font-semibold">{tr("🎯 توسيط الفاتورة تلقائياً", "🎯 Auto-centre the invoice")}</div>
+              <p className="text-sm text-muted">
+                {tr(
+                  "اطبع «جرّب فاتورة». فوق في مسطرة أرقام. اكتب أول رقم مطبوع كامل من اليسار وآخر رقم من اليمين، واضغط «وسّطها»، وبعدين جرّب كمان مرة واحفظ.",
+                  "Print “Test invoice”. There is a ruler with numbers at the top. Type the first number fully printed on the left and the last on the right, press “Centre it”, test again, then Save.",
+                )}
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label={tr("أول رقم (يسار)", "First number (left)")} htmlFor="ac-l">
+                  <NumInput id="ac-l" value={seen.left} onChange={(v) => setSeen({ ...seen, left: v })} />
+                </Field>
+                <Field label={tr("آخر رقم (يمين)", "Last number (right)")} htmlFor="ac-r">
+                  <NumInput id="ac-r" value={seen.right} onChange={(v) => setSeen({ ...seen, right: v })} />
+                </Field>
+                <button type="button" className="btn btn-primary" onClick={autoCentre}>
+                  {tr("وسّطها", "Centre it")}
+                </button>
+              </div>
+            </div>
             {stepper("rx", "pm-rx", tr("الفاتورة: يمين / يسار (ملم)", "Invoice: right / left (mm)"), tr("إذا الفاتورة مزاحة لجنب، حرّكها", "Move it if the invoice sits off to one side"), -15, 15)}
           </div>
           <div className="grid content-start justify-items-center gap-2 rounded-xl bg-sunken p-4">

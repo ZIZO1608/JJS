@@ -427,6 +427,29 @@ function Qr({ text, sizeMm }: { text: string; sizeMm: number }) {
   );
 }
 
+/**
+ * A millimetre ruler across the whole page, for the test invoice: a long tick and number every 5 mm, short ticks
+ * every mm. Whatever numbers make it onto the paper show exactly which part of the page the printer can burn.
+ */
+function PageRuler({ mm }: { mm: number }) {
+  const ticks = Array.from({ length: Math.floor(mm) + 1 }, (_, i) => i);
+  return (
+    <svg viewBox={`0 0 ${mm} 9`} style={{ width: `${mm}mm`, height: "9mm", display: "block", direction: "ltr" }} direction="ltr" shapeRendering="crispEdges" aria-hidden>
+      <rect x="0" y="0" width={mm} height="0.5" fill="#000" />
+      {ticks.map((i) => (
+        <rect key={i} x={Math.min(i, mm - 0.35)} y="0" width="0.35" height={i % 5 === 0 ? 3.2 : 1.6} fill="#000" />
+      ))}
+      {ticks
+        .filter((i) => i % 5 === 0)
+        .map((i) => (
+          <text key={`n${i}`} x={i} y="7.4" fontSize="3" fontWeight="700" fontFamily="Tahoma, Arial, sans-serif" textAnchor={i === 0 ? "start" : i >= mm - 2 ? "end" : "middle"} fill="#000">
+            {i}
+          </text>
+        ))}
+    </svg>
+  );
+}
+
 /** Bottom of every receipt: thanks, then "chat / order on WhatsApp" with the number and a QR that opens the chat. */
 function ReceiptFooter({ p, phone, lang }: { p: Partial<AppSettings["printing"]>; phone: string; lang: Lang }) {
   const t = L(lang);
@@ -798,7 +821,7 @@ export function PrintTest() {
   };
   const saved = labelMargins(s?.printing);
   const m: LabelMargins = { x: num0("ox", -15, 15, saved.x), y: num0("oy", -15, 15, saved.y), pad: num0("pad", 0, 8, saved.pad) };
-  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 4), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
+  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 25, s?.printing.receiptSideMm ?? 4), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
   const sp2 = useSmartPrint(
     !!s,
     kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
@@ -843,13 +866,12 @@ export function PrintTest() {
           </LabelBox>
         </div>
       ) : (
-        <div
-          id="print-root"
-          className="mx-auto bg-white pb-2 pt-1 leading-snug"
-          style={{ ...RECEIPT_STYLE, width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}
-        >
+        <div id="print-root" className="mx-auto bg-white pb-2 pt-1" style={{ ...RECEIPT_STYLE, width: `${PRINTABLE_MM[width] ?? width}mm` }}>
+          {/* Page ruler (not shifted): the first and last number you can read go into Settings → Printing → Auto-centre */}
+          <PageRuler mm={PRINTABLE_MM[width] ?? width} />
+          <div className="mx-auto leading-snug" style={{ width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}>
           {/* edge bars: both must print fully, or move it with Settings → Printing */}
-          <div className="flex justify-between text-[12px] font-bold" dir="ltr">
+          <div className="mt-2 flex justify-between text-[12px] font-bold" dir="ltr">
             <span>|◄ EDGE</span>
             <span>EDGE ►|</span>
           </div>
@@ -879,6 +901,7 @@ export function PrintTest() {
           <div className="mt-1 text-center text-[12px] num ltr">
             {width} mm · {box.content} mm {tr("عرض الطباعة", "print width")} · {box.x >= 0 ? "+" : ""}
             {box.x} mm
+          </div>
           </div>
         </div>
       )}
