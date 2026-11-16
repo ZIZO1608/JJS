@@ -384,7 +384,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
     </div>
   );
   return (
-    <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
+    <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 2 * (rc.printing.receiptSideMm ?? 2)}mm` }}>
       <div className="text-center">
         <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />
         <div className="text-[15px] font-bold">{pk(rc.business)}</div>
@@ -581,6 +581,28 @@ function InvoiceA4({ rc, lang, s }: { rc: Receipt; lang: Lang; s: AppSettings | 
 /* Expiry labels                                                       */
 /* ------------------------------------------------------------------ */
 
+/** Settings → Printing: shift (+ right / down) and inner margin, all in mm. */
+interface LabelMargins {
+  x: number;
+  y: number;
+  pad: number;
+}
+const labelMargins = (p?: AppSettings["printing"]): LabelMargins => ({ x: p?.labelOffsetXMm ?? 0, y: p?.labelOffsetYMm ?? 0, pad: p?.labelPaddingMm ?? 1.2 });
+
+/** One label page: the paper stays put, the content moves by the saved shift. `frame` draws the content's edge (for tests). */
+function LabelBox({ w, h, m, children, frame, className = "border border-dashed border-gray-400 print:border-0", pageBreak = true }: { w: number; h: number; m: LabelMargins; children: ReactNode; frame?: boolean; className?: string; pageBreak?: boolean }) {
+  return (
+    <div
+      className={`overflow-hidden bg-white text-black ${className}`}
+      style={{ width: `${w}mm`, height: `${h}mm`, ...(pageBreak ? { pageBreakAfter: "always" as const, breakAfter: "page" as const } : {}) }}
+    >
+      <div className="flex h-full w-full flex-col justify-between" style={{ padding: `${m.pad}mm`, transform: m.x || m.y ? `translate(${m.x}mm, ${m.y}mm)` : undefined }}>
+        {frame ? <div className="flex h-full w-full flex-col justify-between border border-black p-[0.6mm]">{children}</div> : children}
+      </div>
+    </div>
+  );
+}
+
 function Barcode({ value, height }: { value: string; height: number }) {
   const ref = useRef<SVGSVGElement>(null);
   useEffect(() => {
@@ -620,11 +642,7 @@ export function PrintLabels() {
       {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في دفعات", "No batches")}</p>}
       <div className="flex flex-col items-center gap-2 print:block print:gap-0">
         {labels.map(({ b, key }) => (
-          <div
-            key={key}
-            className="flex flex-col justify-between overflow-hidden border border-dashed border-gray-400 bg-white p-[1.2mm] text-black print:border-0"
-            style={{ width: `${w}mm`, height: `${h}mm`, pageBreakAfter: "always", breakAfter: "page" }}
-          >
+          <LabelBox key={key} w={w} h={h} m={labelMargins(s.printing)}>
             <div className="text-center leading-tight">
               <div className="truncate text-[9pt] font-bold" dir="rtl">
                 {b.item.nameAr}
@@ -649,7 +667,7 @@ export function PrintLabels() {
               </div>
             )}
             <Barcode value={b.batchCode} height={Math.max(12, Math.round(h * 0.45))} />
-          </div>
+          </LabelBox>
         ))}
       </div>
     </div>
@@ -674,6 +692,14 @@ export function PrintTest() {
   const width = clamp(sp.get("width"), 58, 80, s?.printing.receiptWidthMm ?? 58) === 80 ? 80 : 58;
   const w = clamp(sp.get("w"), 20, 120, s?.printing.labelWidthMm ?? 50);
   const h = clamp(sp.get("h"), 15, 120, s?.printing.labelHeightMm ?? 30);
+  // margins from the URL too, so the Settings screen can test them before saving
+  const num0 = (k: string, lo: number, hi: number, d: number) => {
+    const v = sp.get(k);
+    return v === null || v === "" || !Number.isFinite(Number(v)) ? d : Math.min(hi, Math.max(lo, Number(v)));
+  };
+  const saved = labelMargins(s?.printing);
+  const m: LabelMargins = { x: num0("ox", -15, 15, saved.x), y: num0("oy", -15, 15, saved.y), pad: num0("pad", 0, 8, saved.pad) };
+  const rm = num0("rm", 0, 10, s?.printing.receiptSideMm ?? 2);
   const sp2 = useSmartPrint(
     !!s,
     kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm auto; margin: 2mm`,
@@ -697,10 +723,7 @@ export function PrintTest() {
       {sp2.panel}
       {kind === "label" ? (
         <div className="flex justify-center">
-          <div
-            className="flex flex-col justify-between overflow-hidden border border-black bg-white p-[1.2mm] text-black"
-            style={{ width: `${w}mm`, height: `${h}mm` }}
-          >
+          <LabelBox w={w} h={h} m={m} frame className="border border-dashed border-gray-400 print:border-0" pageBreak={false}>
             <div className="flex justify-between text-[6pt] leading-none" dir="ltr">
               <span>┌ TEST</span>
               <span>{w}×{h}</span>
@@ -714,11 +737,11 @@ export function PrintTest() {
                 Zaatar croissant · $1.50
               </div>
             </div>
-            <Barcode value="TEST-123456" height={Math.max(14, Math.round(h * 0.5))} />
-          </div>
+            <Barcode value="TEST-123456" height={Math.max(14, Math.round(h * 0.45))} />
+          </LabelBox>
         </div>
       ) : (
-        <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
+        <div id="print-root" className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 2 * rm}mm` }}>
           <div className="flex justify-between text-[10px]" dir="ltr">
             <span>|◄ edge</span>
             <span>edge ►|</span>
@@ -796,11 +819,7 @@ export function PrintProductLabels() {
       {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في منتجات", "No products")}</p>}
       <div className="flex flex-col items-center gap-2 print:block print:gap-0">
         {labels.map(({ p, key }) => (
-          <div
-            key={key}
-            className="flex flex-col justify-between overflow-hidden border border-dashed border-gray-400 bg-white p-[1.2mm] text-black print:border-0"
-            style={{ width: `${w}mm`, height: `${h}mm`, pageBreakAfter: "always", breakAfter: "page" }}
-          >
+          <LabelBox key={key} w={w} h={h} m={labelMargins(s.printing)}>
             <div className="text-center leading-tight">
               <div className="truncate text-[9pt] font-bold" dir="rtl">
                 {p.nameAr}
@@ -811,7 +830,7 @@ export function PrintProductLabels() {
             </div>
             <div className="text-center text-[13pt] font-black leading-none num ltr">{money(p.price, p.currency, "en")}</div>
             <Barcode value={p.code} height={Math.max(12, Math.round(h * 0.4))} />
-          </div>
+          </LabelBox>
         ))}
       </div>
     </div>

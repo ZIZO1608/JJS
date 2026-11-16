@@ -36,6 +36,10 @@ const printingSchema = z.object({
   receiptFooterAr: z.string().max(120),
   receiptFooterEn: z.string().max(120),
   invoiceSize: z.enum(["thermal", "a4"]).default("thermal"),
+  labelOffsetXMm: z.number().min(-15).max(15).default(0),
+  labelOffsetYMm: z.number().min(-15).max(15).default(0),
+  labelPaddingMm: z.number().min(0).max(8).default(1.2),
+  receiptSideMm: z.number().min(0).max(10).default(2),
 });
 
 for (const [key, schema] of [

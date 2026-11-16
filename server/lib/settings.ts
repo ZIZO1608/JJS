@@ -51,6 +51,13 @@ export interface PrintSettings {
   receiptFooterEn: string;
   /** Default size for sales invoices; the print screen lets you switch. */
   invoiceSize: "thermal" | "a4";
+  /** Shift the whole label (mm): + moves right / down, − left / up. For printers that land a little off. */
+  labelOffsetXMm: number;
+  labelOffsetYMm: number;
+  /** Empty space inside the label edge (mm). */
+  labelPaddingMm: number;
+  /** Empty space on each side of a thermal receipt (mm). */
+  receiptSideMm: number;
 }
 /** Which roll is in the shared label/receipt printer, so every PC can say "swap the roll first". */
 export interface PrinterRoll {
@@ -109,7 +116,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal" },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 2 },
   "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },

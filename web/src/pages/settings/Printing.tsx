@@ -136,15 +136,31 @@ export function PrintingTab() {
   const { can } = useAuth();
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
-  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "" });
+  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "2" });
   useEffect(() => {
     if (!s) return;
-    const p = s.printing as typeof s.printing & { invoiceSize?: string };
-    setF({ receiptWidthMm: String(p.receiptWidthMm), invoiceSize: p.invoiceSize ?? "thermal", labelWidthMm: String(p.labelWidthMm), labelHeightMm: String(p.labelHeightMm), receiptFooterAr: p.receiptFooterAr, receiptFooterEn: p.receiptFooterEn });
+    const p = s.printing as Partial<typeof s.printing> & typeof s.printing;
+    setF({
+      receiptWidthMm: String(p.receiptWidthMm),
+      invoiceSize: p.invoiceSize ?? "thermal",
+      labelWidthMm: String(p.labelWidthMm),
+      labelHeightMm: String(p.labelHeightMm),
+      receiptFooterAr: p.receiptFooterAr,
+      receiptFooterEn: p.receiptFooterEn,
+      ox: String(p.labelOffsetXMm ?? 0),
+      oy: String(p.labelOffsetYMm ?? 0),
+      pad: String(p.labelPaddingMm ?? 1.2),
+      rm: String(p.receiptSideMm ?? 2),
+    });
   }, [s]);
   if (!s) return <Spinner />;
   const w = Math.min(120, Math.max(20, num(f.labelWidthMm) || 50));
   const h = Math.min(120, Math.max(15, num(f.labelHeightMm) || 30));
+  const clampMm = (v: string, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, num(v) || 0)) * 10) / 10;
+  const ox = clampMm(f.ox, -15, 15);
+  const oy = clampMm(f.oy, -15, 15);
+  const pad = clampMm(f.pad, 0, 8);
+  const rm = clampMm(f.rm, 0, 10);
   const save = async () => {
     const ok = await run(() =>
       put("/system/settings/printing", {
@@ -154,15 +170,34 @@ export function PrintingTab() {
         labelHeightMm: h,
         receiptFooterAr: f.receiptFooterAr,
         receiptFooterEn: f.receiptFooterEn,
+        labelOffsetXMm: ox,
+        labelOffsetYMm: oy,
+        labelPaddingMm: pad,
+        receiptSideMm: rm,
       }),
     );
     if (ok) await reload();
   };
+  const nudge = (k: "ox" | "oy" | "pad" | "rm", d: number, lo: number, hi: number) => setF({ ...f, [k]: String(clampMm(String(clampMm(f[k], lo, hi) + d), lo, hi)) });
+  const stepper = (k: "ox" | "oy" | "pad" | "rm", id: string, label: string, hint: string, lo: number, hi: number) => (
+    <Field label={label} htmlFor={id} hint={hint}>
+      <div className="flex items-center gap-1">
+        <button type="button" className="btn min-w-[44px] px-2 py-1 text-lg" aria-label="−0.5" onClick={() => nudge(k, -0.5, lo, hi)}>
+          −
+        </button>
+        <NumInput id={id} value={f[k]} onChange={(v) => setF({ ...f, [k]: v })} />
+        <button type="button" className="btn min-w-[44px] px-2 py-1 text-lg" aria-label="+0.5" onClick={() => nudge(k, 0.5, lo, hi)}>
+          +
+        </button>
+      </div>
+    </Field>
+  );
+  const PX = 4; // preview scale: px per mm
   /** Xprinter XP-236B: 2-inch head, 58 mm paper at most, so invoices go thermal 58 mm and labels can't be wider. */
   const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
     setF({ ...f, receiptWidthMm: "58", invoiceSize: "thermal", labelWidthMm: String(Math.min(58, num(lw) || 50)), labelHeightMm: lh });
   const test = (kind: "receipt" | "label") =>
-    openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}`);
+    openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}&ox=${ox}&oy=${oy}&pad=${pad}&rm=${rm}`);
   const tooWide = w > 58 || f.receiptWidthMm === "80";
   return (
     <div className="grid max-w-4xl gap-5 md:grid-cols-2">
@@ -214,6 +249,53 @@ export function PrintingTab() {
             "In the print window: pick XP-236B, Margins “None”, and untick “Headers and footers”. The test uses the sizes on this screen even before you save.",
           )}
         </p>
+      </section>
+      <section className="card grid gap-4 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{tr("الهوامش ومكان الطباعة", "Margins & position")}</h2>
+          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "2" })}>
+            {tr("رجّع الافتراضي", "Reset")}
+          </button>
+        </div>
+        <p className="text-sm text-muted">
+          {tr(
+            "إذا الطباعة نازلة شوي عن الملصق، حرّكها من هون. كل ضغطة = نص ملم. اطبع تجربة، شوف وين نزلت، عدّل، واطبع كمان مرة. بعدين اضغط «حفظ».",
+            "If the print lands a little off the sticker, move it here. Each press = half a millimetre. Print a test, see where it landed, adjust, print again. Then press Save.",
+          )}
+        </p>
+        <div className="grid gap-5 md:grid-cols-[1fr_auto]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {stepper("ox", "pm-ox", tr("الملصق: يمين / يسار (ملم)", "Label: right / left (mm)"), tr("+ يمين · − يسار", "+ right · − left"), -15, 15)}
+            {stepper("oy", "pm-oy", tr("الملصق: تحت / فوق (ملم)", "Label: down / up (mm)"), tr("+ لتحت · − لفوق", "+ down · − up"), -15, 15)}
+            {stepper("pad", "pm-pad", tr("هامش جوّا الملصق (ملم)", "Margin inside the label (mm)"), tr("فراغ حوالين الكتابة", "Space around the print"), 0, 8)}
+            {stepper("rm", "pm-rm", tr("هامش الفاتورة من الجنبين (ملم)", "Invoice side margin (mm)"), tr("إذا الكتابة مقصوصة من الجنب، زيدها", "Raise it if text is cut at the sides"), 0, 10)}
+          </div>
+          <div className="grid content-start justify-items-center gap-2 rounded-xl bg-sunken p-4">
+            <div className="relative overflow-hidden rounded-[6px] border-2 border-dashed border-faint bg-white" style={{ width: `${w * PX}px`, height: `${h * PX}px` }} aria-label={tr("معاينة مكان الطباعة", "Print position preview")}>
+              <div
+                className="absolute flex flex-col justify-between border border-black text-center text-[9px] leading-tight text-black"
+                style={{ left: `${(ox + pad) * PX}px`, top: `${(oy + pad) * PX}px`, width: `${Math.max(4, w - 2 * pad) * PX}px`, height: `${Math.max(4, h - 2 * pad) * PX}px` }}
+              >
+                <b className="pt-0.5">كرواسان زعتر</b>
+                <span>$1.50</span>
+                <span className="mx-auto mb-1 h-4 w-3/4 bg-[repeating-linear-gradient(90deg,#000_0_1px,transparent_1px_3px)]" />
+              </div>
+            </div>
+            <span className="text-xs text-faint num ltr">
+              {w}×{h} mm · {ox >= 0 ? "+" : ""}
+              {ox} / {oy >= 0 ? "+" : ""}
+              {oy} mm
+            </span>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button className="btn px-3 py-1 text-sm" onClick={() => test("label")}>
+                {tr("جرّب ملصق", "Test label")}
+              </button>
+              <button className="btn px-3 py-1 text-sm" onClick={() => test("receipt")}>
+                {tr("جرّب فاتورة", "Test invoice")}
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
       <ThisComputer />
       <section className="card grid gap-3">

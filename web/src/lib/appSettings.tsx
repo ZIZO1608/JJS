@@ -7,7 +7,13 @@ export interface AppSettings {
   loyalty: { enabled: boolean; buyQty: number; freeQty: number };
   orders: { defaultDeliveryFee: number; allowStacking: boolean; defaultPaymentTermsDays: number; defaultReturnAction: "restock" | "waste" };
   costing?: { targetMarginPct: number; priceAlertPct: number };
-  printing: { receiptWidthMm: 58 | 80; labelWidthMm: number; labelHeightMm: number; receiptFooterAr: string; receiptFooterEn: string; invoiceSize: "thermal" | "a4" };
+  printing: { receiptWidthMm: 58 | 80; labelWidthMm: number; labelHeightMm: number; receiptFooterAr: string; receiptFooterEn: string;
+    invoiceSize: "thermal" | "a4";
+    labelOffsetXMm: number;
+    labelOffsetYMm: number;
+    labelPaddingMm: number;
+    receiptSideMm: number;
+  };
   business: { nameAr: string; nameEn: string; phone?: string; address?: string; logo?: string };
 }
 
