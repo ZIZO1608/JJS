@@ -24,12 +24,18 @@ const dateL = (lang: Lang, iso: string, withTime = false) =>
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
 
+/**
+ * Print-only rules for every print view: white page, no buttons, and nothing but the app itself,
+ * so icons that browser extensions add to every page (they sit outside #root) never reach the paper.
+ */
+const PRINT_CSS = "html, body { background: #fff !important; color: #000 !important; margin: 0 !important; } @media print { .no-print { display: none !important; } body > *:not(#root), html > *:not(head):not(body) { display: none !important; } }";
+
 /** Sets the paper size and prints once when `ready` turns true. */
 function usePrintOnce(ready: boolean, page: string) {
   const done = useRef(false);
   useEffect(() => {
     const st = document.createElement("style");
-    st.textContent = `@page { ${page} } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    st.textContent = `@page { ${page} } ${PRINT_CSS}`;
     document.head.appendChild(st);
     return () => st.remove();
   }, [page]);
@@ -70,7 +76,7 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
 
   useEffect(() => {
     const st = document.createElement("style");
-    st.textContent = `@page { ${page} } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    st.textContent = `@page { ${page} } ${PRINT_CSS}`;
     document.head.appendChild(st);
     styleRef.current = st;
     return () => st.remove();
@@ -81,10 +87,10 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
     let height = j.heightMm;
     if (height === "auto") {
       const root = document.getElementById("print-root");
-      // px → mm, plus a little paper so the last line clears the tear bar
-      height = Math.ceil(((root?.offsetHeight ?? 400) * 25.4) / 96) + 10;
+      // px → mm, plus a few mm so the last line clears the tear bar
+      height = Math.ceil(((root?.offsetHeight ?? 400) * 25.4) / 96) + 4;
     }
-    if (styleRef.current) styleRef.current.textContent = `@page { size: ${j.widthMm}mm ${height}mm; margin: 0 } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    if (styleRef.current) styleRef.current.textContent = `@page { size: ${j.widthMm}mm ${height}mm; margin: 0 } ${PRINT_CSS}`;
     return height;
   };
 
@@ -314,8 +320,8 @@ export function PrintReceipt() {
   const width = rc?.printing.receiptWidthMm ?? 80;
   const sp2 = useSmartPrint(
     !!rc,
-    size === "a4" ? "size: A4; margin: 12mm" : `size: ${width}mm 200mm; margin: 0`,
-    size === "a4" ? null : { kind: "receipt", widthMm: width, heightMm: "auto" },
+    size === "a4" ? "size: A4; margin: 12mm" : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
+    size === "a4" ? null : { kind: "receipt", widthMm: PRINTABLE_MM[width] ?? width, heightMm: "auto" },
   );
   if (r.error) return <p className="p-6 text-bad">{ui.err(r.error)}</p>;
   if (!rc) return <Loading />;
@@ -430,7 +436,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         <span className="text-[17px] font-bold">
           {t("فاتورة", "Invoice")} <span className="num ltr">#{o.number}</span>
         </span>
-        <span className="num ltr text-[13px]">{dateL(lang, o.createdAt ?? o.businessDate, true)}</span>
+        <span className="num ltr whitespace-nowrap text-[13px]">{dateL(lang, o.createdAt ?? o.businessDate, true)}</span>
       </div>
       {rc.client && <div className="mt-0.5 text-[14px]">{t("الزبون", "Client")}: <b>{rc.client.name}</b></div>}
       {o.type !== "normal" && <div className="mt-0.5 text-[14px] font-bold">{discountWords(o.type, t) || o.type}</div>}
@@ -741,8 +747,8 @@ export function PrintTest() {
   const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 5), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
   const sp2 = useSmartPrint(
     !!s,
-    kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm 200mm; margin: 0`,
-    kind === "label" ? { kind: "label", widthMm: w, heightMm: h } : { kind: "receipt", widthMm: width, heightMm: "auto" },
+    kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
+    kind === "label" ? { kind: "label", widthMm: w, heightMm: h } : { kind: "receipt", widthMm: PRINTABLE_MM[width] ?? width, heightMm: "auto" },
   );
   if (!s) return <Loading />;
   const now = new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -804,7 +810,7 @@ export function PrintTest() {
             <span className="text-[17px] font-bold">
               {tr("فاتورة", "Invoice")} <span className="num ltr">#0000</span>
             </span>
-            <span className="num ltr text-[13px]">{now}</span>
+            <span className="num ltr whitespace-nowrap text-[13px]">{now}</span>
           </div>
           <div className="my-2 border-t-2 border-black" />
           {item("كرواسان زعتر", "2 × $1.50", "$3.00")}
