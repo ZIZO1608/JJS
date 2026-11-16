@@ -76,16 +76,28 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
     return () => st.remove();
   }, [page]);
 
-  const send = async () => {
-    if (!api || !job) return;
-    setStage("printing");
-    let height = job.heightMm;
+  /** Sets the page to the job's exact size (receipts measured), so neither Electron nor Chrome's print window needs a paper size picked. */
+  const exactPage = (j: Job) => {
+    let height = j.heightMm;
     if (height === "auto") {
       const root = document.getElementById("print-root");
       // px → mm, plus a little paper so the last line clears the tear bar
       height = Math.ceil(((root?.offsetHeight ?? 400) * 25.4) / 96) + 10;
     }
-    if (styleRef.current) styleRef.current.textContent = `@page { size: ${job.widthMm}mm ${height}mm; margin: 0 } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    if (styleRef.current) styleRef.current.textContent = `@page { size: ${j.widthMm}mm ${height}mm; margin: 0 } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    return height;
+  };
+
+  const send = async () => {
+    if (!job) return;
+    const height = exactPage(job);
+    if (!direct || !api) {
+      // browser (or no printer chosen): the print window opens at the right size; the hint says which printer to pick
+      setStage("idle");
+      window.print();
+      return;
+    }
+    setStage("printing");
     const r = await api.print({ deviceName: device, widthMm: job.widthMm, heightMm: height });
     if (r.ok) {
       setStage("done");
@@ -97,7 +109,7 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
   };
 
   const start = async () => {
-    if (!direct || !job) {
+    if (!job) {
       window.print();
       return;
     }
@@ -138,16 +150,30 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  const panel = <PrintStatus stage={stage} job={job} device={device} loaded={loaded} error={error} onSwapped={swapped} onCancel={() => setStage("idle")} />;
+  const panel = (
+    <PrintStatus
+      stage={stage}
+      job={job}
+      device={device || (job ? DEFAULT_PRINTER[job.kind] : "")}
+      direct={direct}
+      loaded={loaded}
+      error={error}
+      onSwapped={swapped}
+      onCancel={() => setStage("idle")}
+    />
+  );
   return { print: () => void start(), dialog: () => window.print(), direct, panel };
 }
 
 const ROLL_NAME: Record<PrintKind, [string, string]> = { label: ["رول الملصقات", "label roll"], receipt: ["رول الفواتير 58 ملم", "58 mm receipt roll"] };
+/** The Windows names set up for the XP-236B; used in the browser hint when this PC has none saved. */
+const DEFAULT_PRINTER: Record<PrintKind, string> = { label: "XP-236B Labels", receipt: "XP-236B Invoices" };
 
 function PrintStatus({
   stage,
   job,
   device,
+  direct,
   loaded,
   error,
   onSwapped,
@@ -156,13 +182,24 @@ function PrintStatus({
   stage: Stage;
   job: Job | null;
   device: string;
+  direct: boolean;
   loaded: RollState | null;
   error: string;
   onSwapped: () => void;
   onCancel: () => void;
 }) {
   const { tr } = useI18n();
-  if (stage === "idle" || !job) return null;
+  if (!job) return null;
+  if (stage === "idle") {
+    if (direct) return null;
+    // browser: the print window can't be told which printer, so say it plainly
+    return (
+      <div className="no-print mx-2 mb-3 rounded-lg border border-line bg-sunken px-3 py-2 text-sm" role="note">
+        <b>{tr("بنافذة الطباعة:", "In the print window:")}</b> {tr("الطابعة", "Printer")} <b className="ltr">{device}</b> · {tr("الهوامش «بلا»", "Margins “None”")} ·{" "}
+        {tr("شيل «الرأس والتذييل»", "untick “Headers and footers”")}
+      </div>
+    );
+  }
   if (stage === "swap") {
     const need = ROLL_NAME[job.kind];
     const have = ROLL_NAME[loaded?.roll ?? (job.kind === "label" ? "receipt" : "label")];

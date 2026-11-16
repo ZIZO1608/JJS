@@ -85,12 +85,25 @@ function ThisComputer() {
           </Check>
         </>
       ) : (
-        <p className="text-sm text-muted">
-          {tr(
-            "من المتصفح بتطلع نافذة الطباعة كل مرة. لتطبع دغري، افتح برنامج JJ's ERP على الكمبيوتر الموصول عليه الطابعة.",
-            "In a browser the print window opens every time. To print straight away, use the JJ's ERP desktop app on the PC the printer is plugged into.",
-          )}
-        </p>
+        <>
+          <p className="text-sm text-muted">
+            {tr(
+              "من المتصفح بتطلع نافذة الطباعة كل مرة، بس الحجم بيكون مضبوط لحاله، وفوق بيكتبلك أي طابعة تختار. اكتب أسماء الطابعات متل ما هي بويندوز.",
+              "In a browser the print window opens every time, but the paper size is set for you and a note on top says which printer to pick. Type the printer names as they are in Windows.",
+            )}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={tr("طابعة الملصقات والباركود", "Labels & barcodes printer")} htmlFor="bp-label">
+              <TextInput id="bp-label" dir="ltr" placeholder="XP-236B Labels" value={cfg.label} onChange={(e) => change({ label: e.target.value })} />
+            </Field>
+            <Field label={tr("طابعة الفواتير (حراري)", "Invoices printer (thermal)")} htmlFor="bp-receipt">
+              <TextInput id="bp-receipt" dir="ltr" placeholder="XP-236B Invoices" value={cfg.receipt} onChange={(e) => change({ receipt: e.target.value })} />
+            </Field>
+          </div>
+          <Check checked={cfg.sharedRoll} onChange={(v) => change({ sharedRoll: v })}>
+            {tr("الملصقات والفواتير على نفس الطابعة (ذكّرني بدّل الرول)", "Labels and invoices share one printer (remind me to swap the roll)")}
+          </Check>
+        </>
       )}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted">{tr("الرول اللي بالطابعة هلق:", "Roll in the printer now:")}</span>
