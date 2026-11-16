@@ -1,4 +1,5 @@
 import JsBarcode from "jsbarcode";
+import qrcode from "qrcode-generator";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useAppSettings, type AppSettings } from "../../lib/appSettings";
@@ -390,7 +391,7 @@ const PRINTABLE_MM: Record<number, number> = { 58: 48, 80: 72 };
 
 /** Content width and sideways shift for a thermal receipt, from Settings → Printing. */
 export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, width: number, override?: { side?: number; x?: number }) {
-  const side = override?.side ?? p?.receiptSideMm ?? 5;
+  const side = override?.side ?? p?.receiptSideMm ?? 4;
   const content = Math.max(30, Math.min(width - 2 * side, PRINTABLE_MM[width] ?? width - 8));
   return { content, x: override?.x ?? p?.receiptOffsetXMm ?? 0 };
 }
@@ -399,6 +400,54 @@ export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, widt
 const RECEIPT_STYLE = { fontFamily: 'Tahoma, "Segoe UI", Arial, sans-serif', color: "#000", WebkitFontSmoothing: "none", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" } as const;
 /** Logos are often grey line art; push them to solid black so the head prints them sharp. */
 const LOGO_INK = { filter: "grayscale(1) contrast(4) brightness(0.85)" } as const;
+
+/** "0944 123 456" → "963944123456" (Syrian local numbers get the country code), "+44…" / "0044…" → "44…". */
+export function waDigits(phone: string) {
+  const d = phone.replace(/\D/g, "");
+  if (d.startsWith("00")) return d.slice(2);
+  if (d.startsWith("0")) return `963${d.slice(1)}`;
+  return d;
+}
+
+/** A QR code as one crisp SVG path (no image smoothing), sized in mm for the thermal head. */
+function Qr({ text, sizeMm }: { text: string; sizeMm: number }) {
+  const { n, d } = useMemo(() => {
+    const q = qrcode(0, "M");
+    q.addData(text);
+    q.make();
+    const count = q.getModuleCount();
+    let path = "";
+    for (let r = 0; r < count; r++) for (let c = 0; c < count; c++) if (q.isDark(r, c)) path += `M${c},${r}h1v1h-1z`;
+    return { n: count, d: path };
+  }, [text]);
+  return (
+    <svg viewBox={`0 0 ${n} ${n}`} style={{ width: `${sizeMm}mm`, height: `${sizeMm}mm` }} shapeRendering="crispEdges" aria-hidden>
+      <path d={d} fill="#000" />
+    </svg>
+  );
+}
+
+/** Bottom of every receipt: thanks, then "chat / order on WhatsApp" with the number and a QR that opens the chat. */
+function ReceiptFooter({ p, phone, lang }: { p: Partial<AppSettings["printing"]>; phone: string; lang: Lang }) {
+  const t = L(lang);
+  const wa = (p.receiptWhatsapp || phone || "").trim();
+  const digits = wa ? waDigits(wa) : "";
+  return (
+    <>
+      <div className="text-center text-[17px] font-bold">{lang === "ar" ? p.receiptFooterAr : p.receiptFooterEn}</div>
+      {digits && (
+        <div className="mt-2 flex items-center gap-2.5 rounded-[3px] border-2 border-black p-1.5">
+          {p.receiptQr !== false && <Qr text={`https://wa.me/${digits}`} sizeMm={19} />}
+          <div className={`min-w-0 flex-1 leading-tight ${p.receiptQr === false ? "text-center" : ""}`}>
+            <div className="text-[14px] font-bold">{t("اطلب عبر واتساب", "Order on WhatsApp")}</div>
+            <div className="num ltr mt-0.5 text-[16px] font-bold">{wa}</div>
+            {p.receiptQr !== false && <div className="mt-0.5 text-[11px]">{t("امسح الكود لتراسلنا", "Scan to chat with us")}</div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: AppSettings | null; width: number }) {
   const t = L(lang);
@@ -423,13 +472,14 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
     >
       <div className="text-center">
         <Logo s={s} className="mx-auto mb-1.5 h-16 w-auto" style={LOGO_INK} />
-        <div className="text-[21px] font-bold leading-tight">{pk(rc.business)}</div>
+        <div className="text-[22px] font-bold leading-tight">{pk(rc.business)}</div>
+        {rc.printing.receiptSocial && <div className="mt-0.5 text-[14px] font-bold">{rc.printing.receiptSocial}</div>}
+        {rc.business.address && <div className="text-[13px]">{rc.business.address}</div>}
         {rc.business.phone && (
           <div className="mt-0.5 text-[14px]">
-            <span className="ltr">{rc.business.phone}</span>
+            ☎ <span className="ltr">{rc.business.phone}</span>
           </div>
         )}
-        {rc.business.address && <div className="text-[13px]">{rc.business.address}</div>}
       </div>
       {rule}
       <div className="flex items-baseline justify-between gap-2">
@@ -457,6 +507,10 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         </div>
       ))}
       {rule}
+      {row(
+        t("عدد الأصناف / القطع", "Items / pieces"),
+        `${rc.lines.length} / ${rc.lines.reduce((n, l) => n + l.qty, 0)}`,
+      )}
       {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
       {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
       {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
@@ -486,7 +540,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         </div>
       )}
       {rule}
-      <div className="text-center text-[16px] font-bold">{lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn}</div>
+      <ReceiptFooter p={rc.printing} phone={rc.business.phone ?? ""} lang={lang} />
     </div>
   );
 }
@@ -744,7 +798,7 @@ export function PrintTest() {
   };
   const saved = labelMargins(s?.printing);
   const m: LabelMargins = { x: num0("ox", -15, 15, saved.x), y: num0("oy", -15, 15, saved.y), pad: num0("pad", 0, 8, saved.pad) };
-  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 5), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
+  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 4), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
   const sp2 = useSmartPrint(
     !!s,
     kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
@@ -820,10 +874,8 @@ export function PrintTest() {
             <span className="text-[18px] font-bold">{tr("المجموع", "TOTAL")}</span>
             <span className="num ltr text-[23px] font-bold">$10.75</span>
           </div>
-          <div className="text-center text-[13px] font-bold">{tr("إذا الحافتين مطبوعين كاملين، الإعداد صح ✓", "Both EDGE marks fully printed = setup is right ✓")}</div>
-          <div className="mt-1.5">
-            <Barcode value="TEST-123456" height={34} />
-          </div>
+          <div className="mb-2 text-center text-[13px] font-bold">{tr("إذا الحافتين مطبوعين كاملين، الإعداد صح ✓", "Both EDGE marks fully printed = setup is right ✓")}</div>
+          <ReceiptFooter p={s.printing} phone={s.business.phone ?? ""} lang={ui.lang} />
           <div className="mt-1 text-center text-[12px] num ltr">
             {width} mm · {box.content} mm {tr("عرض الطباعة", "print width")} · {box.x >= 0 ? "+" : ""}
             {box.x} mm

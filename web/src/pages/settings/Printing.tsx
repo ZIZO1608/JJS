@@ -136,7 +136,7 @@ export function PrintingTab() {
   const { can } = useAuth();
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
-  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "5", rx: "0" });
+  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0", wa: "", social: "", qr: true });
   useEffect(() => {
     if (!s) return;
     const p = s.printing as Partial<typeof s.printing> & typeof s.printing;
@@ -150,8 +150,11 @@ export function PrintingTab() {
       ox: String(p.labelOffsetXMm ?? 0),
       oy: String(p.labelOffsetYMm ?? 0),
       pad: String(p.labelPaddingMm ?? 1.2),
-      rm: String(p.receiptSideMm ?? 5),
+      rm: String(p.receiptSideMm ?? 4),
       rx: String(p.receiptOffsetXMm ?? 0),
+      wa: p.receiptWhatsapp ?? "",
+      social: p.receiptSocial ?? "",
+      qr: p.receiptQr ?? true,
     });
   }, [s]);
   if (!s) return <Spinner />;
@@ -177,6 +180,9 @@ export function PrintingTab() {
         labelPaddingMm: pad,
         receiptSideMm: rm,
         receiptOffsetXMm: rx,
+        receiptWhatsapp: f.wa.trim(),
+        receiptSocial: f.social.trim(),
+        receiptQr: f.qr,
       }),
     );
     if (ok) await reload();
@@ -196,9 +202,9 @@ export function PrintingTab() {
     </Field>
   );
   const PX = 4; // preview scale: px per mm
-  /** This shop's printer takes 80 mm receipt paper; receipts keep 5 mm clear on each side (70 mm of print). Labels up to 80 mm. */
+  /** This shop's printer takes 80 mm receipt paper; receipts use the full 72 mm the head can print (4 mm clear on each side). Labels up to 80 mm. */
   const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
-    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", rm: "5", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
+    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", rm: "4", rx: "0", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
   const test = (kind: "receipt" | "label") =>
     openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}&ox=${ox}&oy=${oy}&pad=${pad}&rm=${rm}&rx=${rx}`);
   const tooWide = w > 80;
@@ -213,8 +219,8 @@ export function PrintingTab() {
         </div>
         <p className="text-sm text-muted">
           {tr(
-            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، ومنترك نص سانتي من كل جنب (الطباعة 70 ملم). بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
-            "One printer for invoices and barcodes. Receipt paper is 80 mm with 5 mm clear on each side (70 mm of print). After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
+            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، والطباعة 72 ملم (4 ملم فاضي من كل جنب). بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
+            "One printer for invoices and barcodes. Receipt paper is 80 mm; the print is 72 mm wide (4 mm clear on each side). After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
           )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -256,7 +262,7 @@ export function PrintingTab() {
       <section className="card grid gap-4 md:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold">{tr("الهوامش ومكان الطباعة", "Margins & position")}</h2>
-          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "5", rx: "0" })}>
+          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0" })}>
             {tr("رجّع الافتراضي", "Reset")}
           </button>
         </div>
@@ -322,6 +328,15 @@ export function PrintingTab() {
         <Field label={tr("سطر آخر الفاتورة (إنكليزي)", "Footer line (English)")} htmlFor="pr-fe">
           <TextInput id="pr-fe" dir="ltr" value={f.receiptFooterEn} onChange={(e) => setF({ ...f, receiptFooterEn: e.target.value })} />
         </Field>
+        <Field label={tr("رقم الواتساب على الفاتورة", "WhatsApp number on receipts")} htmlFor="pr-wa" hint={tr(`فاضي = رقم المحل${s.business.phone ? ` (${s.business.phone})` : ""}`, `Empty = shop phone${s.business.phone ? ` (${s.business.phone})` : ""}`)}>
+          <TextInput id="pr-wa" dir="ltr" inputMode="tel" placeholder="+963 9xx xxx xxx" value={f.wa} onChange={(e) => setF({ ...f, wa: e.target.value })} />
+        </Field>
+        <Field label={tr("سطر تحت اسم المحل", "Line under the shop name")} htmlFor="pr-so" hint={tr("مثلاً: انستغرام @jjsdeli", "e.g. Instagram @jjsdeli")}>
+          <TextInput id="pr-so" dir="auto" value={f.social} onChange={(e) => setF({ ...f, social: e.target.value })} />
+        </Field>
+        <Check checked={f.qr} onChange={(v) => setF({ ...f, qr: v })}>
+          {tr("اطبع كود QR للواتساب آخر الفاتورة", "Print a WhatsApp QR code at the bottom")}
+        </Check>
       </section>
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("ملصقات الصلاحية", "Expiry labels")}</h2>

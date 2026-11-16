@@ -60,6 +60,12 @@ export interface PrintSettings {
   receiptSideMm: number;
   /** Shift the whole receipt (mm): + right, − left. For a 3-inch head printing on 58 mm paper. */
   receiptOffsetXMm: number;
+  /** WhatsApp number printed (with a QR code to chat) at the bottom of receipts; empty = the shop phone. */
+  receiptWhatsapp: string;
+  /** One extra line under the shop name, e.g. "@jjsdeli · Instagram". */
+  receiptSocial: string;
+  /** Print the WhatsApp QR code on receipts. */
+  receiptQr: boolean;
 }
 /** Which roll is in the shared label/receipt printer, so every PC can say "swap the roll first". */
 export interface PrinterRoll {
@@ -118,7 +124,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 5, receiptOffsetXMm: 0 },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 4, receiptOffsetXMm: 0, receiptWhatsapp: "", receiptSocial: "", receiptQr: true },
   "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },

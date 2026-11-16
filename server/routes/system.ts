@@ -39,8 +39,11 @@ const printingSchema = z.object({
   labelOffsetXMm: z.number().min(-15).max(15).default(0),
   labelOffsetYMm: z.number().min(-15).max(15).default(0),
   labelPaddingMm: z.number().min(0).max(8).default(1.2),
-  receiptSideMm: z.number().min(0).max(10).default(5),
+  receiptSideMm: z.number().min(0).max(10).default(4),
   receiptOffsetXMm: z.number().min(-15).max(15).default(0),
+  receiptWhatsapp: z.string().trim().max(30).default(""),
+  receiptSocial: z.string().trim().max(60).default(""),
+  receiptQr: z.boolean().default(true),
 });
 
 for (const [key, schema] of [

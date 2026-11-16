@@ -14,6 +14,9 @@ export interface AppSettings {
     labelPaddingMm: number;
     receiptSideMm: number;
     receiptOffsetXMm: number;
+    receiptWhatsapp: string;
+    receiptSocial: string;
+    receiptQr: boolean;
   };
   business: { nameAr: string; nameEn: string; phone?: string; address?: string; logo?: string };
 }
