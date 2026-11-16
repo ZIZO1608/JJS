@@ -118,7 +118,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 2, receiptOffsetXMm: 0 },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 5, receiptOffsetXMm: 0 },
   "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },

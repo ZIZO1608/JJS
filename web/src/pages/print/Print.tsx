@@ -173,7 +173,7 @@ function useSmartPrint(ready: boolean, page: string, job: Job | null) {
   return { print: () => void start(), dialog: () => window.print(), direct, panel };
 }
 
-const ROLL_NAME: Record<PrintKind, [string, string]> = { label: ["رول الملصقات", "label roll"], receipt: ["رول الفواتير 58 ملم", "58 mm receipt roll"] };
+const ROLL_NAME: Record<PrintKind, [string, string]> = { label: ["رول الملصقات", "label roll"], receipt: ["رول الفواتير 80 ملم", "80 mm receipt roll"] };
 /** The Windows names set up for the XP-236B; used in the browser hint when this PC has none saved. */
 const DEFAULT_PRINTER: Record<PrintKind, string> = { label: "XP-236B Labels", receipt: "XP-236B Invoices" };
 
@@ -384,7 +384,7 @@ const PRINTABLE_MM: Record<number, number> = { 58: 48, 80: 72 };
 
 /** Content width and sideways shift for a thermal receipt, from Settings → Printing. */
 export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, width: number, override?: { side?: number; x?: number }) {
-  const side = override?.side ?? p?.receiptSideMm ?? 2;
+  const side = override?.side ?? p?.receiptSideMm ?? 5;
   const content = Math.max(30, Math.min(width - 2 * side, PRINTABLE_MM[width] ?? width - 8));
   return { content, x: override?.x ?? p?.receiptOffsetXMm ?? 0 };
 }
@@ -738,7 +738,7 @@ export function PrintTest() {
   };
   const saved = labelMargins(s?.printing);
   const m: LabelMargins = { x: num0("ox", -15, 15, saved.x), y: num0("oy", -15, 15, saved.y), pad: num0("pad", 0, 8, saved.pad) };
-  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 2), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
+  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 10, s?.printing.receiptSideMm ?? 5), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
   const sp2 = useSmartPrint(
     !!s,
     kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${width}mm 200mm; margin: 0`,

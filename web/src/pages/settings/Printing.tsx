@@ -109,7 +109,7 @@ function ThisComputer() {
         <span className="text-sm text-muted">{tr("الرول اللي بالطابعة هلق:", "Roll in the printer now:")}</span>
         {(["label", "receipt"] as const).map((r) => (
           <button key={r} className={`btn px-3 py-1 text-sm ${roll?.roll === r ? "btn-primary" : ""}`} onClick={() => void pickRoll(r)}>
-            {r === "label" ? tr("🏷️ ملصقات", "🏷️ Labels") : tr("🧾 فواتير 58 ملم", "🧾 Receipts 58 mm")}
+            {r === "label" ? tr("🏷️ ملصقات", "🏷️ Labels") : tr("🧾 فواتير 80 ملم", "🧾 Receipts 80 mm")}
           </button>
         ))}
         {roll?.changedBy && <span className="text-xs text-faint">{tr(`آخر تبديل: ${roll.changedBy}`, `Last swapped by ${roll.changedBy}`)}</span>}
@@ -136,7 +136,7 @@ export function PrintingTab() {
   const { can } = useAuth();
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
-  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "2", rx: "0" });
+  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "5", rx: "0" });
   useEffect(() => {
     if (!s) return;
     const p = s.printing as Partial<typeof s.printing> & typeof s.printing;
@@ -150,7 +150,7 @@ export function PrintingTab() {
       ox: String(p.labelOffsetXMm ?? 0),
       oy: String(p.labelOffsetYMm ?? 0),
       pad: String(p.labelPaddingMm ?? 1.2),
-      rm: String(p.receiptSideMm ?? 2),
+      rm: String(p.receiptSideMm ?? 5),
       rx: String(p.receiptOffsetXMm ?? 0),
     });
   }, [s]);
@@ -196,12 +196,12 @@ export function PrintingTab() {
     </Field>
   );
   const PX = 4; // preview scale: px per mm
-  /** Xprinter XP-236B: 2-inch head, 58 mm paper at most, so invoices go thermal 58 mm and labels can't be wider. */
+  /** This shop's printer takes 80 mm receipt paper; receipts keep 5 mm clear on each side (70 mm of print). Labels up to 80 mm. */
   const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
-    setF({ ...f, receiptWidthMm: "58", invoiceSize: "thermal", labelWidthMm: String(Math.min(58, num(lw) || 50)), labelHeightMm: lh });
+    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", rm: "5", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
   const test = (kind: "receipt" | "label") =>
     openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}&ox=${ox}&oy=${oy}&pad=${pad}&rm=${rm}&rx=${rx}`);
-  const tooWide = w > 58 || f.receiptWidthMm === "80";
+  const tooWide = w > 80;
   return (
     <div className="grid max-w-4xl gap-5 md:grid-cols-2">
       <section className="card grid gap-3 md:col-span-2">
@@ -213,8 +213,8 @@ export function PrintingTab() {
         </div>
         <p className="text-sm text-muted">
           {tr(
-            "نفس الطابعة للفواتير والباركود. ورقها أعرض شي 58 ملم. بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
-            "One printer for invoices and barcodes. Paper is 58 mm wide at most. After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
+            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، ومنترك نص سانتي من كل جنب (الطباعة 70 ملم). بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
+            "One printer for invoices and barcodes. Receipt paper is 80 mm with 5 mm clear on each side (70 mm of print). After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
           )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
@@ -235,7 +235,7 @@ export function PrintingTab() {
         </div>
         {tooWide && (
           <p className="text-sm font-semibold text-bad">
-            {tr("انتبه: هالطابعة ما بتطبع أعرض من 58 ملم.", "Careful: this printer can't print wider than 58 mm.")}
+            {tr("انتبه: هالطابعة ما بتطبع أعرض من 80 ملم.", "Careful: this printer can't print wider than 80 mm.")}
           </p>
         )}
         <div className="flex flex-wrap gap-2">
@@ -256,7 +256,7 @@ export function PrintingTab() {
       <section className="card grid gap-4 md:col-span-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-bold">{tr("الهوامش ومكان الطباعة", "Margins & position")}</h2>
-          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "2", rx: "0" })}>
+          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "5", rx: "0" })}>
             {tr("رجّع الافتراضي", "Reset")}
           </button>
         </div>
