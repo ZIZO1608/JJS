@@ -400,6 +400,8 @@ export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, widt
 const RECEIPT_STYLE = { fontFamily: 'Tahoma, "Segoe UI", Arial, sans-serif', color: "#000", WebkitFontSmoothing: "none", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" } as const;
 /** Logos are often grey line art; push them to solid black so the head prints them sharp. */
 const LOGO_INK = { filter: "grayscale(1) contrast(4) brightness(0.85)" } as const;
+/** Same, flipped to white for the black header banner. */
+const LOGO_INK_ON_BLACK = { filter: "grayscale(1) contrast(4) brightness(0.85) invert(1)" } as const;
 
 /** "0944 123 456" → "963944123456" (Syrian local numbers get the country code), "+44…" / "0044…" → "44…". */
 export function waDigits(phone: string) {
@@ -485,73 +487,110 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
       <span className="num ltr whitespace-nowrap">{b}</span>
     </div>
   );
-  const rule = <div className="my-2 border-t-2 border-black" />;
   const thin = <div className="my-1.5 border-t border-dashed border-black" />;
+  const pieces = rc.lines.reduce((n, l) => n + l.qty, 0);
+  const stamp = o.status === "cancelled" ? null : payStamp(o.total, rc.payment, t);
   return (
     <div
       id="print-root"
       className="mx-auto bg-white pb-2 pt-1 leading-snug"
       style={{ ...RECEIPT_STYLE, width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}
     >
-      <div className="text-center">
-        <Logo s={s} className="mx-auto mb-1.5 h-16 w-auto" style={LOGO_INK} />
-        <div className="text-[22px] font-bold leading-tight">{pk(rc.business)}</div>
+      {/* Black banner: logo and shop name in white */}
+      <div className="rounded-[6px] bg-black px-2 pb-2 pt-2.5 text-center text-white">
+        <Logo s={s} className="mx-auto mb-1 h-14 w-auto" style={LOGO_INK_ON_BLACK} />
+        <div className="text-[23px] font-black leading-tight tracking-wide">{pk(rc.business)}</div>
         {rc.printing.receiptSocial && <div className="mt-0.5 text-[14px] font-bold">{rc.printing.receiptSocial}</div>}
-        {rc.business.address && <div className="text-[13px]">{rc.business.address}</div>}
-        {rc.business.phone && (
-          <div className="mt-0.5 text-[14px]">
-            ☎ <span className="ltr">{rc.business.phone}</span>
-          </div>
-        )}
       </div>
-      {rule}
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[17px] font-bold">
-          {t("فاتورة", "Invoice")} <span className="num ltr">#{o.number}</span>
-        </span>
-        <span className="num ltr whitespace-nowrap text-[13px]">{dateL(lang, o.createdAt ?? o.businessDate, true)}</span>
+      {(rc.business.address || rc.business.phone) && (
+        <div className="mt-1 text-center text-[13px] leading-tight">
+          {rc.business.address && <div>{rc.business.address}</div>}
+          {rc.business.phone && (
+            <div className="font-bold">
+              ☎ <span className="ltr">{rc.business.phone}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Invoice number, date, client */}
+      <div className="mt-2 flex items-stretch gap-1.5">
+        <div className="flex flex-col justify-center rounded-[4px] border-2 border-black px-1.5 py-0.5 text-center leading-none">
+          <div className="text-[10px] font-bold uppercase tracking-wider">{t("فاتورة", "Invoice")}</div>
+          <div className="num ltr mt-0.5 text-[19px] font-black">#{o.number}</div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col justify-center text-end leading-tight">
+          <div className="num text-[13px] font-bold">{dateL(lang, o.createdAt ?? o.businessDate, true)}</div>
+          {rc.client && <div className="truncate text-[14px] font-bold">{rc.client.name}</div>}
+        </div>
       </div>
-      {rc.client && <div className="mt-0.5 text-[14px]">{t("الزبون", "Client")}: <b>{rc.client.name}</b></div>}
-      {o.type !== "normal" && <div className="mt-0.5 text-[14px] font-bold">{discountWords(o.type, t) || o.type}</div>}
+      {o.type !== "normal" && <div className="mt-1 text-center text-[14px] font-bold">★ {discountWords(o.type, t) || o.type} ★</div>}
       {o.status === "cancelled" && <Cancelled lang={lang} />}
-      {rule}
-      {rc.lines.map((l, i) => (
-        <div key={l.id}>
-          {i > 0 && thin}
-          <div className="text-[15px] font-bold leading-tight">{pk(l)}</div>
-          {lineOptions(l, lang) && <div className="text-[13px]">+ {lineOptions(l, lang)}</div>}
-          <div className="mt-0.5 flex items-baseline justify-between gap-2">
-            <span className="num ltr text-[14px]">
-              {l.qty} × {m(l.unitPrice)}
-              {l.freeQty > 0 && <span className="text-[12px]"> ({t(`${l.freeQty} مجاناً`, `${l.freeQty} free`)})</span>}
-            </span>
-            <span className="num ltr whitespace-nowrap text-[15px] font-bold">{m(l.lineTotal)}</span>
+
+      {/* Lines */}
+      <div className="mt-2 flex items-baseline justify-between border-b-2 border-black pb-0.5 text-[11px] font-bold uppercase tracking-wider">
+        <span>{t("الصنف", "Item")}</span>
+        <span>{t("المبلغ", "Amount")}</span>
+      </div>
+      <div className="mt-1">
+        {rc.lines.map((l, i) => (
+          <div key={l.id}>
+            {i > 0 && thin}
+            <div className="flex items-start gap-1.5">
+              <span className="num ltr mt-[1px] shrink-0 rounded-[3px] bg-black px-1 text-[13px] font-bold leading-[18px] text-white">{l.qty}×</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-bold leading-tight">{pk(l)}</div>
+                {lineOptions(l, lang) && <div className="text-[12px] leading-tight">+ {lineOptions(l, lang)}</div>}
+                <div className="num ltr text-[12px]">
+                  @ {m(l.unitPrice)}
+                  {l.freeQty > 0 && <b> · {t(`${l.freeQty} مجاناً`, `${l.freeQty} FREE`)}</b>}
+                </div>
+              </div>
+              <span className="num ltr whitespace-nowrap text-[15px] font-bold">{m(l.lineTotal)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Totals */}
+      <div className="mt-2 border-t-2 border-black pt-1.5">
+        {row(t("الأصناف / القطع", "Items / pieces"), `${rc.lines.length} / ${pieces}`)}
+        {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
+        {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
+        {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
+        {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
+        <span className="text-[18px] font-black tracking-wider">{t("المجموع", "TOTAL")}</span>
+        <span className="num ltr whitespace-nowrap text-[24px] font-black">{m(o.total)}</span>
+      </div>
+      {o.currency === "SYP" && o.fxRate ? <div className="mt-0.5 text-end text-[13px] num ltr">≈ {usd(o.totalUsd)}</div> : null}
+      {o.discount > 0 && o.status !== "cancelled" && (
+        <div className="mt-1.5 rounded-[4px] border-2 border-dashed border-black py-1 text-center text-[15px] font-bold">
+          ✂ {t("وفّرت", "You saved")} <span className="num ltr">{m(o.discount)}</span> ✂
+        </div>
+      )}
+
+      {/* Payment */}
+      {(o.method || rc.payment.paid > 0 || rc.payment.remaining > 0) && (
+        <div className="mt-1.5">
+          {o.method && row(t("طريقة الدفع", "Payment"), pk(o.method))}
+          {rc.payment.paid > 0 && row(t("المدفوع", "Paid"), m(rc.payment.paid))}
+          {rc.payment.remaining > 0 && row(t("الباقي على الحساب", "Remaining on account"), m(rc.payment.remaining), true)}
+        </div>
+      )}
+      {stamp && (
+        <div className="mb-1 mt-3 flex justify-center">
+          <div className="rotate-[-4deg] rounded-[6px] border-[3px] border-black px-3 py-0.5 text-center leading-tight" style={{ outline: "1px solid #000", outlineOffset: "2px" }}>
+            <div className="text-[20px] font-black tracking-[0.2em]">{stamp}</div>
           </div>
         </div>
-      ))}
-      {rule}
-      {row(
-        t("عدد الأصناف / القطع", "Items / pieces"),
-        `${rc.lines.length} / ${rc.lines.reduce((n, l) => n + l.qty, 0)}`,
       )}
-      {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
-      {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
-      {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
-      {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
-      <div className="my-2 flex items-baseline justify-between gap-2 border-y-[4px] border-double border-black py-1.5">
-        <span className="text-[18px] font-bold">{t("المجموع", "TOTAL")}</span>
-        <span className="num ltr whitespace-nowrap text-[23px] font-bold">{m(o.total)}</span>
-      </div>
-      {o.currency === "SYP" && o.fxRate ? <div className="text-end text-[13px] num ltr">≈ {usd(o.totalUsd)}</div> : null}
-      {o.method && row(t("طريقة الدفع", "Payment"), pk(o.method))}
-      {rc.payment.paid > 0 && row(t("المدفوع", "Paid"), m(rc.payment.paid))}
-      {rc.payment.remaining > 0 && row(t("الباقي على الحساب", "Remaining on account"), m(rc.payment.remaining), true)}
       {rc.account && (
-        <>
-          {thin}
+        <div className="mt-2 rounded-[4px] border-2 border-black px-1.5 py-1">
           {row(t("الرصيد السابق", "Previous balance"), bw(rc.account.beforeUsd))}
           {row(t("الرصيد الجديد", "New balance"), bw(rc.account.afterUsd), true)}
-        </>
+        </div>
       )}
       {rc.loyalty?.enabled && (
         <div className="mt-1.5 text-center text-[13px]">
@@ -562,10 +601,23 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
           {rc.loyalty.available > 0 && ` · ${t(`لك ${rc.loyalty.available} مجاناً`, `${rc.loyalty.available} free waiting`)}`}
         </div>
       )}
-      {rule}
+
+      {/* Footer */}
+      <div className="my-2 border-t-2 border-black" />
       <ReceiptFooter p={rc.printing} phone={rc.business.phone ?? ""} lang={lang} />
+      <div className="mt-2" dir="ltr">
+        <Barcode value={String(o.number)} height={34} />
+      </div>
     </div>
   );
+}
+
+/** PAID / PARTLY PAID / ON ACCOUNT for the stamp; nothing for a free (zero-total) invoice. */
+function payStamp(total: number, pay: Receipt["payment"], t: (ar: string, en: string) => string) {
+  if (total <= 0.009) return null;
+  if (pay.remaining <= 0.009) return t("مدفوعة", "PAID");
+  if (pay.paid > 0.009) return t("مدفوعة جزئياً", "PART PAID");
+  return t("على الحساب", "ON ACCOUNT");
 }
 
 function InvoiceA4({ rc, lang, s }: { rc: Receipt; lang: Lang; s: AppSettings | null }) {
@@ -876,9 +928,9 @@ export function PrintTest() {
             <span>EDGE ►|</span>
           </div>
           <div className="border-t-[3px] border-black" />
-          <div className="mt-2 text-center">
-            <Logo s={s} className="mx-auto mb-1.5 h-16 w-auto" style={LOGO_INK} />
-            <div className="text-[21px] font-bold leading-tight">{ui.pick(s.business)}</div>
+          <div className="mt-2 rounded-[6px] bg-black px-2 pb-2 pt-2.5 text-center text-white">
+            <Logo s={s} className="mx-auto mb-1 h-14 w-auto" style={LOGO_INK_ON_BLACK} />
+            <div className="text-[22px] font-black leading-tight tracking-wide">{ui.pick(s.business)}</div>
             <div className="mt-0.5 text-[14px] font-bold">{tr("فاتورة تجربة", "TEST INVOICE")}</div>
           </div>
           <div className="my-2 border-t-2 border-black" />
@@ -892,9 +944,9 @@ export function PrintTest() {
           {item("كرواسان زعتر", "2 × $1.50", "$3.00")}
           {item("Turkey & Cheddar", "1 × $4.25", "$4.25")}
           {item("قهوة عربية", "3 × 15,000", "45,000 ل.س")}
-          <div className="my-2 flex items-baseline justify-between gap-2 border-y-[4px] border-double border-black py-1.5">
-            <span className="text-[18px] font-bold">{tr("المجموع", "TOTAL")}</span>
-            <span className="num ltr text-[23px] font-bold">$10.75</span>
+          <div className="my-2 flex items-center justify-between gap-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
+            <span className="text-[18px] font-black tracking-wider">{tr("المجموع", "TOTAL")}</span>
+            <span className="num ltr text-[24px] font-black">$10.75</span>
           </div>
           <div className="mb-2 text-center text-[13px] font-bold">{tr("إذا الحافتين مطبوعين كاملين، الإعداد صح ✓", "Both EDGE marks fully printed = setup is right ✓")}</div>
           <ReceiptFooter p={s.printing} phone={s.business.phone ?? ""} lang={ui.lang} />
