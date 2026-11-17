@@ -396,6 +396,18 @@ export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, widt
   return { content, x: override?.x ?? p?.receiptOffsetXMm ?? 0 };
 }
 
+/**
+ * The receipt is laid out at the full design width (72 mm on 80 mm paper) and then shrunk as one piece to the strip
+ * from Settings → Printing. Without this, a narrower strip (the XP-236B head burns only ~56 mm of an 80 mm roll) keeps
+ * every font, the QR and the totals at full size, so they spill past the strip and get cut on both sides.
+ */
+function ReceiptFit({ width, content, children }: { width: number; content: number; children: ReactNode }) {
+  const design = PRINTABLE_MM[width] ?? width - 8;
+  const zoom = content / design;
+  if (zoom >= 0.999) return <>{children}</>;
+  return <div style={{ width: `${design}mm`, zoom }}>{children}</div>;
+}
+
 /** Tahoma: crisp at small sizes on a 203 dpi head, and it has Arabic. Pure black, no smoothing greys. */
 const RECEIPT_STYLE = { fontFamily: 'Tahoma, "Segoe UI", Arial, sans-serif', color: "#000", WebkitFontSmoothing: "none", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" } as const;
 /** Logos are often grey line art; push them to solid black so the head prints them sharp. */
@@ -482,9 +494,10 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
   const bw = (v: number) => balanceWords(v, lang, o.fxRate, o.currency === "SYP");
   const box = receiptBox(rc.printing, width);
   const row = (a: ReactNode, b: ReactNode, strong = false) => (
-    <div className={`flex items-baseline justify-between gap-2 ${strong ? "text-[16px] font-bold" : "text-[14px]"}`}>
+    // a long amount (a balance with its SYP value) drops under the label instead of running off the paper
+    <div className={`flex flex-wrap items-baseline justify-between gap-x-2 ${strong ? "text-[16px] font-bold" : "text-[14px]"}`}>
       <span>{a}</span>
-      <span className="num ltr whitespace-nowrap">{b}</span>
+      <span className="num ltr ms-auto whitespace-nowrap">{b}</span>
     </div>
   );
   const thin = <div className="my-1.5 border-t border-dashed border-black" />;
@@ -496,6 +509,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
       className="mx-auto bg-white pb-2 pt-1 leading-snug"
       style={{ ...RECEIPT_STYLE, width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}
     >
+      <ReceiptFit width={width} content={box.content}>
       {/* Black banner: logo and shop name in white */}
       <div className="rounded-[6px] bg-black px-2 pb-2 pt-2.5 text-center text-white">
         <Logo s={s} className="mx-auto mb-1 h-14 w-auto" style={LOGO_INK_ON_BLACK} />
@@ -560,7 +574,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
         {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
         <span className="text-[18px] font-black tracking-wider">{t("المجموع", "TOTAL")}</span>
         <span className="num ltr whitespace-nowrap text-[24px] font-black">{m(o.total)}</span>
       </div>
@@ -608,6 +622,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
       <div className="mt-2" dir="ltr">
         <Barcode value={String(o.number)} height={34} />
       </div>
+      </ReceiptFit>
     </div>
   );
 }
@@ -922,6 +937,7 @@ export function PrintTest() {
           {/* Page ruler (not shifted): the first and last number you can read go into Settings → Printing → Auto-centre */}
           <PageRuler mm={PRINTABLE_MM[width] ?? width} />
           <div className="mx-auto leading-snug" style={{ width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}>
+          <ReceiptFit width={width} content={box.content}>
           {/* edge bars: both must print fully, or move it with Settings → Printing */}
           <div className="mt-2 flex justify-between text-[12px] font-bold" dir="ltr">
             <span>|◄ EDGE</span>
@@ -954,6 +970,7 @@ export function PrintTest() {
             {width} mm · {box.content} mm {tr("عرض الطباعة", "print width")} · {box.x >= 0 ? "+" : ""}
             {box.x} mm
           </div>
+          </ReceiptFit>
           </div>
         </div>
       )}

@@ -215,9 +215,12 @@ export function PrintingTab() {
     const x = Math.round(((a + b) / 2 - pageW / 2) * 2) / 2;
     setF({ ...f, rm: String(side), rx: String(x) });
   };
-  /** This shop's printer takes 80 mm receipt paper; receipts use the full 72 mm the head can print (4 mm clear on each side). Labels up to 80 mm. */
+  /**
+   * This shop's printer takes an 80 mm receipt roll, but its head burns a narrower strip, so the receipt width and
+   * position come from the ruler (Auto-centre) and are left alone here. Labels up to 80 mm.
+   */
   const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
-    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", rm: "4", rx: "0", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
+    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
   const test = (kind: "receipt" | "label") =>
     openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}&ox=${ox}&oy=${oy}&pad=${pad}&rm=${rm}&rx=${rx}`);
   const tooWide = w > 80;
@@ -232,8 +235,8 @@ export function PrintingTab() {
         </div>
         <p className="text-sm text-muted">
           {tr(
-            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، والطباعة 72 ملم (4 ملم فاضي من كل جنب). بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
-            "One printer for invoices and barcodes. Receipt paper is 80 mm; the print is 72 mm wide (4 mm clear on each side). After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
+            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، بس راس الطابعة بيطبع شريط أضيق بالنص، فاضبط عرض الفاتورة من «توسيط الفاتورة تلقائياً» تحت، والفاتورة بتصغر كلها لتركب فيه. بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
+            "One printer for invoices and barcodes. Receipt paper is 80 mm, but the head only prints a narrower strip in the middle, so set the receipt width with “Auto-centre the invoice” below; the whole receipt shrinks to fit it. After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
           )}
         </p>
         <div className="flex flex-wrap items-center gap-2">
