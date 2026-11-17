@@ -4,7 +4,7 @@ import { put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { num } from "../../lib/format";
-import { desktop, getRoll, guessDevicePrinters, openPrint, readDevicePrinters, setRoll, writeDevicePrinters, type DesktopPrinter, type DevicePrinters, type PrintKind, type RollState } from "../../lib/print";
+import { desktop, getRoll, guessDevicePrinters, openPrint, readDevicePrinters, receiptLinkBase, setRoll, writeDevicePrinters, type DesktopPrinter, type DevicePrinters, type PrintKind, type RollState } from "../../lib/print";
 import { useI18n } from "../../lib/i18n";
 import { Check, NumInput, useSaver } from "../kit";
 
@@ -137,7 +137,7 @@ export function PrintingTab() {
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
   const [seen, setSeen] = useState({ left: "0", right: "72" });
-  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0", wa: "", social: "", qr: true });
+  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0", wa: "", social: "", qr: true, linkQr: true, linkBase: "" });
   useEffect(() => {
     if (!s) return;
     const p = s.printing as Partial<typeof s.printing> & typeof s.printing;
@@ -156,6 +156,8 @@ export function PrintingTab() {
       wa: p.receiptWhatsapp ?? "",
       social: p.receiptSocial ?? "",
       qr: p.receiptQr ?? true,
+      linkQr: p.receiptLinkQr ?? true,
+      linkBase: p.receiptLinkBase ?? "",
     });
   }, [s]);
   if (!s) return <Spinner />;
@@ -184,6 +186,8 @@ export function PrintingTab() {
         receiptWhatsapp: f.wa.trim(),
         receiptSocial: f.social.trim(),
         receiptQr: f.qr,
+        receiptLinkQr: f.linkQr,
+        receiptLinkBase: f.linkBase.trim(),
       }),
     );
     if (ok) await reload();
@@ -373,6 +377,23 @@ export function PrintingTab() {
         <Check checked={f.qr} onChange={(v) => setF({ ...f, qr: v })}>
           {tr("اطبع كود QR للواتساب آخر الفاتورة", "Print a WhatsApp QR code at the bottom")}
         </Check>
+        <Check checked={f.linkQr} onChange={(v) => setF({ ...f, linkQr: v })}>
+          {tr("اطبع كود QR «فاتورتك أونلاين» (الزبون بيفتح الفاتورة عتلفونه)", "Print a “digital receipt” QR (the client opens the receipt on their phone)")}
+        </Check>
+        {f.linkQr && (
+          <Field
+            label={tr("عنوان روابط الفواتير", "Receipt link address")}
+            htmlFor="pr-lb"
+            hint={(() => {
+              const base = receiptLinkBase({ receiptLinkBase: f.linkBase });
+              return base
+                ? tr(`الروابط رح تفتح على ${base}`, `Links will open at ${base}`)
+                : tr("هالجهاز فاتح السيستم من عنوان محلي، فما رح ينطبع الكود. اكتب عنوان السيستم أونلاين (نفس السيستم ونفس البيانات).", "This system is open at a local address, so the code won't print. Type this same system's online address.");
+            })()}
+          >
+            <TextInput id="pr-lb" dir="ltr" inputMode="url" placeholder={tr("فاضي = العنوان الحالي", "Empty = the current address")} value={f.linkBase} onChange={(e) => setF({ ...f, linkBase: e.target.value })} />
+          </Field>
+        )}
       </section>
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("ملصقات الصلاحية", "Expiry labels")}</h2>

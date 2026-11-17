@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useAppSettings, type AppSettings } from "../../lib/appSettings";
 import { money, qty as fq, today, usd, type Currency } from "../../lib/format";
 import { useI18n, type Lang } from "../../lib/i18n";
-import { desktop, getRoll, readDevicePrinters, setRoll, type PrintKind, type RollState } from "../../lib/print";
+import { desktop, getRoll, readDevicePrinters, receiptLinkUrl, setRoll, waDigits, type PrintKind, type RollState } from "../../lib/print";
 import { useData } from "../../lib/useData";
 import type { Batch, PeriodReport } from "../../lib/types";
 import { waLink } from "../distribution/common";
@@ -308,6 +308,8 @@ interface Receipt {
   loyalty: { enabled: boolean; buyQty: number; progress: number; available: number } | null;
   payment: { paid: number; remaining: number };
   account: { beforeUsd: number; afterUsd: number; nowUsd: number } | null;
+  /** Signed key for the digital receipt page at /r/<link>. */
+  link?: string;
 }
 
 export function PrintReceipt() {
@@ -415,14 +417,6 @@ const LOGO_INK = { filter: "grayscale(1) contrast(4) brightness(0.85)" } as cons
 /** Same, flipped to white for the black header banner. */
 const LOGO_INK_ON_BLACK = { filter: "grayscale(1) contrast(4) brightness(0.85) invert(1)" } as const;
 
-/** "0944 123 456" → "963944123456" (Syrian local numbers get the country code), "+44…" / "0044…" → "44…". */
-export function waDigits(phone: string) {
-  const d = phone.replace(/\D/g, "");
-  if (d.startsWith("00")) return d.slice(2);
-  if (d.startsWith("0")) return `963${d.slice(1)}`;
-  return d;
-}
-
 /** A QR code as one crisp SVG path (no image smoothing), sized in mm for the thermal head. */
 function Qr({ text, sizeMm }: { text: string; sizeMm: number }) {
   const { n, d } = useMemo(() => {
@@ -465,13 +459,25 @@ function PageRuler({ mm }: { mm: number }) {
 }
 
 /** Bottom of every receipt: thanks, then "chat / order on WhatsApp" with the number and a QR that opens the chat. */
-function ReceiptFooter({ p, phone, lang }: { p: Partial<AppSettings["printing"]>; phone: string; lang: Lang }) {
+function ReceiptFooter({ p, phone, lang, linkUrl }: { p: Partial<AppSettings["printing"]>; phone: string; lang: Lang; linkUrl?: string }) {
   const t = L(lang);
   const wa = (p.receiptWhatsapp || phone || "").trim();
   const digits = wa ? waDigits(wa) : "";
   return (
     <>
       <div className="text-center text-[17px] font-bold">{lang === "ar" ? p.receiptFooterAr : p.receiptFooterEn}</div>
+      {linkUrl && (
+        <div className="mt-2 overflow-hidden rounded-[6px] border-2 border-black">
+          <div className="bg-black py-0.5 text-center text-[12px] font-black uppercase tracking-[0.2em] text-white">{t("فاتورتك أونلاين", "Digital receipt")}</div>
+          <div className="flex items-center gap-2.5 p-1.5">
+            <Qr text={linkUrl} sizeMm={21} />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="text-[15px] font-black">{t("امسح وشوف فاتورتك", "Scan for your receipt")}</div>
+              <div className="mt-0.5 text-[12px]">{t("افتحها، احفظها أو ابعتها من تلفونك", "View, save or share it on your phone")}</div>
+            </div>
+          </div>
+        </div>
+      )}
       {digits && (
         <div className="mt-2 flex items-center gap-2.5 rounded-[3px] border-2 border-black p-1.5">
           {p.receiptQr !== false && <Qr text={`https://wa.me/${digits}`} sizeMm={19} />}
@@ -618,7 +624,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
 
       {/* Footer */}
       <div className="my-2 border-t-2 border-black" />
-      <ReceiptFooter p={rc.printing} phone={rc.business.phone ?? ""} lang={lang} />
+      <ReceiptFooter p={rc.printing} phone={rc.business.phone ?? ""} lang={lang} linkUrl={o.status === "cancelled" ? "" : receiptLinkUrl(rc.printing, rc.link)} />
       <div className="mt-2" dir="ltr">
         <Barcode value={String(o.number)} height={34} />
       </div>
@@ -965,7 +971,8 @@ export function PrintTest() {
             <span className="num ltr text-[24px] font-black">$10.75</span>
           </div>
           <div className="mb-2 text-center text-[13px] font-bold">{tr("إذا الحافتين مطبوعين كاملين، الإعداد صح ✓", "Both EDGE marks fully printed = setup is right ✓")}</div>
-          <ReceiptFooter p={s.printing} phone={s.business.phone ?? ""} lang={ui.lang} />
+          {/* sample link: shows the code prints and scans; the real one opens that receipt */}
+          <ReceiptFooter p={s.printing} phone={s.business.phone ?? ""} lang={ui.lang} linkUrl={receiptLinkUrl(s.printing, "test")} />
           <div className="mt-1 text-center text-[12px] num ltr">
             {width} mm · {box.content} mm {tr("عرض الطباعة", "print width")} · {box.x >= 0 ? "+" : ""}
             {box.x} mm

@@ -76,3 +76,33 @@ export interface RollState {
 }
 export const getRoll = () => get<RollState>("/system/printer-roll");
 export const setRoll = (roll: PrintKind) => put<RollState>("/system/printer-roll", { roll });
+
+/** localhost, 127.x, LAN addresses and *.local: a customer's phone on mobile data can't open these. */
+const isPrivateHost = (host: string) =>
+  host === "localhost" || host === "[::1]" || host.endsWith(".local") || host.endsWith(".localhost") || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+
+/**
+ * Where receipt links point: Settings → Printing "link address", else the address this system is open at.
+ * Empty when that is a private address (this PC or the shop Wi-Fi), so we never print a QR that leads nowhere.
+ */
+export function receiptLinkBase(p: { receiptLinkBase?: string } | undefined, loc: Pick<Location, "protocol" | "hostname" | "origin"> = window.location): string {
+  const set = (p?.receiptLinkBase ?? "").trim().replace(/\/+$/, "");
+  if (set) return /^https?:\/\//i.test(set) ? set : `https://${set}`;
+  if (!/^https?:$/.test(loc.protocol) || isPrivateHost(loc.hostname)) return "";
+  return loc.origin;
+}
+
+/** The full receipt link for a QR code, or "" when it is switched off or there is no public address. */
+export function receiptLinkUrl(p: { receiptLinkQr?: boolean; receiptLinkBase?: string } | undefined, linkKey: string | undefined): string {
+  if (!linkKey || p?.receiptLinkQr === false) return "";
+  const base = receiptLinkBase(p);
+  return base ? `${base}/r/${linkKey}` : "";
+}
+
+/** "0944 123 456" → "963944123456" (Syrian local numbers get the country code), "+44…" / "0044…" → "44…". */
+export function waDigits(phone: string) {
+  const d = phone.replace(/\D/g, "");
+  if (d.startsWith("00")) return d.slice(2);
+  if (d.startsWith("0")) return `963${d.slice(1)}`;
+  return d;
+}

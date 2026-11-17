@@ -30,6 +30,7 @@ import { stockRouter } from "./routes/stock.js";
 import { systemRouter } from "./routes/system.js";
 import { wholesaleRouter } from "./routes/wholesale.js";
 import { portalRouter } from "./routes/portal.js";
+import { publicReceiptRouter } from "./routes/publicReceipt.js";
 import { notificationsRouter, requestsRouter } from "./routes/requests.js";
 
 export function createApp() {
@@ -86,6 +87,7 @@ export function createApp() {
   api.use("/reports", reportsRouter);
   api.use("/system", systemRouter);
   api.use("/portal", portalRouter);
+  api.use("/public/receipts", publicReceiptRouter);
   api.use("/requests", requestsRouter);
   api.use("/notifications", notificationsRouter);
   api.use(wholesaleRouter);
