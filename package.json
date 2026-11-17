@@ -20,6 +20,8 @@
     "dist:win:server": "electron-builder --win --config electron-builder.server.json",
     "dist:win:client": "electron-builder --win --config electron-builder.client.json",
     "dist:win:two": "npm run build && npm run dist:win:server && npm run dist:win:client",
+    "postdist:win:two": "npm rebuild better-sqlite3",
+    "postdist:win": "npm rebuild better-sqlite3",
     "test": "node tests/run.mjs",
     "cloud:schema": "tsx scripts/gen-cloud-schema.ts"
   },

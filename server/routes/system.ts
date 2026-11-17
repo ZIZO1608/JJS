@@ -108,6 +108,22 @@ systemRouter.put(
   }),
 );
 
+/**
+ * Restart the shop so a pending restore or the phone-access setting applies.
+ * Only the desktop server can restart itself (it sets globalThis.__jjsRestart).
+ */
+systemRouter.post(
+  "/restart",
+  requirePerm("settings", "edit"),
+  h((req, res) => {
+    const restart = (globalThis as { __jjsRestart?: () => void }).__jjsRestart;
+    if (!restart) throw new HttpError(409, "restart_unavailable", "Stop the server and start it again to apply this.");
+    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "system.restart" });
+    res.json({ ok: true });
+    setTimeout(restart, 500);
+  }),
+);
+
 /** Cloud sync (Supabase). The key is write-only: it is never sent back to the screen. */
 systemRouter.get(
   "/sync",

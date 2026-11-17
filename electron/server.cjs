@@ -16,7 +16,9 @@ process.env.JJS_DATA_DIR = process.env.JJS_DATA_DIR || path.join(SHARED_DIR, "da
 process.env.JJS_MIGRATIONS_DIR = process.env.JJS_MIGRATIONS_DIR || path.join(ROOT, "drizzle");
 process.env.NODE_ENV = "production";
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// A second copy must stop here: quit() alone would still run boot() below.
+const isFirstCopy = app.requestSingleInstanceLock();
+if (!isFirstCopy) app.exit(0);
 
 let tray = null;
 let shopUrl = `http://127.0.0.1:${PORT}`;
@@ -57,6 +59,7 @@ function buildMenu() {
         tray.setContextMenu(buildMenu());
       },
     },
+    { label: "Restart the shop", click: () => globalThis.__jjsRestart?.() },
     { type: "separator" },
     {
       label: "Stop the shop",
@@ -82,6 +85,11 @@ async function boot() {
       dialog.showMessageBoxSync({ type: "info", title: "JJ's ERP Server", message: "The shop is already running.", detail: shopUrl });
       return app.quit();
     }
+    // Lets Settings → Backups / Network restart the shop so a restore or phone access applies.
+    globalThis.__jjsRestart = () => {
+      app.relaunch();
+      app.exit(0);
+    };
     const { start } = await import(pathToFileURL(path.join(ROOT, "dist", "server", "server", "index.js")).href);
     // No host: the server listens on this PC only, unless the admin turned on phone access in Settings.
     const { url } = await start(PORT);
@@ -107,4 +115,4 @@ app.on("second-instance", () => {
 // No windows: keep running until "Stop the shop".
 // server.json stays after quitting: "JJ's ERP" reads it to find this exe and start the shop.
 app.on("window-all-closed", () => {});
-app.whenReady().then(boot);
+if (isFirstCopy) app.whenReady().then(boot);

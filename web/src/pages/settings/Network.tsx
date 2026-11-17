@@ -3,6 +3,7 @@ import { Field, Modal, Spinner, TextInput } from "../../components/ui";
 import { post, put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
+import { restartShop } from "../../lib/restart";
 import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
@@ -37,6 +38,7 @@ export function NetworkTab() {
   const [c, setC] = useState({ enabled: false, supabaseUrl: "", serviceKey: "" });
   const [running, setRunning] = useState(false);
   const [demo, setDemo] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const edit = can("settings", "edit");
   useEffect(() => {
     if (net.data) setLanOn(net.data.lanAccess);
@@ -73,7 +75,7 @@ export function NetworkTab() {
     <div className="grid max-w-3xl gap-5">
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("الهواتف على نفس الواي فاي", "Phones on the same Wi-Fi")}</h2>
-        <p className="text-sm text-muted">{tr("بتخلي المدير يفتح النظام من موبايله داخل المحل. بيلزم تسكير البرنامج وفتحه بعد التغيير.", "Lets the manager open the system from a phone inside the shop. Close and reopen the app after changing it.")}</p>
+        <p className="text-sm text-muted">{tr("بتخلي المدير يفتح النظام من موبايله داخل المحل. بيلزم إعادة تشغيل المحل بعد التغيير.", "Lets the manager open the system from a phone inside the shop. Restart the shop after changing it.")}</p>
         <Check checked={lanOn} onChange={setLanOn} disabled={!edit}>
           {tr("السماح للهواتف", "Allow phones")}
         </Check>
@@ -89,7 +91,24 @@ export function NetworkTab() {
             </ul>
           </div>
         )}
-        {lanOn !== net.data.lanAccess && <p className="text-sm text-warn">{tr("بعد الحفظ سكّر البرنامج وافتحه.", "After saving, close and reopen the app.")}</p>}
+        {lanOn !== net.data.lanAccess && <p className="text-sm text-warn">{tr("بعد الحفظ أعد تشغيل المحل.", "After saving, restart the shop.")}</p>}
+        {edit && net.data.lanAccess !== net.data.listeningOnLan && (
+          <button
+            className="btn w-fit"
+            disabled={restarting}
+            onClick={async () => {
+              setRestarting(true);
+              try {
+                await restartShop();
+              } catch (e) {
+                toast(err(e), "error");
+                setRestarting(false);
+              }
+            }}
+          >
+            {restarting ? tr("عم يعيد التشغيل…", "Restarting…") : tr("أعد تشغيل المحل الآن", "Restart the shop now")}
+          </button>
+        )}
         {edit && (
           <button className="btn btn-primary w-fit" disabled={lan.busy || lanOn === net.data.lanAccess} onClick={async () => (await lan.run(() => put("/system/network", { lanAccess: lanOn }))) && void net.reload()}>
             {tr("حفظ", "Save")}

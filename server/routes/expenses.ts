@@ -198,6 +198,7 @@ expensesRouter.delete(
       assertDayOpen(tx, e.date);
       tx.update(expenses).set({ deletedAt: nowIso(), updatedAt: nowIso(), syncedAt: null }).where(eq(expenses.id, id)).run();
       const mv = tx.select().from(boxMoves).where(and(eq(boxMoves.refType, "expense"), eq(boxMoves.refId, id), isNull(boxMoves.deletedAt))).get();
+      if (mv) assertDayOpen(tx, mv.businessDate);
       if (mv) tx.update(boxMoves).set({ deletedAt: nowIso(), syncedAt: null }).where(eq(boxMoves.id, mv.id)).run();
       writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "expense", entityId: id, before: e });
     });

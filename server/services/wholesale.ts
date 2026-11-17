@@ -82,12 +82,20 @@ export function createReturn(tx: Q, input: ReturnInput, userId: string) {
     const freeValue = oLines.reduce((s, l) => s + l.freeQty * l.unitPrice, 0);
     const discountable = o.subtotal - freeValue;
     const ratio = discountable > 0 ? Math.max(0, 1 - Math.max(0, o.discount - freeValue) / discountable) : 0;
+    // The same product can sit on several lines (plain and with an add-on): count and price it as one.
+    const byProduct = new Map<string, { qty: number; paid: number; costUsd: number; nameAr: string; nameEn: string }>();
     for (const l of oLines) {
-      const already = tx.get<{ q: number }>(sql`select coalesce(sum(rl.qty),0) as q from return_lines rl join returns r on r.id = rl.return_id where r.order_id = ${o.id} and rl.product_id = ${l.productId} and r.deleted_at is null`)?.q ?? 0;
-      const paidOnLine = (l.qty - l.freeQty) * l.unitPrice * ratio;
-      priceOf.set(l.productId, { unit: roundMoney(l.qty > 0 ? paidOnLine / l.qty : 0, currency), costUsd: l.unitCostUsd, nameAr: l.nameAr, nameEn: l.nameEn });
-      const wanted = input.lines.filter((x) => x.productId === l.productId).reduce((s, x) => s + x.qty, 0);
-      if (wanted > l.qty - already) throw new HttpError(400, "return_too_many", `Only ${l.qty - already} of ${l.nameEn} can still be returned from this invoice.`);
+      const g = byProduct.get(l.productId) ?? { qty: 0, paid: 0, costUsd: 0, nameAr: l.nameAr, nameEn: l.nameEn };
+      g.qty += l.qty;
+      g.paid += (l.qty - l.freeQty) * l.unitPrice * ratio;
+      g.costUsd += l.qty * l.unitCostUsd;
+      byProduct.set(l.productId, g);
+    }
+    for (const [productId, g] of byProduct) {
+      const already = tx.get<{ q: number }>(sql`select coalesce(sum(rl.qty),0) as q from return_lines rl join returns r on r.id = rl.return_id where r.order_id = ${o.id} and rl.product_id = ${productId} and r.deleted_at is null`)?.q ?? 0;
+      priceOf.set(productId, { unit: roundMoney(g.qty > 0 ? g.paid / g.qty : 0, currency), costUsd: g.qty > 0 ? g.costUsd / g.qty : 0, nameAr: g.nameAr, nameEn: g.nameEn });
+      const wanted = input.lines.filter((x) => x.productId === productId).reduce((s, x) => s + x.qty, 0);
+      if (wanted > g.qty - already) throw new HttpError(400, "return_too_many", `Only ${g.qty - already} of ${g.nameEn} can still be returned from this invoice.`);
     }
   } else if (input.consignmentId) {
     const c = tx.select().from(consignments).where(eq(consignments.id, input.consignmentId)).get();

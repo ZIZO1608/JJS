@@ -119,7 +119,10 @@ function computePayroll(tx: Tx | typeof db, month: string) {
         .get()!.usd;
       const openAdv = tx.select().from(advances).where(and(eq(advances.employeeId, e.id), isNull(advances.deletedAt), sql`${advances.remainingUsd} > 0.001`)).orderBy(asc(advances.date)).all();
       const advTotal = openAdv.reduce((s, a) => s + a.remainingUsd, 0);
-      const gross = base + commission - staff;
+      // Staff purchases come off this month's pay; anything above the pay is carried to next month as an advance.
+      const staffDeducted = Math.min(staff, Math.max(0, base + commission));
+      const staffCarried = staff - staffDeducted;
+      const gross = base + commission - staffDeducted;
       const advDeducted = Math.max(0, Math.min(advTotal, gross));
       return {
         employeeId: e.id,
@@ -131,7 +134,8 @@ function computePayroll(tx: Tx | typeof db, month: string) {
         deliveredOrders: delivered.n,
         convertedClients,
         commissionUsd: round4(commission),
-        staffPurchasesUsd: round4(staff),
+        staffPurchasesUsd: round4(staffDeducted),
+        staffCarriedUsd: round4(staffCarried),
         openAdvancesUsd: round4(advTotal),
         advancesUsd: round4(advDeducted),
         netUsd: round4(Math.max(0, gross - advDeducted)),
@@ -179,6 +183,10 @@ peopleRouter.post(
           const take = Math.min(left, a.remainingUsd);
           tx.update(advances).set({ remainingUsd: round4(a.remainingUsd - take), updatedAt: nowIso(), syncedAt: null }).where(eq(advances.id, a.id)).run();
           left -= take;
+        }
+        if (r.staffCarriedUsd > 0.0001) {
+          const carried = r.staffCarriedUsd;
+          tx.insert(advances).values({ id: newId(), employeeId: r.employeeId, date, amount: carried, currency: "USD", fxRate: rate, amountUsd: carried, remainingUsd: carried, boxId: null, note: `Staff purchases above ${month} pay` }).run();
         }
         if (r.netUsd > 0) payFromBox(tx, { boxId: body.boxId, type: "salary", amount: -r.netUsd, currency: "USD", rate, refType: "payroll", refId: runId, note: `${r.name} ${month}`, userId: req.user!.id, date });
       }

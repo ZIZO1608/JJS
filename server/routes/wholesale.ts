@@ -187,7 +187,8 @@ wholesaleRouter.post(
 
 wholesaleRouter.post(
   "/consignments/:id/cancel",
-  requirePerm("orders", "delete"),
+  // Members hold orders:delete only to undo their own fresh order; a consignment needs a manager.
+  requirePerm("orders", "edit"),
   h((req, res) => {
     const id = String(req.params.id);
     db.transaction((tx) => {
