@@ -18,8 +18,13 @@ import { ToastProvider } from "./lib/toast";
 // The client portal is its own download: staff never fetch it, clients never fetch the staff screens.
 const PortalApp = lazy(() => import("./portal/PortalApp").then((m) => ({ default: m.PortalApp })));
 
+// The digital receipt behind the QR code on printed receipts: no login, its own small download.
+const PublicReceiptPage = lazy(() => import("./receipt/PublicReceipt").then((m) => ({ default: m.PublicReceiptPage })));
+const receiptKey = /^\/r\/([^/]+)\/?$/.exec(window.location.pathname)?.[1];
+
 // Clients use the same address under /portal: their own login, screens and home-screen icon.
 const isPortal = window.location.pathname === "/portal" || window.location.pathname.startsWith("/portal/");
+if (receiptKey) document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#141312");
 if (isPortal) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "#d2561a");
   document.title = "JJ's";
@@ -44,6 +49,13 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 }
 
 createRoot(document.getElementById("root")!).render(
+  receiptKey ? (
+    <StrictMode>
+      <Suspense fallback={null}>
+        <PublicReceiptPage linkKey={decodeURIComponent(receiptKey)} />
+      </Suspense>
+    </StrictMode>
+  ) : (
   <StrictMode>
     <I18nProvider>
       <ToastProvider raised={isPortal}>
@@ -58,5 +70,6 @@ createRoot(document.getElementById("root")!).render(
         )}
       </ToastProvider>
     </I18nProvider>
-  </StrictMode>,
+  </StrictMode>
+  ),
 );

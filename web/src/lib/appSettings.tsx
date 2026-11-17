@@ -17,6 +17,8 @@ export interface AppSettings {
     receiptWhatsapp: string;
     receiptSocial: string;
     receiptQr: boolean;
+    receiptLinkQr?: boolean;
+    receiptLinkBase?: string;
   };
   business: { nameAr: string; nameEn: string; phone?: string; address?: string; logo?: string };
 }

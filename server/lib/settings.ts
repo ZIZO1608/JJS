@@ -66,6 +66,10 @@ export interface PrintSettings {
   receiptSocial: string;
   /** Print the WhatsApp QR code on receipts. */
   receiptQr: boolean;
+  /** Print a "digital receipt" QR code that opens this receipt online. */
+  receiptLinkQr: boolean;
+  /** Address phones use to open receipt links (e.g. https://jjs.example.com); empty = the address this system is opened at. */
+  receiptLinkBase: string;
 }
 /** Which roll is in the shared label/receipt printer, so every PC can say "swap the roll first". */
 export interface PrinterRoll {
@@ -124,7 +128,7 @@ export const SETTING_DEFAULTS: SettingsShape = {
   loyalty: { enabled: true, buyQty: 100, freeQty: 5 },
   orders: { defaultDeliveryFee: 0, allowStacking: false, defaultPaymentTermsDays: 7, defaultReturnAction: "waste" },
   costing: { targetMarginPct: 40, priceAlertPct: 5 },
-  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 4, receiptOffsetXMm: 0, receiptWhatsapp: "", receiptSocial: "", receiptQr: true },
+  printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal", labelOffsetXMm: 0, labelOffsetYMm: 0, labelPaddingMm: 1.2, receiptSideMm: 4, receiptOffsetXMm: 0, receiptWhatsapp: "", receiptSocial: "", receiptQr: true, receiptLinkQr: true, receiptLinkBase: "" },
   "printing.roll": { roll: "label", changedAt: null, changedBy: null },
   "seed.version": 1,
   network: { lanAccess: false },

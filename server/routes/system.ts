@@ -44,6 +44,13 @@ const printingSchema = z.object({
   receiptWhatsapp: z.string().trim().max(30).default(""),
   receiptSocial: z.string().trim().max(60).default(""),
   receiptQr: z.boolean().default(true),
+  receiptLinkQr: z.boolean().default(true),
+  receiptLinkBase: z
+    .string()
+    .trim()
+    .max(200)
+    .refine((v) => v === "" || /^(https?:\/\/)?[a-z0-9.-]+(:\d+)?(\/\S*)?$/i.test(v), "Use an address like https://jjs.example.com")
+    .default(""),
 });
 
 for (const [key, schema] of [

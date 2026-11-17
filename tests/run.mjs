@@ -6,7 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"], ["api-member-rules.mjs"], ["api-deliveries.mjs"]];
+const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"], ["api-member-rules.mjs"], ["api-deliveries.mjs"], ["api-receipt-link.mjs"]];
 let failed = 0;
 /** A port nobody is listening on, so a suite never talks to another run's server. */
 const freePort = () =>

@@ -6,6 +6,7 @@ import { clients, employees, orderLines, orders, paymentMethods, payments, recur
 import { writeAudit } from "../lib/audit.js";
 import { can, requirePerm, type AuthUser } from "../lib/auth.js";
 import { localDate, round4 } from "../lib/biz.js";
+import { receiptLinkKey } from "../lib/receiptLink.js";
 import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus } from "../services/clients.js";
@@ -279,5 +280,43 @@ export function receiptOf(orderId: string) {
     lines: lines.map((l) => ({ ...l, options: JSON.parse(l.optionsJson) })),
     client: client ? { name: client.name, phone: client.phone, address: client.address, contactPerson: client.contactPerson, language: client.receiptLanguage, balanceUsd: clientBalanceUsd(db, client.id) } : null,
     loyalty: client && o.type === "normal" ? loyaltyStatus(db, client.id, o.businessDate) : null,
+    /** For the "digital receipt" QR: the page at /r/<link> shows this receipt to whoever scans it. */
+    link: receiptLinkKey(o.id),
+  };
+}
+
+/**
+ * What the public receipt page (/r/<link>) shows to anyone holding the link: the receipt itself and nothing more.
+ * Field by field on purpose: no costs, staff, notes, account balances or the client's phone and address.
+ */
+export function publicReceiptOf(orderId: string) {
+  const rc = receiptOf(orderId);
+  const o = rc.order;
+  const p = rc.printing;
+  return {
+    business: { nameAr: rc.business.nameAr, nameEn: rc.business.nameEn, phone: rc.business.phone, address: rc.business.address, logo: rc.business.logo },
+    contact: { whatsapp: p.receiptWhatsapp, social: p.receiptSocial, footerAr: p.receiptFooterAr, footerEn: p.receiptFooterEn },
+    order: {
+      number: o.number,
+      createdAt: o.createdAt,
+      businessDate: o.businessDate,
+      type: o.type,
+      status: o.status,
+      currency: o.currency,
+      subtotal: o.subtotal,
+      discount: o.discount,
+      discountReason: o.discountReason,
+      taxes: (o.taxes as { nameAr: string; nameEn: string; kind: string; value: number; amount: number }[]).map((x) => ({ nameAr: x.nameAr, nameEn: x.nameEn, kind: x.kind, value: x.value, amount: x.amount })),
+      deliveryFee: o.deliveryFee,
+      total: o.total,
+      totalUsd: o.totalUsd,
+      fxRate: o.fxRate,
+      fulfilment: o.fulfilment,
+      method: o.method,
+    },
+    lines: rc.lines.map((l) => ({ id: l.id, nameAr: l.nameAr, nameEn: l.nameEn, qty: l.qty, freeQty: l.freeQty, unitPrice: l.unitPrice, lineTotal: l.lineTotal, options: (l.options as { nameAr: string; nameEn: string }[]).map((x) => ({ nameAr: x.nameAr, nameEn: x.nameEn })) })),
+    client: rc.client ? { name: rc.client.name, language: rc.client.language } : null,
+    payment: rc.payment,
+    loyalty: rc.loyalty ? { enabled: rc.loyalty.enabled, buyQty: rc.loyalty.buyQty, progress: rc.loyalty.progress, available: rc.loyalty.available } : null,
   };
 }
