@@ -1,0 +1,222 @@
+{
+ "base_url": "http://127.0.0.1:4396",
+ "display_base_url": "JJ's ERP",
+ "viewport": {
+  "width": 1000,
+  "height": 760
+ },
+ "device_scale_factor": 2,
+ "delay_ms": 400,
+ "hide": [
+  "[role=status]",
+  ".toast"
+ ],
+ "login": {
+  "url": "/",
+  "actions": [
+   {
+    "fill": {
+     "selector": "#login-user",
+     "value": "jabal"
+    }
+   },
+   {
+    "fill": {
+     "selector": "#login-pass",
+     "value": "jabal123"
+    }
+   },
+   {
+    "press": "Enter"
+   },
+   {
+    "wait_for": "header"
+   }
+  ]
+ },
+ "languages": {
+  "ar": {
+   "setup": [
+    {
+     "click": "header button:text-is('عربي')"
+    },
+    {
+     "wait_for": "html[dir=rtl]"
+    }
+   ],
+   "locale": "ar-SY"
+  },
+  "en": {
+   "setup": [
+    {
+     "click": "header button:text-is('EN')"
+    },
+    {
+     "wait_for": "html[dir=ltr]"
+    }
+   ],
+   "locale": "en-GB"
+  }
+ },
+ "screens": [
+  {
+   "id": "print-printer",
+   "url": "/settings/printing",
+   "actions": [
+    {
+     "wait": 600
+    }
+   ],
+   "clip": "main section:has(h2:text-is('Printer: Xprinter XP-236B')), main section:has(h2:text-is('الطابعة: Xprinter XP-236B'))",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "preset",
+     "selector": "button:text-is(\"Use settings for this printer\"), button:text-is(\"اضبط الإعدادات لهالطابعة\")"
+    },
+    {
+     "key": "size",
+     "selector": "button:text-is(\"50×30\"), button:text-is(\"50×30\")"
+    },
+    {
+     "key": "invoice",
+     "selector": "button:text-is(\"Print test invoice\"), button:text-is(\"اطبع فاتورة تجربة\")"
+    },
+    {
+     "key": "label",
+     "selector": "button:text-is(\"Print test label\"), button:text-is(\"اطبع ملصق تجربة\")"
+    }
+   ]
+  },
+  {
+   "id": "print-computer",
+   "url": "/settings/printing",
+   "actions": [
+    {
+     "wait": 600
+    }
+   ],
+   "clip": "main section:has(h2:text-is('This computer')), main section:has(h2:text-is('هالكمبيوتر'))",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "labelp",
+     "selector": "#bp-label"
+    },
+    {
+     "key": "receiptp",
+     "selector": "#bp-receipt"
+    },
+    {
+     "key": "shared",
+     "selector": "main label:has-text('share one printer'), main label:has-text('نفس الطابعة')"
+    },
+    {
+     "key": "auto",
+     "selector": "main label:has-text('after every sale'), main label:has-text('بعد كل بيعة')"
+    }
+   ]
+  },
+  {
+   "id": "print-centre",
+   "url": "/settings/printing",
+   "actions": [
+    {
+     "wait": 600
+    }
+   ],
+   "clip": "main div.rounded-xl:has(#ac-l)",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "first",
+     "selector": "#ac-l"
+    },
+    {
+     "key": "last",
+     "selector": "#ac-r"
+    },
+    {
+     "key": "centre",
+     "selector": "button:text-is(\"Centre it\"), button:text-is(\"وسّطها\")"
+    }
+   ]
+  },
+  {
+   "id": "print-invoices",
+   "url": "/settings/printing",
+   "actions": [
+    {
+     "wait": 600
+    }
+   ],
+   "clip": "main section:has(h2:text-is('Invoices')), main section:has(h2:text-is('الفواتير'))",
+   "clip_padding": 8,
+   "callouts": [
+    {
+     "key": "wa",
+     "selector": "#pr-wa"
+    },
+    {
+     "key": "social",
+     "selector": "#pr-so"
+    },
+    {
+     "key": "qr",
+     "selector": "main label:has-text('digital receipt'), main label:has-text('فاتورتك أونلاين')"
+    },
+    {
+     "key": "save",
+     "selector": "main button.btn-primary:text-is('Save'), main button.btn-primary:text-is('حفظ')"
+    }
+   ]
+  },
+  {
+   "id": "roll-swap",
+   "url": "/",
+   "actions": [
+    {
+     "eval": "fetch('/api/system/printer-roll', {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({roll: 'label'})})"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "goto": "/print/receipt/01a1f0cf-1277-723e-ae2f-4eaf81bb0788"
+    },
+    {
+     "wait": 900
+    }
+   ],
+   "clip": "div.card:has(button:text-is('Cancel')), div.card:has(button:text-is('إلغاء'))",
+   "clip_padding": 10,
+   "callouts": [
+    {
+     "key": "swapped",
+     "selector": "div.card .btn-primary"
+    }
+   ]
+  },
+  {
+   "id": "receipt",
+   "url": "/",
+   "actions": [
+    {
+     "eval": "fetch('/api/system/printer-roll', {method: 'PUT', headers: {'content-type': 'application/json'}, body: JSON.stringify({roll: 'receipt'})})"
+    },
+    {
+     "wait": 400
+    },
+    {
+     "goto": "/print/receipt/01a1f0cf-1277-723e-ae2f-4eaf81bb0788"
+    },
+    {
+     "wait": 1200
+    }
+   ],
+   "clip": "div.mx-auto.bg-white",
+   "clip_padding": 6,
+   "callouts": []
+  }
+ ]
+}

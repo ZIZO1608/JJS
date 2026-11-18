@@ -5,8 +5,8 @@
     "subtitle": "Orders, kitchen, money and reports — step by step",
     "client_name": "JJ's deli shop",
     "product_name": "JJ's ERP",
-    "version": "1.0",
-    "date": "October 2026",
+    "version": "1.1",
+    "date": "November 2026",
     "confidential": "For JJ's team only"
   },
   "brand": {
@@ -36,6 +36,251 @@
   },
   "parts": [
     {
+      "id": "setup",
+      "title": "Setting up",
+      "audience": [
+        "owner"
+      ],
+      "intro": "Do this part once, on the first day, with the person who installs the system. It takes about 30 minutes.",
+      "chapters": [
+        {
+          "id": "install",
+          "title": "Put JJ's ERP on the shop computer",
+          "intro": "JJ's ERP lives online at `https://jjs.ahmad-zaven.io`. Nothing needs to be installed from a USB: you open the address and install it as an app. Every update arrives by itself.",
+          "tasks": [
+            {
+              "id": "install-app",
+              "title": "Install JJ's ERP on the computer",
+              "goal": "So staff open it from an icon, in its own window, like a normal program.",
+              "time": "2 min",
+              "before": [
+                "Google Chrome or Microsoft Edge",
+                "Internet in the shop",
+                "The Admin username and password"
+              ],
+              "steps": [
+                "Open **Chrome**.",
+                "In the address bar, type `https://jjs.ahmad-zaven.io` and press `Enter`. The sign-in screen opens.",
+                "At the right end of the address bar, click the small **Install** icon (a screen with an arrow). If you don't see it, click the **⋮** menu → **Cast, save and share** → **Install page as app**.",
+                "Click **Install**.",
+                {
+                  "text": "JJ's ERP opens in its own window, and an icon is added to the desktop and the Start menu.",
+                  "tip": "Right-click the icon on the taskbar and choose **Pin to taskbar**, so it is always one click away."
+                }
+              ],
+              "result": "Staff open **JJ's ERP** from the desktop icon and sign in.",
+              "note": "On a phone: open the same address in Chrome (Android) or Safari (iPhone) and choose **Add to Home Screen**."
+            },
+            {
+              "id": "install-printer",
+              "title": "Install the XP-236B printer",
+              "goal": "Windows must know the printer before JJ's ERP can print on it.",
+              "time": "10 min",
+              "before": [
+                "The Xprinter XP-236B, its power cable and USB cable",
+                "The driver CD or USB stick that came in the box",
+                "A receipt roll (80 mm) and a label roll"
+              ],
+              "steps": [
+                "Plug the printer into power and into the computer by USB. Turn it on.",
+                "Put the driver CD or USB in the computer and run the setup on it. Choose **XP-236B** when it asks for the model, and finish the setup.",
+                "Open Windows **Settings** → **Bluetooth & devices** → **Printers & scanners**. The XP-236B is in the list.",
+                "Click it → **Printer properties** → **Print test page**."
+              ],
+              "result": "The printer prints the Windows test page.",
+              "warning": "Download the driver only from the CD/USB in the box or from the Xprinter website. Never from another site."
+            }
+          ]
+        },
+        {
+          "id": "printing",
+          "title": "Printer and receipts",
+          "intro": "One XP-236B prints both the 80 mm receipts and the stickers. You only swap the roll. These settings are saved on each computer.",
+          "tasks": [
+            {
+              "id": "printer-settings",
+              "title": "Set up the printer in JJ's ERP",
+              "goal": "Gives receipts and labels the right size for the XP-236B.",
+              "time": "3 min",
+              "steps": [
+                {
+                  "text": "Go to **Settings** → **Printing**. In the first box, press [[preset]].",
+                  "shot": {
+                    "id": "print-printer",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "preset",
+                        "label": "**Use settings for this printer**"
+                      },
+                      {
+                        "key": "size",
+                        "label": "**Label size** — the size of your stickers"
+                      },
+                      {
+                        "key": "invoice",
+                        "label": "**Print test invoice**"
+                      },
+                      {
+                        "key": "label",
+                        "label": "**Print test label**"
+                      }
+                    ]
+                  }
+                },
+                "Under **Label size**, press the size of your sticker roll (for example **50×30**).",
+                {
+                  "text": "Scroll down to **This computer**. Type the printer name exactly as it is in Windows in [[labelp]] and [[receiptp]].",
+                  "shot": {
+                    "id": "print-computer",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "labelp",
+                        "label": "**Labels & barcodes printer**"
+                      },
+                      {
+                        "key": "receiptp",
+                        "label": "**Invoices printer (thermal)**"
+                      },
+                      {
+                        "key": "shared",
+                        "label": "**Labels and invoices share one printer** — tick it"
+                      },
+                      {
+                        "key": "auto",
+                        "label": "**Print the invoice by itself after every sale**"
+                      }
+                    ]
+                  }
+                },
+                "Tick **Labels and invoices share one printer**, because it is one printer. Then press the roll that is in the printer now: **Labels** or **Receipts 80 mm**.",
+                "If you want a receipt after every sale without pressing anything, tick **Print the invoice by itself after every sale**.",
+                "Press **Save** at the bottom of the page."
+              ],
+              "result": "Receipts and labels now open at the right size.",
+              "note": "In the print window: pick **XP-236B**, set **Margins** to **None**, and untick **Headers and footers**. Chrome remembers this after the first time."
+            },
+            {
+              "id": "centre-receipt",
+              "title": "Centre the receipt on the paper",
+              "goal": "The printer head prints a little narrower than the paper. This makes sure nothing is cut off at the sides.",
+              "time": "3 min",
+              "before": [
+                "The receipt roll in the printer"
+              ],
+              "steps": [
+                "In **Settings** → **Printing**, press **Print test invoice**. The test receipt has a ruler with numbers across the top.",
+                "Look at the ruler on the paper. Find the first number printed fully on the left, and the last number printed fully on the right.",
+                {
+                  "text": "Type them in [[first]] and [[last]], then press [[centre]].",
+                  "shot": {
+                    "id": "print-centre",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "first",
+                        "label": "**First number (left)**"
+                      },
+                      {
+                        "key": "last",
+                        "label": "**Last number (right)**"
+                      },
+                      {
+                        "key": "centre",
+                        "label": "**Centre it**"
+                      }
+                    ]
+                  }
+                },
+                "Press **Print test invoice** again and check that nothing is cut at the sides.",
+                "Press **Save**."
+              ],
+              "result": "Every receipt is centred and fully printed.",
+              "tip": "For stickers, print a **test label**. If the print sits off the sticker, use the **Label: right / left** and **down / up** buttons (each press is half a millimetre), test again, then **Save**.",
+              "new_page": true
+            },
+            {
+              "id": "swap-roll",
+              "title": "Swap between receipts and labels",
+              "goal": "JJ's ERP remembers which roll is in the printer and reminds you before printing on the wrong one.",
+              "time": "1 min",
+              "steps": [
+                {
+                  "text": "When you print a receipt while the label roll is in (or the opposite), JJ's ERP shows *Swap the roll first*.",
+                  "shot": {
+                    "id": "roll-swap",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "swapped",
+                        "label": "**Swapped, print**"
+                      }
+                    ],
+                    "size": "small"
+                  }
+                },
+                "Open the printer, take out the roll, and put in the other one.",
+                "Close the cover and hold the **FEED** button until it beeps. The printer measures the new paper.",
+                "Press **Swapped, print**."
+              ],
+              "result": "It prints, and JJ's ERP now knows which roll is in.",
+              "warning": "Always hold **FEED** after swapping. If you don't, the next print can start in the wrong place."
+            },
+            {
+              "id": "receipt-setup",
+              "title": "Set up what the receipt shows",
+              "goal": "Your WhatsApp, your Instagram and a QR code that opens the receipt on the client's phone.",
+              "time": "3 min",
+              "steps": [
+                {
+                  "text": "In **Settings** → **Printing**, go to the **Invoices** box.",
+                  "shot": {
+                    "id": "print-invoices",
+                    "frame": "plain",
+                    "callouts": [
+                      {
+                        "key": "wa",
+                        "label": "**WhatsApp number on receipts**"
+                      },
+                      {
+                        "key": "social",
+                        "label": "**Line under the shop name** — for example your Instagram"
+                      },
+                      {
+                        "key": "qr",
+                        "label": "**Digital receipt QR**"
+                      },
+                      {
+                        "key": "save",
+                        "label": "**Save**"
+                      }
+                    ],
+                    "size": "tall"
+                  }
+                },
+                "Type the shop's WhatsApp number in **WhatsApp number on receipts**. Leave it empty to use the shop phone.",
+                "Type a short line in **Line under the shop name**, for example `Instagram @jjsdeli`.",
+                "Keep **Digital receipt QR** ticked. In **Receipt link address**, type `https://jjs.ahmad-zaven.io`.",
+                "Press **Save**.",
+                {
+                  "text": "Print any receipt to check it. It shows the logo, the items, the total, a **PAID** stamp, a QR that opens this receipt online, and a QR to order on WhatsApp.",
+                  "shot": {
+                    "id": "receipt",
+                    "frame": "plain",
+                    "callouts": [],
+                    "size": "tall"
+                  }
+                }
+              ],
+              "result": "The client can scan the receipt to open it on their phone, save it or send it.",
+              "new_page": true
+            }
+          ]
+        }
+      ]
+    },
+    {
       "title": "Getting started",
       "audience": [
         "all"
@@ -45,23 +290,22 @@
         {
           "id": "start",
           "title": "Open the shop and sign in",
-          "intro": "JJ's ERP works with no internet. It has two parts on the shop computer: **JJ's ERP Server** keeps the data, and **JJ's ERP** is the window you work in.",
+          "intro": "JJ's ERP works online at `https://jjs.ahmad-zaven.io`. Everyone signs in with their own username, on the shop computer or on a phone.",
           "tasks": [
             {
               "id": "start-shop",
-              "title": "Start the shop in the morning",
-              "goal": "Do this once when you turn on the shop computer.",
-              "time": "1 min",
+              "title": "Open JJ's ERP",
+              "goal": "The shop computer needs internet. There is nothing to start.",
+              "time": "30 sec",
               "steps": [
-                "On the desktop, double-click **JJ's ERP Server**. Nothing opens; a small JJ's icon appears next to the clock at the bottom of the screen. This means the shop is running.",
-                "Double-click **JJ's ERP** on the desktop. The work window opens.",
+                "Double-click **JJ's ERP** on the desktop (or click it on the taskbar).",
                 {
-                  "text": "If you open **JJ's ERP** first, it shows *Starting the shop…* and starts the server for you. Wait a few seconds.",
-                  "tip": "Right-click the JJ's icon next to the clock and tick **Start with Windows**. The shop then starts by itself every time the computer is turned on."
+                  "text": "If the icon is missing, open Chrome and go to `https://jjs.ahmad-zaven.io`.",
+                  "tip": "On a phone, open the same address and choose **Add to Home Screen** once."
                 }
               ],
               "result": "The sign-in screen of JJ's ERP is open.",
-              "warning": "Closing the **JJ's ERP** window does not stop the shop. To really stop it, right-click the JJ's icon next to the clock and choose **Stop the shop**. Nobody can work until it is started again."
+              "note": "Closing the window does nothing to the shop: the data is safe on the server. Open it again to continue."
             },
             {
               "id": "sign-in",
@@ -1547,8 +1791,12 @@
       "group": "Every day"
     },
     {
-      "action": "Start the shop",
-      "how": "Double-click **JJ's ERP Server**, then **JJ's ERP**"
+      "action": "Open JJ's ERP",
+      "how": "Double-click **JJ's ERP** on the desktop, or open `https://jjs.ahmad-zaven.io`"
+    },
+    {
+      "action": "Swap the printer roll",
+      "how": "Swap the roll → hold **FEED** until it beeps → **Swapped, print**"
     },
     {
       "action": "Sell at the counter",
@@ -1632,11 +1880,11 @@
   "faq": [
     {
       "q": "Does it need the internet?",
-      "a": "No. Everything works with no internet. The internet is only used for the automatic dollar rate and the optional cloud copy."
+      "a": "Yes. JJ's ERP works online, so the shop computer and phones need internet. If the internet stops, write the sales on paper and enter them when it is back."
     },
     {
-      "q": "I closed the JJ's ERP window. Is the shop stopped?",
-      "a": "No. The shop keeps running in **JJ's ERP Server** (the icon next to the clock). Open **JJ's ERP** again to continue."
+      "q": "I closed the JJ's ERP window. Is anything lost?",
+      "a": "No. Everything is saved on the server as soon as you press a button. Open **JJ's ERP** again to continue."
     },
     {
       "q": "Why can't I see Reports or Costing?",
@@ -1660,7 +1908,7 @@
     },
     {
       "q": "Where is my data kept?",
-      "a": "On the shop computer, in `%APPDATA%\\jjs-erp\\data`. A copy is made every day in the `backups` folder next to it."
+      "a": "On the shop's online server. A copy is made every day; the owner can download one in **Settings** → **Backups**."
     },
     {
       "q": "I forgot my password.",
@@ -1669,9 +1917,9 @@
   ],
   "troubleshooting": [
     {
-      "problem": "JJ's ERP shows *The shop is not started*",
-      "cause": "JJ's ERP Server is not running and could not be found.",
-      "fix": "Double-click **JJ's ERP Server** on the desktop, wait a few seconds."
+      "problem": "JJ's ERP doesn't open or shows *This site can't be reached*",
+      "cause": "No internet on this computer or phone.",
+      "fix": "Check the Wi-Fi or the internet box. Open any other website to test, then open JJ's ERP again."
     },
     {
       "problem": "Wrong username or password",
@@ -1694,9 +1942,9 @@
       "fix": "**Settings** → **Currency & rate** → type the rate → **Use this rate**."
     },
     {
-      "problem": "The receipt doesn't print",
-      "cause": "The printer is off, out of paper, or the wrong paper size is set.",
-      "fix": "Check the printer. Set the size (58 or 80 mm) in **Settings** → **Printing**."
+      "problem": "The receipt doesn't print, or is cut at the sides",
+      "cause": "The printer is off, out of paper, the wrong roll is in, or the receipt is not centred.",
+      "fix": "Check the printer and the roll, hold **FEED** until it beeps. To fix the sides, see *Centre the receipt on the paper*."
     },
     {
       "problem": "*Your role cannot close the day.*",

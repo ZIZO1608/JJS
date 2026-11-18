@@ -1,0 +1,36 @@
+{
+  "image": "print-computer.png",
+  "width": 720,
+  "height": 319.75,
+  "url": "http://127.0.0.1:4396/settings/printing",
+  "display_url": "JJ's ERP/settings/printing",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "labelp": [
+      366,
+      141.0,
+      329,
+      41.2
+    ],
+    "receiptp": [
+      25,
+      141.0,
+      329,
+      41.2
+    ],
+    "shared": [
+      25,
+      194.2,
+      670,
+      23.2
+    ],
+    "auto": [
+      25,
+      271.5,
+      670,
+      23.2
+    ]
+  },
+  "captured": "2026-11-19 01:45"
+}
