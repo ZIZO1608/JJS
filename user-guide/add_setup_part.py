@@ -50,15 +50,17 @@ EN = {
                         "title": "Install the XP-236B printer",
                         "goal": "Windows must know the printer before JJ's ERP can print on it.",
                         "time": "10 min",
-                        "before": ["The Xprinter XP-236B, its power cable and USB cable", "The driver CD or USB stick that came in the box", "A receipt roll (80 mm) and a label roll"],
+                        "before": ["The Xprinter XP-236B, its power cable and USB cable", "Internet, to download the driver (or the driver CD/USB from the box)", "A receipt roll (80 mm) and a label roll"],
                         "steps": [
                             "Plug the printer into power and into the computer by USB. Turn it on.",
-                            "Put the driver CD or USB in the computer and run the setup on it. Choose **XP-236B** when it asks for the model, and finish the setup.",
+                            "In Chrome, open `https://www.xprintertech.com/download/xp-236b` (the official Xprinter site). Under **Drivers** → **Windows**, click **Download**.",
+                            "Open the downloaded file. If it is a `.zip`, right-click it → **Extract All**, then open the folder.",
+                            {"text": "Run the setup file inside. Choose **XP-236B** when it asks for the model, and finish the setup.", "tip": "If the printer came with a driver CD or USB, you can run the setup from it instead."},
                             "Open Windows **Settings** → **Bluetooth & devices** → **Printers & scanners**. The XP-236B is in the list.",
                             "Click it → **Printer properties** → **Print test page**.",
                         ],
                         "result": "The printer prints the Windows test page.",
-                        "warning": "Download the driver only from the CD/USB in the box or from the Xprinter website. Never from another site.",
+                        "warning": "Download the driver only from `https://www.xprintertech.com/download/xp-236b` or the CD/USB in the box. Other driver websites are not official and can install unwanted software.",
                     },
                 ],
             },
@@ -218,15 +220,17 @@ AR = {
                         "title": "ثبّت طابعة XP-236B",
                         "goal": "يجب أن يتعرّف ويندوز على الطابعة قبل أن يطبع عليها JJ's ERP.",
                         "time": "10 دقائق",
-                        "before": ["طابعة Xprinter XP-236B مع كبل الكهرباء وكبل USB", "سي دي أو فلاشة التعريف الموجودة في العلبة", "رول فواتير 80 مم ورول ملصقات"],
+                        "before": ["طابعة Xprinter XP-236B مع كبل الكهرباء وكبل USB", "إنترنت لتنزيل التعريف (أو سي دي/فلاشة التعريف من العلبة)", "رول فواتير 80 مم ورول ملصقات"],
                         "steps": [
                             "وصّل الطابعة بالكهرباء وبالكمبيوتر عبر USB، ثم شغّلها.",
-                            "ضع سي دي أو فلاشة التعريف في الكمبيوتر وشغّل ملف التثبيت. اختر **XP-236B** عندما يسأل عن الموديل، وأكمل التثبيت.",
+                            "في Chrome افتح `https://www.xprintertech.com/download/xp-236b` (موقع Xprinter الرسمي). تحت **Drivers** ← **Windows** اضغط **Download**.",
+                            "افتح الملف الذي نزل. إذا كان `.zip`، اضغط عليه بالزر الأيمن ← **Extract All** (استخراج الكل)، ثم افتح المجلد.",
+                            {"text": "شغّل ملف التثبيت الموجود داخله. اختر **XP-236B** عندما يسأل عن الموديل، وأكمل التثبيت.", "tip": "إذا جاءت مع الطابعة سي دي أو فلاشة تعريف، يمكنك التثبيت منها بدلاً من ذلك."},
                             "افتح **Settings** (إعدادات ويندوز) ← **Bluetooth & devices** ← **Printers & scanners**. ستجد XP-236B في القائمة.",
                             "اضغط عليها ← **Printer properties** ← **Print test page** (طباعة صفحة اختبار).",
                         ],
                         "result": "تطبع الطابعة صفحة اختبار ويندوز.",
-                        "warning": "نزّل التعريف فقط من السي دي أو الفلاشة الموجودة في العلبة أو من موقع Xprinter. لا تنزّله من أي موقع آخر.",
+                        "warning": "نزّل التعريف فقط من `https://www.xprintertech.com/download/xp-236b` أو من السي دي/الفلاشة الموجودة في العلبة. مواقع التعريفات الأخرى غير رسمية وقد تثبّت برامج غير مرغوبة.",
                     },
                 ],
             },
@@ -366,8 +370,21 @@ def unlink_keys(part):
                     task["steps"][i] = re.sub(r"\[\[(\w+)\]\]", lambda m: labels.get(m.group(1), m.group(0)), st)
 
 
+def rtl_arrows(x):
+    """Arabic: mark each arrow right-to-left, so two English button names around it keep their order."""
+    if isinstance(x, str):
+        return x.replace(" ← ", " ‏←‏ ")
+    if isinstance(x, list):
+        return [rtl_arrows(v) for v in x]
+    if isinstance(x, dict):
+        return {k: rtl_arrows(v) for k, v in x.items()}
+    return x
+
+
 def apply(path, t):
     unlink_keys(t["part"])
+    if t is AR:
+        t = {k: rtl_arrows(v) for k, v in t.items()}
     g = json.loads(path.read_text(encoding="utf-8"))
     g["parts"] = [p for p in g["parts"] if p.get("id") != "setup"]
     g["parts"].insert(0, t["part"])
@@ -387,7 +404,7 @@ def apply(path, t):
             g["faq"][k] = v
     for k, v in t["trouble"].items():
         g["troubleshooting"][k] = v
-    g["meta"]["date"] = "November 2026" if t is EN else "تشرين الثاني 2026"
+    g["meta"]["date"] = "November 2026" if path.name.endswith("en.json") else "تشرين الثاني 2026"
     g["meta"]["version"] = "1.1"
     path.write_text(json.dumps(g, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("updated", path.name)

@@ -78,17 +78,22 @@
               "time": "10 min",
               "before": [
                 "The Xprinter XP-236B, its power cable and USB cable",
-                "The driver CD or USB stick that came in the box",
+                "Internet, to download the driver (or the driver CD/USB from the box)",
                 "A receipt roll (80 mm) and a label roll"
               ],
               "steps": [
                 "Plug the printer into power and into the computer by USB. Turn it on.",
-                "Put the driver CD or USB in the computer and run the setup on it. Choose **XP-236B** when it asks for the model, and finish the setup.",
+                "In Chrome, open `https://www.xprintertech.com/download/xp-236b` (the official Xprinter site). Under **Drivers** → **Windows**, click **Download**.",
+                "Open the downloaded file. If it is a `.zip`, right-click it → **Extract All**, then open the folder.",
+                {
+                  "text": "Run the setup file inside. Choose **XP-236B** when it asks for the model, and finish the setup.",
+                  "tip": "If the printer came with a driver CD or USB, you can run the setup from it instead."
+                },
                 "Open Windows **Settings** → **Bluetooth & devices** → **Printers & scanners**. The XP-236B is in the list.",
                 "Click it → **Printer properties** → **Print test page**."
               ],
               "result": "The printer prints the Windows test page.",
-              "warning": "Download the driver only from the CD/USB in the box or from the Xprinter website. Never from another site."
+              "warning": "Download the driver only from `https://www.xprintertech.com/download/xp-236b` or the CD/USB in the box. Other driver websites are not official and can install unwanted software."
             }
           ]
         },
