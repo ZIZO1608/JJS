@@ -1,0 +1,76 @@
+JJ's ERP — setting up the shop laptop
+=====================================
+
+INSTALL (5 minutes)
+ 1. Copy this whole folder to the laptop (USB or download).
+ 2. Double-click  "Install JJ's ERP.bat".
+    If Windows shows "Windows protected your PC": click "More info" → "Run anyway".
+ 3. Wait until it says "Done". JJ's ERP opens by itself.
+    The shop now starts on its own every time the laptop is turned on
+    (the JJ's ERP icon next to the clock).
+
+FIRST TIME IN THE APP
+ 1. "Set up JJ's ERP": type the business name and create the Admin login.
+    Write the username and password down and keep them safe.
+ 2. Settings → Business: phone, address, logo.
+ 3. Settings → Currency: the dollar rate (API or manual) before selling in SYP.
+ 4. Settings → Money: the opening cash in the box.
+ 5. Users: add the manager and the staff, each with their own login.
+ 6. Menu and Clients: check the products, prices and clients.
+
+PRINTER (Xprinter XP-236B)
+ 1. Install the printer driver from the CD / USB that came with the printer,
+    plug the printer in by USB and turn it on.
+ 2. Windows → Settings → Printers: print a Windows test page to make sure it works.
+ 3. JJ's ERP → Settings → Printing → "This computer":
+    - pick the printer for invoices and for labels,
+    - tick "Labels and invoices share one printer" if it is the same printer,
+    - tick "Print straight away, without the print window".
+ 4. Print the test invoice and use its ruler to centre the receipt.
+    Print a test label and adjust the label position if needed.
+
+UPDATING LATER
+ Run "Install JJ's ERP.bat" from the new folder. The data is kept.
+
+BACKUPS
+ The app makes a backup every day (keeps 30). Once a week:
+ Settings → Backups → download, and keep the copy on a USB or Google Drive.
+
+Help — WhatsApp: +963 942 556 404
+
+
+تثبيت نظام جي جيز على لابتوب المحل
+==================================
+
+التثبيت (5 دقائق)
+ 1. انسخ هالمجلد كلّه على اللابتوب.
+ 2. دبل كليك على  "Install JJ's ERP.bat".
+    إذا طلعت رسالة "Windows protected your PC": اضغط "More info" ثم "Run anyway".
+ 3. استنى لحتى يكتب "Done" — البرنامج بيفتح لحاله.
+    من هلق المحل بيشتغل لحاله كل ما ينفتح اللابتوب (أيقونة جي جيز جنب الساعة).
+
+أول مرة بالبرنامج
+ 1. "Set up JJ's ERP": اكتب اسم المحل واعمل حساب الإدارة. اكتب اسم المستخدم وكلمة السر واحفظهم.
+ 2. الإعدادات ← معلومات المحل: الهاتف، العنوان، اللوغو.
+ 3. الإعدادات ← العملة: سعر الدولار قبل البيع بالليرة.
+ 4. الإعدادات ← المال: الكاش الموجود بالصندوق بالبداية.
+ 5. المستخدمين: ضيف المدير والموظفين، كل واحد بحسابه.
+ 6. القائمة والزبائن: راجع المنتجات والأسعار والزبائن.
+
+الطابعة (Xprinter XP-236B)
+ 1. نزّل تعريف الطابعة من السي دي / الفلاشة اللي إجت معها، ووصّلها USB وشغّلها.
+ 2. من إعدادات ويندوز ← الطابعات: اطبع صفحة تجربة لتتأكد إنها شغالة.
+ 3. بالبرنامج ← الإعدادات ← الطباعة ← "هالكمبيوتر":
+    - اختار طابعة الفواتير وطابعة الملصقات،
+    - علّم "الملصقات والفواتير على نفس الطابعة" إذا نفس الطابعة،
+    - علّم "اطبع دغري بلا نافذة الطباعة".
+ 4. اطبع فاتورة التجربة واستعمل المسطرة اللي عليها لتوسيط الفاتورة، واطبع ملصق تجربة وظبّط مكانه.
+
+التحديث بعدين
+ شغّل "Install JJ's ERP.bat" من المجلد الجديد. البيانات بتضل محفوظة.
+
+النسخ الاحتياطي
+ البرنامج بياخد نسخة كل يوم (بيحتفظ بآخر 30). مرة بالأسبوع:
+ الإعدادات ← النسخ الاحتياطي ← تنزيل، وخلّي النسخة على فلاشة أو Google Drive.
+
+مساعدة — واتساب: 963942556404+

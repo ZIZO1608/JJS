@@ -16,6 +16,10 @@ process.env.JJS_DATA_DIR = process.env.JJS_DATA_DIR || path.join(SHARED_DIR, "da
 process.env.JJS_MIGRATIONS_DIR = process.env.JJS_MIGRATIONS_DIR || path.join(ROOT, "drizzle");
 process.env.NODE_ENV = "production";
 
+// The setup kit starts it once with this flag, so the shop opens by itself every time Windows starts.
+// (The tray menu's "Start with Windows" can turn it off again.)
+if (process.argv.includes("--start-with-windows")) app.setLoginItemSettings({ openAtLogin: true });
+
 // A second copy must stop here: quit() alone would still run boot() below.
 const isFirstCopy = app.requestSingleInstanceLock();
 if (!isFirstCopy) app.exit(0);
