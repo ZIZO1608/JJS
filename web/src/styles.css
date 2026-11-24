@@ -337,9 +337,62 @@ h3 {
     opacity: 0;
   }
 }
+/* "Your prices are ready": a soft glow that keeps asking for a tap */
+.portal-glow {
+  animation: portal-glow 2.2s ease-in-out infinite;
+}
+@keyframes portal-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--brand) / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgb(var(--brand) / 0);
+  }
+}
+.portal-coin {
+  animation: portal-coin 1.6s cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+@keyframes portal-coin {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-10px) rotate(-8deg);
+  }
+  60% {
+    transform: translateY(0) rotate(6deg);
+  }
+}
+/* confetti when the client approves the prices */
+.portal-confetti {
+  position: absolute;
+  top: -12px;
+  width: 9px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: portal-confetti 1.5s ease-out forwards;
+}
+@keyframes portal-confetti {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), 260px) rotate(var(--rot));
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .portal-sheet,
-  .portal-pop {
+  .portal-pop,
+  .portal-glow,
+  .portal-coin {
     animation: none;
+  }
+  .portal-confetti {
+    display: none;
   }
 }

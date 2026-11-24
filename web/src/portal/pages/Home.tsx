@@ -6,7 +6,7 @@ import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { useData } from "../../lib/useData";
 import type { PortalClient } from "../auth";
-import { stageOf, StageChip, useAgo, useMoney, useRefreshOn, type PortalRequest } from "../shared";
+import { stageOf, StageChip, useAgo, useMoney, useRefreshOn, useRequestMoney, type PortalRequest } from "../shared";
 
 export interface PortalSubscription {
   planId: string;
@@ -32,6 +32,9 @@ interface HomeData {
   loyalty: { enabled: boolean; buyQty: number; freeQty: number; progress: number; available: number };
   month: { orders: number; items: number };
   requests: PortalRequest[];
+  showPrices: boolean;
+  /** Prices the shop sent that still need the client's answer. */
+  quotesWaiting: { id: string; number: number; total: number; currency: Currency; itemsCount: number }[];
 }
 
 /** A ring that fills as the included items are used. */
@@ -76,6 +79,7 @@ function InstallCard() {
 export function HomePage() {
   const { tr, pick, fmtDate, lang } = useI18n();
   const m = useMoney();
+  const money = useRequestMoney();
   const ago = useAgo();
   const { data, reload } = useData<HomeData>("/portal/home");
   useRefreshOn(reload);
@@ -89,6 +93,22 @@ export function HomePage() {
 
   return (
     <div className="grid gap-4">
+      {/* prices the shop sent: the one thing that needs the client now */}
+      {data.quotesWaiting.map((q) => (
+        <Link key={q.id} to={`/portal/orders/${q.id}`} className="portal-glow portal-pop flex items-center gap-4 rounded-3xl border-2 border-brand bg-surface p-4 transition-transform active:scale-[0.98]">
+          <span className="portal-coin grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-brand/15 text-3xl" aria-hidden>
+            💰
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold">{tr(`أسعار طلبك #${q.number} جاهزة!`, `Prices for order #${q.number} are ready!`)}</span>
+            <span className="block text-sm text-muted">
+              <span className="num ltr">{m(q.total, q.currency)}</span> · {q.itemsCount} {tr("قطعة", "items")}
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-brand px-3.5 py-2 text-sm font-bold text-white">{tr("شوف ووافق", "Review")}</span>
+        </Link>
+      ))}
+
       {/* greeting + balance */}
       <section className="portal-hero relative overflow-hidden rounded-3xl p-5 text-white shadow-lg shadow-brand/20">
         <div className="text-sm text-white/80">{greet} 👋</div>
@@ -112,7 +132,7 @@ export function HomePage() {
       <Link to="/portal/order" className="flex items-center justify-between gap-3 rounded-3xl border-2 border-brand bg-brand/10 px-5 py-4 transition-transform active:scale-[0.98]">
         <div>
           <div className="text-lg font-bold text-brand">{tr("اطلب الآن", "Order now")}</div>
-          <div className="text-sm text-muted">{tr("اختر من القائمة بأسعارك الخاصة", "Pick from the menu at your prices")}</div>
+          <div className="text-sm text-muted">{data.showPrices ? tr("اختر من القائمة بأسعارك الخاصة", "Pick from the menu at your prices") : tr("اختر طلبك والمحل بيبعتلك الأسعار", "Pick your items and the shop sends you prices")}</div>
         </div>
         <span className="grid h-12 w-12 place-items-center rounded-full bg-brand text-2xl text-white" aria-hidden>
           +
@@ -190,7 +210,7 @@ export function HomePage() {
         ) : (
           <div className="grid gap-2">
             {data.requests.map((r) => (
-              <RequestRow key={r.id} r={r} ago={ago(r.createdAt)} money={m(r.order?.total ?? r.quotedTotal, r.order?.currency ?? r.currency)} />
+              <RequestRow key={r.id} r={r} ago={ago(r.createdAt)} money={money(r)} />
             ))}
           </div>
         )}
@@ -202,7 +222,7 @@ export function HomePage() {
 export function RequestRow({ r, ago, money }: { r: PortalRequest; ago: string; money: string }) {
   const { tr } = useI18n();
   return (
-    <Link to={`/portal/orders/${r.id}`} className="card flex items-center gap-3 rounded-2xl p-3.5 transition-colors hover:border-brand/40">
+    <Link to={`/portal/orders/${r.id}`} className={`card flex items-center gap-3 rounded-2xl p-3.5 transition-colors hover:border-brand/40 ${r.status === "quoted" ? "!border-brand" : ""}`}>
       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-sunken text-lg" aria-hidden>
         {r.fulfilment === "delivery" ? "🛵" : "🛍️"}
       </span>

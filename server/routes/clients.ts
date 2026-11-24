@@ -565,7 +565,7 @@ function createPortalAccount(tx: Q, clientId: string, userId: string, chosen: Ch
 }
 
 const portalOut = (a: typeof clientAccounts.$inferSelect | undefined) =>
-  a ? { username: a.username, active: a.active, mustChangePassword: a.mustChangePassword, lastLoginAt: a.lastLoginAt, createdAt: a.createdAt } : null;
+  a ? { username: a.username, active: a.active, mustChangePassword: a.mustChangePassword, showPrices: a.showPrices, lastLoginAt: a.lastLoginAt, createdAt: a.createdAt } : null;
 
 clientsRouter.get(
   "/:id/portal",
@@ -611,13 +611,13 @@ clientsRouter.put(
   requirePerm("clients", "create"),
   h((req, res) => {
     const id = String(req.params.id);
-    const { active } = parse(z.object({ active: z.boolean() }), req.body);
+    const body = parse(z.object({ active: z.boolean().optional(), showPrices: z.boolean().optional() }), req.body);
     db.transaction((tx) => {
       const a = accountOf(tx, id);
       if (!a) throw notFound("portal login");
-      tx.update(clientAccounts).set({ active, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
-      if (!active) tx.delete(clientSessions).where(eq(clientSessions.accountId, a.id)).run();
-      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client_account", entityId: a.id, after: { active } });
+      tx.update(clientAccounts).set({ ...body, updatedAt: nowIso(), syncedAt: null }).where(eq(clientAccounts.id, a.id)).run();
+      if (body.active === false) tx.delete(clientSessions).where(eq(clientSessions.accountId, a.id)).run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client_account", entityId: a.id, after: body });
     });
     res.json({ account: portalOut(accountOf(db, id)) });
   }),

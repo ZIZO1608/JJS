@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Modal, Spinner } from "../../components/ui";
 import { post } from "../../lib/api";
@@ -6,15 +6,15 @@ import type { Currency } from "../../lib/format";
 import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../lib/toast";
 import { useData } from "../../lib/useData";
-import { stageOf, StageChip, useAgo, useMoney, useRefreshOn, type PortalRequest, type Stage } from "../shared";
+import { stageOf, StageChip, useAgo, useMoney, useRefreshOn, useRequestMoney, type PortalRequest, type Stage } from "../shared";
 import { RequestRow } from "./Home";
 
 type Filter = "all" | "active" | "done";
-const ACTIVE: Stage[] = ["waiting", "accepted"];
+const ACTIVE: Stage[] = ["pricing", "quoted", "waiting", "accepted"];
 
 export function RequestsPage() {
   const { tr } = useI18n();
-  const m = useMoney();
+  const money = useRequestMoney();
   const ago = useAgo();
   const { data, reload } = useData<{ rows: PortalRequest[] }>("/portal/order-requests");
   useRefreshOn(reload);
@@ -49,7 +49,7 @@ export function RequestsPage() {
       ) : (
         <div className="grid gap-2">
           {rows.map((r) => (
-            <RequestRow key={r.id} r={r} ago={ago(r.createdAt)} money={m(r.order?.total ?? r.quotedTotal, r.order?.currency ?? r.currency)} />
+            <RequestRow key={r.id} r={r} ago={ago(r.createdAt)} money={money(r)} />
           ))}
         </div>
       )}
@@ -60,6 +60,8 @@ export function RequestsPage() {
 interface Detail extends PortalRequest {
   lines: { nameAr: string; nameEn: string; qty: number; freeQty: number; unitPrice: number; lineTotal: number; options: { nameAr: string; nameEn: string }[] }[];
   totals: { subtotal: number; discount: number; taxTotal: number; deliveryFee: number; total: number; currency: Currency } | null;
+  /** Only for prices the shop sent (an accepted order shows them on the receipt). */
+  taxes: { nameAr: string; nameEn: string; amount: number }[];
   delivery: { name: string; phone: string } | null;
   reports: { id: string; category: ReportCategory; message: string; status: "open" | "resolved"; reply: string; createdAt: string; resolvedAt: string | null }[];
 }
@@ -132,12 +134,25 @@ function Timeline({ r }: { r: Detail }) {
   const { tr, fmtDate } = useI18n();
   const stage = stageOf(r);
   const steps: { label: string; when?: string | null; state: "done" | "now" | "todo" | "bad" }[] = [{ label: tr("أُرسل الطلب", "Order sent"), when: r.createdAt, state: "done" }];
+  const closed = stage === "declined" || r.status === "cancelled";
+  if (r.needsPrice) {
+    if (!r.quotedAt) {
+      if (!closed) steps.push({ label: tr("المحل عم يجهّز أسعارك", "The shop is pricing it"), state: "now" });
+    } else {
+      steps.push({ label: tr("وصلتك الأسعار", "Prices sent to you"), when: r.quotedAt, state: "done" });
+      if (r.approvedAt) steps.push({ label: tr("وافقت على الأسعار", "You approved the prices"), when: r.approvedAt, state: "done" });
+      else if (stage === "quoted") steps.push({ label: tr("بانتظار موافقتك", "Waiting for your OK"), state: "now" });
+    }
+  }
+  const doneLabel = r.fulfilment === "delivery" ? tr("تم التوصيل", "Delivered") : tr("تم الاستلام", "Picked up");
   if (stage === "declined") steps.push({ label: tr("رُفض الطلب", "Declined"), when: r.decidedAt, state: "bad" });
-  else if (r.status === "cancelled") steps.push({ label: tr("ألغيت الطلب", "You cancelled it"), state: "bad" });
+  else if (r.status === "cancelled") steps.push({ label: r.needsPrice && r.quotedAt && r.decidedAt ? tr("ما وافقت على الأسعار", "You turned down the prices") : tr("ألغيت الطلب", "You cancelled it"), when: r.decidedAt, state: "bad" });
+  else if (stage === "pricing" || stage === "quoted") steps.push({ label: doneLabel, state: "todo" });
   else {
-    steps.push({ label: stage === "waiting" ? tr("بانتظار موافقة المحل", "Waiting for the shop") : tr("قبله المحل", "Accepted by the shop"), when: r.decidedAt, state: stage === "waiting" ? "now" : "done" });
+    if (r.needsPrice) steps.push({ label: tr("تأكّد الطلب", "Order confirmed"), when: r.order ? r.decidedAt : null, state: r.order ? "done" : "now" });
+    else steps.push({ label: stage === "waiting" ? tr("بانتظار موافقة المحل", "Waiting for the shop") : tr("قبله المحل", "Accepted by the shop"), when: r.decidedAt, state: stage === "waiting" ? "now" : "done" });
     if (stage === "cancelled") steps.push({ label: tr("أُلغي الطلب", "Order cancelled"), when: r.order?.updatedAt, state: "bad" });
-    else steps.push({ label: r.fulfilment === "delivery" ? tr("تم التوصيل", "Delivered") : tr("تم الاستلام", "Picked up"), when: stage === "delivered" ? r.order?.updatedAt : null, state: stage === "delivered" ? "done" : stage === "accepted" ? "now" : "todo" });
+    else steps.push({ label: doneLabel, when: stage === "delivered" ? r.order?.updatedAt : null, state: stage === "delivered" ? "done" : stage === "accepted" && r.order ? "now" : "todo" });
   }
   const dot = { done: "bg-good text-white", now: "bg-warn text-white animate-pulse", todo: "bg-sunken text-faint", bad: "bg-bad text-white" };
   return (
@@ -158,6 +173,112 @@ function Timeline({ r }: { r: Detail }) {
   );
 }
 
+const CONFETTI_COLORS = ["#e06a2e", "#16a34a", "#eab308", "#3b82f6", "#ec4899"];
+
+/** A short celebration after the client approves the prices. */
+function Celebration({ title, sub, onClose }: { title: string; sub: string; onClose: () => void }) {
+  const { tr } = useI18n();
+  const pieces = useMemo(
+    () => Array.from({ length: 28 }, (_, i) => ({ left: Math.random() * 100, dx: `${Math.round((Math.random() - 0.5) * 160)}px`, rot: `${Math.round(Math.random() * 720 - 360)}deg`, delay: Math.random() * 0.35, color: CONFETTI_COLORS[i % CONFETTI_COLORS.length] })),
+    [],
+  );
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="portal-pop relative w-full max-w-sm overflow-hidden rounded-3xl bg-surface p-6 text-center shadow-2xl">
+        {pieces.map((p, i) => (
+          <span key={i} className="portal-confetti" aria-hidden style={{ left: `${p.left}%`, background: p.color, animationDelay: `${p.delay}s`, ["--dx" as string]: p.dx, ["--rot" as string]: p.rot }} />
+        ))}
+        <div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-good/15 text-4xl" aria-hidden>
+          🎉
+        </div>
+        <h2 className="mt-4 text-xl font-bold">{title}</h2>
+        <p className="mt-1 text-muted">{sub}</p>
+        <button className="btn btn-primary mt-5 w-full !py-3" onClick={onClose} autoFocus>
+          {tr("تمام", "Great")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const REJECT_REASONS = [
+  { ar: "السعر غالي", en: "Too expensive" },
+  { ar: "غيّرت رأيي", en: "I changed my mind" },
+  { ar: "رح اطلب بعدين", en: "I'll order later" },
+];
+
+function RejectDialog({ number, onClose, onConfirm }: { number: number; onClose: () => void; onConfirm: (reason: string) => Promise<void> }) {
+  const { tr, pick } = useI18n();
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <Modal
+      title={tr(`ما بدك أسعار الطلب #${number}؟`, `Turn down the prices for #${number}?`)}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>
+            {tr("رجوع", "Back")}
+          </button>
+          <button
+            className="btn btn-primary !border-bad !bg-bad !text-white"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onConfirm(reason.trim()).finally(() => setBusy(false));
+            }}
+          >
+            {tr("ما بدي", "Turn down")}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-sm text-muted">{tr("رح يوصل للمحل إنك ما وافقت. فيك تقلّهم ليش (اختياري):", "The shop will be told. You can say why (optional):")}</p>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {REJECT_REASONS.map((x) => (
+          <button key={x.en} className={`chip ${reason === pick(x) ? "!bg-ink !text-bg" : "hover:bg-line"}`} onClick={() => setReason(pick(x))}>
+            {pick(x)}
+          </button>
+        ))}
+      </div>
+      <textarea className="input min-h-[72px] !text-base" maxLength={250} value={reason} onChange={(e) => setReason(e.target.value)} aria-label={tr("السبب", "Reason")} />
+    </Modal>
+  );
+}
+
+/** The shop's prices, front and centre, with the one decision the client has to make. */
+function QuoteCard({ r, busy, onApprove, onReject }: { r: Detail; busy: boolean; onApprove: () => void; onReject: () => void }) {
+  const { tr } = useI18n();
+  const m = useMoney();
+  const t = r.totals!;
+  return (
+    <section className="portal-glow overflow-hidden rounded-3xl border-2 border-brand bg-surface">
+      <div className="portal-hero flex items-center gap-4 p-5 text-white">
+        <span className="portal-coin grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/20 text-3xl" aria-hidden>
+          💰
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm text-white/85">{tr("أسعارك وصلت من المحل", "Your prices are here")}</div>
+          <div className="text-3xl font-bold num ltr text-start">{m(t.total, t.currency)}</div>
+          <div className="text-xs text-white/80">
+            {r.itemsCount} {tr("قطعة", "items")}
+            {t.deliveryFee > 0 && ` · ${tr("مع التوصيل", "incl. delivery")}`}
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-2 p-4">
+        <p className="text-sm text-muted">{tr("شوف الأسعار تحت. إذا موافق، اضغط وافق ومنبلّش نجهّز طلبك فوراً.", "Check the prices below. If they work for you, approve and we start on your order right away.")}</p>
+        <button className="btn btn-primary !border-good !bg-good w-full !py-3.5 text-base font-bold !text-white" disabled={busy} onClick={onApprove}>
+          ✓ {tr("موافق، اعتمد الطلب", "Approve & place order")}
+        </button>
+        <button className="btn w-full !py-2.5 text-muted" disabled={busy} onClick={onReject}>
+          {tr("لا، ما بدي", "No thanks")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function RequestDetailPage() {
   const { id } = useParams();
   const { tr, pick, err } = useI18n();
@@ -168,6 +289,13 @@ export function RequestDetailPage() {
   useRefreshOn(reload);
   const [busy, setBusy] = useState(false);
   const [reporting, setReporting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [celebrate, setCelebrate] = useState<{ title: string; sub: string } | null>(null);
+  // Opening the order reads its notifications on the server: let the bell catch up.
+  const loaded = !!data;
+  useEffect(() => {
+    if (loaded) window.dispatchEvent(new Event("portal:notifications-read"));
+  }, [loaded, id]);
   if (!data) return <Spinner />;
   const r = data.request;
   const stage = stageOf(r);
@@ -184,8 +312,25 @@ export function RequestDetailPage() {
       setBusy(false);
     }
   };
+  const approve = async () => {
+    setBusy(true);
+    try {
+      const out = await post<{ placed: boolean; orderNumber: number | null }>(`/portal/order-requests/${r.id}/approve`);
+      setCelebrate(
+        out.placed
+          ? { title: tr("تم! طلبك تأكّد 🎉", "Done! Your order is confirmed"), sub: tr(`فاتورة #${out.orderNumber} · منبلّش نجهّزه هلّق`, `Invoice #${out.orderNumber} · we're starting on it now`) }
+          : { title: tr("وصلت موافقتك ✓", "Your OK reached the shop"), sub: tr("المحل رح يأكّد الطلب ويبعتلك إشعار", "The shop will confirm the order and notify you") },
+      );
+      await reload();
+    } catch (e) {
+      toast(err(e), "error");
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <div className="grid gap-4">
+    <div className={`grid gap-4 ${stage === "quoted" ? "pb-4" : ""}`}>
       <Link to="/portal/orders" className="text-sm font-semibold text-muted">
         {tr("→ طلباتي", "← My orders")}
       </Link>
@@ -195,6 +340,20 @@ export function RequestDetailPage() {
         </h1>
         <StageChip stage={stage} />
       </div>
+
+      {stage === "quoted" && r.totals && <QuoteCard r={r} busy={busy} onApprove={() => void approve()} onReject={() => setRejecting(true)} />}
+
+      {stage === "pricing" && (
+        <div className="flex items-center gap-3 rounded-3xl border border-warn/40 bg-warn/10 p-4">
+          <span className="text-3xl" aria-hidden>
+            ⏳
+          </span>
+          <div>
+            <div className="font-bold">{tr("المحل عم يجهّز أسعارك", "The shop is preparing your prices")}</div>
+            <div className="text-sm text-muted">{tr("رح يوصلك إشعار 🔔 أول ما تجهز، وبتوافق قبل ما ينعمل أي شي.", "You'll get a notification 🔔 as soon as they're ready, and nothing is made until you approve.")}</div>
+          </div>
+        </div>
+      )}
 
       {stage === "declined" && r.declineReason && (
         <div className="rounded-2xl border border-bad/30 bg-bad/10 p-4">
@@ -239,9 +398,10 @@ export function RequestDetailPage() {
                   <span className="num">{l.qty}×</span> {pick(l)}
                 </div>
                 {l.options.length > 0 && <div className="text-xs text-muted">{l.options.map((o) => pick(o)).join("، ")}</div>}
+                {r.totals && l.qty > 0 && <div className="text-xs text-faint num ltr text-start">{tr(`${m(l.unitPrice, r.totals.currency)} للقطعة`, `${m(l.unitPrice, r.totals.currency)} each`)}</div>}
                 {l.freeQty > 0 && <div className="text-xs text-good">{tr(`${l.freeQty} مجاناً`, `${l.freeQty} free`)}</div>}
               </div>
-              {r.totals && <span className="num ltr">{m(l.lineTotal, r.totals.currency)}</span>}
+              {r.totals && <span className="num ltr font-semibold">{m(l.lineTotal, r.totals.currency)}</span>}
             </li>
           ))}
         </ul>
@@ -249,12 +409,24 @@ export function RequestDetailPage() {
         <dl className="mt-3 grid gap-1 border-t border-line pt-3 text-sm">
           {r.totals ? (
             <>
+              {(r.totals.discount > 0 || r.taxes.length > 0 || r.totals.deliveryFee > 0) && (
+                <div className="flex justify-between">
+                  <dt className="text-muted">{tr("المجموع", "Subtotal")}</dt>
+                  <dd className="num ltr">{m(r.totals.subtotal, r.totals.currency)}</dd>
+                </div>
+              )}
               {r.totals.discount > 0 && (
                 <div className="flex justify-between text-good">
                   <dt>{tr("الخصم", "Discount")}</dt>
                   <dd className="num ltr">−{m(r.totals.discount, r.totals.currency)}</dd>
                 </div>
               )}
+              {r.taxes.map((t) => (
+                <div key={t.nameEn} className="flex justify-between">
+                  <dt className="text-muted">{pick(t)}</dt>
+                  <dd className="num ltr">{m(t.amount, r.totals!.currency)}</dd>
+                </div>
+              ))}
               {r.totals.deliveryFee > 0 && (
                 <div className="flex justify-between">
                   <dt className="text-muted">{tr("التوصيل", "Delivery")}</dt>
@@ -266,6 +438,11 @@ export function RequestDetailPage() {
                 <dd className="num ltr">{m(r.totals.total, r.totals.currency)}</dd>
               </div>
             </>
+          ) : r.needsPrice ? (
+            <div className="flex justify-between text-base font-bold">
+              <dt>{tr("الإجمالي", "Total")}</dt>
+              <dd className="text-sm font-semibold text-faint">{r.quotedAt ? "—" : tr("بانتظار الأسعار", "Waiting for prices")}</dd>
+            </div>
           ) : (
             <div className="flex justify-between text-base font-bold">
               <dt>{tr("الإجمالي التقريبي", "Estimated total")}</dt>
@@ -318,7 +495,7 @@ export function RequestDetailPage() {
         />
       )}
 
-      {stage === "waiting" && (
+      {(stage === "waiting" || stage === "pricing") && (
         <button className="btn w-full !py-3 text-bad" disabled={busy} onClick={cancel}>
           {tr("إلغاء الطلب", "Cancel order")}
         </button>
@@ -328,6 +505,33 @@ export function RequestDetailPage() {
           {tr("اطلب من جديد", "Order again")}
         </Link>
       )}
+
+      {stage === "quoted" && (
+        <div className="fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-20 px-4">
+          <button disabled={busy} onClick={() => void approve()} className="portal-pop mx-auto flex w-full max-w-xl items-center justify-between rounded-2xl bg-good px-5 py-3.5 font-bold text-white shadow-xl active:scale-[0.99]">
+            <span>✓ {tr("وافق على الأسعار", "Approve the prices")}</span>
+            {r.totals && <span className="num ltr">{m(r.totals.total, r.totals.currency)}</span>}
+          </button>
+        </div>
+      )}
+
+      {rejecting && (
+        <RejectDialog
+          number={r.number}
+          onClose={() => setRejecting(false)}
+          onConfirm={async (reason) => {
+            try {
+              await post(`/portal/order-requests/${r.id}/reject-prices`, { reason });
+              toast(tr("وصل ردّك للمحل", "The shop was told"));
+              setRejecting(false);
+              await reload();
+            } catch (e) {
+              toast(err(e), "error");
+            }
+          }}
+        />
+      )}
+      {celebrate && <Celebration title={celebrate.title} sub={celebrate.sub} onClose={() => setCelebrate(null)} />}
     </div>
   );
 }

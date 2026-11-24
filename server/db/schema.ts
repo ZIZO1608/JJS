@@ -910,6 +910,8 @@ export const clientAccounts = sqliteTable(
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     mustChangePassword: integer("must_change_password", { mode: "boolean" }).notNull().default(true),
     lastLoginAt: text("last_login_at"),
+    /** Off: the client sees no prices; each order is a price request the shop prices and the client approves. */
+    showPrices: integer("show_prices", { mode: "boolean" }).notNull().default(true),
   },
   (t) => [uniqueIndex("client_accounts_client_uq").on(t.clientId), uniqueIndex("client_accounts_username_uq").on(t.username)],
 );
@@ -934,7 +936,8 @@ export const orderRequests = sqliteTable(
     ...base,
     number: integer("number").notNull(),
     clientId: text("client_id").notNull().references(() => clients.id),
-    status: text("status", { enum: ["pending", "accepted", "declined", "cancelled"] }).notNull().default("pending"),
+    /** pending → (price requests: quoted → approved by the client) → accepted (an order was made). */
+    status: text("status", { enum: ["pending", "quoted", "approved", "accepted", "declined", "cancelled"] }).notNull().default("pending"),
     fulfilment: text("fulfilment", { enum: ["pickup", "delivery"] }).notNull().default("pickup"),
     paymentChoice: text("payment_choice", { enum: ["on_account", "on_delivery"] }).notNull(),
     note: text("note").notNull().default(""),
@@ -948,6 +951,15 @@ export const orderRequests = sqliteTable(
     decidedAt: text("decided_at"),
     declineReason: text("decline_reason").notNull().default(""),
     orderId: text("order_id").references(() => orders.id),
+    /** Sent by a client who doesn't see prices: staff price it before it can become an order. */
+    needsPrice: integer("needs_price", { mode: "boolean" }).notNull().default(false),
+    /** The prices staff sent, exactly as the client sees and approves them (QuoteSnapshot). */
+    quoteJson: text("quote_json").notNull().default(""),
+    quotedBy: text("quoted_by").references(() => users.id),
+    quotedAt: text("quoted_at"),
+    approvedAt: text("approved_at"),
+    /** The client's reason when they turn the prices down. */
+    clientReply: text("client_reply").notNull().default(""),
   },
   (t) => [uniqueIndex("order_requests_number_uq").on(t.number), index("order_requests_client_idx").on(t.clientId, t.createdAt), index("order_requests_status_idx").on(t.status)],
 );

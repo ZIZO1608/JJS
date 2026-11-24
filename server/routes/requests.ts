@@ -5,21 +5,24 @@ import { db } from "../db/client.js";
 import { clients, options, orderReports, orderRequests, orders, products, subscriptionPlans, subscriptionRequests, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requireAuth, requirePerm } from "../lib/auth.js";
-import { h, parse } from "../lib/util.js";
+import { h, HttpError, parse } from "../lib/util.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
-import { acceptOrderRequest, acceptSubscriptionRequest, declineOrderRequest, declineSubscriptionRequest, resolveOrderReport, type RequestLine } from "../services/portal.js";
+import { acceptOrderRequest, acceptSubscriptionRequest, buildQuote, declineOrderRequest, declineSubscriptionRequest, quotableRequest, quoteOf, resolveOrderReport, sendQuote, suggestedQuote, type RequestLine } from "../services/portal.js";
 
 /** Staff side of the client portal: the requests inbox. */
 export const requestsRouter = Router();
 
 const statusQuery = z.object({ status: z.enum(["pending", "accepted", "declined", "cancelled", "all"]).default("pending") });
+/** Order requests still open: new ones, priced ones waiting for the client, and approved ones to finish. */
+const OPEN_ORDER_STATUSES = ["pending", "quoted", "approved"] as const;
 
 requestsRouter.get(
   "/counts",
   requireAuth,
   h((_req, res) => {
-    const pendingOrders = db.select({ n: count() }).from(orderRequests).where(and(eq(orderRequests.status, "pending"), isNull(orderRequests.deletedAt))).get()?.n ?? 0;
+    // Priced requests wait for the client, not for staff, so they are not counted.
+    const pendingOrders = db.select({ n: count() }).from(orderRequests).where(and(inArray(orderRequests.status, ["pending", "approved"]), isNull(orderRequests.deletedAt))).get()?.n ?? 0;
     const pendingSubscriptions = db.select({ n: count() }).from(subscriptionRequests).where(and(eq(subscriptionRequests.status, "pending"), isNull(subscriptionRequests.deletedAt))).get()?.n ?? 0;
     const openReports = db.select({ n: count() }).from(orderReports).where(and(eq(orderReports.status, "open"), isNull(orderReports.deletedAt))).get()?.n ?? 0;
     res.json({ orders: pendingOrders, subscriptions: pendingSubscriptions, reports: openReports });
@@ -36,7 +39,7 @@ requestsRouter.get(
       .from(orderRequests)
       .innerJoin(clients, eq(orderRequests.clientId, clients.id))
       .leftJoin(users, eq(orderRequests.decidedBy, users.id))
-      .where(and(isNull(orderRequests.deletedAt), q.status === "all" ? undefined : eq(orderRequests.status, q.status)))
+      .where(and(isNull(orderRequests.deletedAt), q.status === "all" ? undefined : q.status === "pending" ? inArray(orderRequests.status, [...OPEN_ORDER_STATUSES]) : eq(orderRequests.status, q.status)))
       .orderBy(q.status === "pending" ? orderRequests.number : desc(orderRequests.number))
       .limit(200)
       .all();
@@ -53,7 +56,9 @@ requestsRouter.get(
         clientName: x.clientName,
         clientPhone: x.clientPhone,
         decidedByName: x.decidedByName,
-        balanceUsd: x.r.status === "pending" ? clientBalanceUsd(db, x.r.clientId) : null,
+        balanceUsd: (OPEN_ORDER_STATUSES as readonly string[]).includes(x.r.status) ? clientBalanceUsd(db, x.r.clientId) : null,
+        quote: quoteOf(x.r),
+        quoteJson: undefined,
         order: x.r.orderId ? (linked.get(x.r.orderId) ?? null) : null,
         lines: lines[i]!.map((l) => ({
           productId: l.productId,
@@ -78,6 +83,47 @@ requestsRouter.post(
       return r.order;
     });
     res.json({ orderId: out.id, number: out.number });
+  }),
+);
+
+/** Starting prices for the price form: what this client would pay today. */
+requestsRouter.get(
+  "/orders/:id/suggested-prices",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const r = quotableRequest(db, String(req.params.id));
+    try {
+      res.json(suggestedQuote(db, r));
+    } catch (e) {
+      // A product left the menu or the rate is missing: staff can still type the prices by hand.
+      if (!(e instanceof HttpError)) throw e;
+      res.json({ currency: null, deliveryFee: 0, lines: [], problem: e.message });
+    }
+  }),
+);
+
+/** The totals the client would see for these prices (taxes, delivery), without saving or sending. */
+requestsRouter.post(
+  "/orders/:id/quote-preview",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const r = quotableRequest(db, String(req.params.id));
+    res.json(buildQuote(db, r, req.body));
+  }),
+);
+
+/** Send the prices: the client gets a notification and approves or turns them down. */
+requestsRouter.post(
+  "/orders/:id/quote",
+  requirePerm("orders", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const out = db.transaction((tx) => {
+      const r = sendQuote(tx, id, req.user!.id, req.body);
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "order_request", entityId: id, after: { number: r.request.number, status: "quoted", total: r.quote.total, currency: r.quote.currency, prices: r.quote.prices, deliveryFee: r.quote.deliveryFee } });
+      return r.quote;
+    });
+    res.json({ quote: out });
   }),
 );
 

@@ -11,7 +11,7 @@ export const useRefreshOn = (reload: () => void) =>
     return () => window.removeEventListener(REFRESH_EVENT, reload);
   }, [reload]);
 
-export type RequestStatus = "pending" | "accepted" | "declined" | "cancelled";
+export type RequestStatus = "pending" | "quoted" | "approved" | "accepted" | "declined" | "cancelled";
 
 export interface PortalRequest {
   id: string;
@@ -26,6 +26,11 @@ export interface PortalRequest {
   declineReason: string;
   decidedAt: string | null;
   createdAt: string;
+  /** Sent without prices: the shop prices it and the client approves. */
+  needsPrice: boolean;
+  quotedAt: string | null;
+  approvedAt: string | null;
+  clientReply: string;
   order: { id: string; number: number; status: "confirmed" | "delivered" | "cancelled"; total: number; currency: Currency; paymentStatus: string; updatedAt: string } | null;
 }
 
@@ -42,9 +47,11 @@ export interface PortalNotification {
 }
 
 /** One status for the client: the request, then the order it became. */
-export type Stage = "waiting" | "accepted" | "delivered" | "declined" | "cancelled";
+export type Stage = "pricing" | "quoted" | "waiting" | "accepted" | "delivered" | "declined" | "cancelled";
 export const stageOf = (r: PortalRequest): Stage => {
-  if (r.status === "pending") return "waiting";
+  if (r.status === "pending") return r.needsPrice ? "pricing" : "waiting";
+  if (r.status === "quoted") return "quoted";
+  if (r.status === "approved") return "accepted";
   if (r.status === "declined") return "declined";
   if (r.status === "cancelled" || r.order?.status === "cancelled") return "cancelled";
   if (r.order?.status === "delivered") return "delivered";
@@ -52,6 +59,8 @@ export const stageOf = (r: PortalRequest): Stage => {
 };
 
 const STAGE: Record<Stage, { ar: string; en: string; cls: string; icon: string }> = {
+  pricing: { ar: "عم نجهّز الأسعار", en: "Getting prices", cls: "bg-warn/15 text-warn", icon: "⏳" },
+  quoted: { ar: "الأسعار جاهزة", en: "Prices ready", cls: "bg-brand text-white", icon: "💰" },
   waiting: { ar: "بانتظار الموافقة", en: "Waiting", cls: "bg-warn/15 text-warn", icon: "⏳" },
   accepted: { ar: "تم القبول", en: "Accepted", cls: "bg-good/15 text-good", icon: "✓" },
   delivered: { ar: "تم التسليم", en: "Delivered", cls: "bg-good/15 text-good", icon: "🎉" },
@@ -68,6 +77,12 @@ export function StageChip({ stage }: { stage: Stage }) {
       {pick(s)}
     </span>
   );
+}
+
+/** The money shown for a request in a list: nothing until the shop has priced it. */
+export function useRequestMoney() {
+  const m = useMoney();
+  return (r: PortalRequest) => (r.order ? m(r.order.total, r.order.currency) : r.needsPrice && !r.quotedAt ? "" : m(r.quotedTotal, r.currency));
 }
 
 export function useMoney() {

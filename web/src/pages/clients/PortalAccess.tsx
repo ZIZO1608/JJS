@@ -15,6 +15,7 @@ interface PortalAccount {
   username: string;
   active: boolean;
   mustChangePassword: boolean;
+  showPrices: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -115,6 +116,8 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
   const [shown, setShown] = useState<PortalCredentials | null>(null);
   const [busy, setBusy] = useState(false);
   const [choosing, setChoosing] = useState(false);
+  /** The switch moves at once; the server answer then confirms it (or puts it back). */
+  const [pricesShown, setPricesShown] = useState<boolean | null>(null);
   const manage = can("clients", "create");
   if (!data) return <Spinner />;
   const a = data.account;
@@ -154,6 +157,31 @@ export function PortalTab({ clientId, clientName, phone }: { clientId: string; c
               <dd>{a.mustChangePassword ? tr("مؤقتة (لم يغيّرها بعد)", "Temporary (not changed yet)") : tr("اختارها الزبون", "Chosen by the client")}</dd>
             </div>
           </dl>
+          <label className={`mt-4 flex items-start gap-3 rounded-xl border p-3 ${(pricesShown ?? a.showPrices) ? "border-line" : "border-brand/50 bg-brand/5"} ${manage ? "cursor-pointer" : ""}`}>
+            <input
+              type="checkbox"
+              className="mt-1 h-5 w-5 shrink-0 accent-[rgb(var(--brand))]"
+              checked={pricesShown ?? a.showPrices}
+              disabled={!manage || busy}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setPricesShown(on);
+                void run(async () => {
+                  await put(`/clients/${clientId}/portal`, { showPrices: on });
+                  toast(on ? tr("صار الزبون يشوف الأسعار", "The client now sees prices") : tr("الأسعار مخفية: كل طلب منه بيوصلك لتحط أسعاره", "Prices hidden: each order from this client comes to you to price"));
+                  return {};
+                }).finally(() => setPricesShown(null));
+              }}
+            />
+            <span className="min-w-0">
+              <span className="block font-semibold">{tr("يشوف الأسعار بالتطبيق", "Show prices in the portal")}</span>
+              <span className="block text-sm text-muted">
+                {(pricesShown ?? a.showPrices)
+                  ? tr("الزبون بيشوف أسعاره وبيطلب مباشرة.", "The client sees their prices and orders directly.")
+                  : tr("💰 الزبون ما بيشوف أسعار. بيبعت طلبه، إنت بتحط الأسعار من «طلبات الزبائن»، وهو بيوافق.", "💰 The client sees no prices. They send their list, you set the prices in Client requests, and they approve.")}
+              </span>
+            </span>
+          </label>
           {manage && (
             <div className="mt-4 flex flex-wrap gap-2">
               <button className="btn" disabled={busy} onClick={() => void run(() => post(`/clients/${clientId}/portal/reset`))}>

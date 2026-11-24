@@ -56,6 +56,8 @@ export interface OrderOptions {
   consignmentId?: string;
   fulfilmentNote?: string;
   source?: "staff" | "portal";
+  /** A delivery fee the shop already agreed (a priced portal request): kept even with preset prices. */
+  presetDeliveryFee?: number;
 }
 
 export interface PricedLine {
@@ -209,7 +211,14 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate(), opts: O
     }
   }
   const taxTotal = roundMoney(appliedTaxes.reduce((s, t) => s + t.amount, 0), currency);
-  const deliveryFee = input.fulfilment === "delivery" && input.type !== "trial" && input.type !== "internal" && !agreed ? roundMoney(Math.max(0, input.deliveryFee ?? getSetting("orders").defaultDeliveryFee), currency) : 0;
+  const deliveryFee =
+    input.fulfilment !== "delivery" || input.type === "trial" || input.type === "internal"
+      ? 0
+      : opts.presetDeliveryFee !== undefined
+        ? roundMoney(Math.max(0, opts.presetDeliveryFee), currency)
+        : agreed
+          ? 0
+          : roundMoney(Math.max(0, input.deliveryFee ?? getSetting("orders").defaultDeliveryFee), currency);
   const total = roundMoney(Math.max(0, subtotal - discount + taxTotal + deliveryFee), currency);
 
   const balanceUsd = client ? clientBalanceUsd(tx, client.id) : null;
