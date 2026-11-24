@@ -20,6 +20,8 @@ export interface AuthClient {
   username: string;
   language: "ar" | "en";
   mustChangePassword: boolean;
+  /** False: the shop prices each order and the client approves it. */
+  showPrices: boolean;
 }
 
 declare global {
@@ -54,7 +56,7 @@ export function loadClient(accountId: string): AuthClient | null {
     .where(and(eq(clientAccounts.id, accountId), eq(clientAccounts.active, true), isNull(clientAccounts.deletedAt), eq(clients.active, true), isNull(clients.deletedAt)))
     .get();
   if (!row) return null;
-  return { accountId: row.a.id, clientId: row.c.id, name: row.c.name, username: row.a.username, language: row.c.receiptLanguage, mustChangePassword: row.a.mustChangePassword };
+  return { accountId: row.a.id, clientId: row.c.id, name: row.c.name, username: row.a.username, language: row.c.receiptLanguage, mustChangePassword: row.a.mustChangePassword, showPrices: row.a.showPrices };
 }
 
 /** Attaches req.portalClient when a valid portal cookie is present. Never rejects. */

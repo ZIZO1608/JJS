@@ -10,6 +10,7 @@ export interface PortalClient {
   username: string;
   language: Lang;
   mustChangePassword: boolean;
+  showPrices: boolean;
 }
 interface Business {
   nameAr: string;

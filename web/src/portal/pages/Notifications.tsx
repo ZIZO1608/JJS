@@ -7,6 +7,7 @@ import { useData } from "../../lib/useData";
 import { useAgo, useRefreshOn, type PortalNotification } from "../shared";
 
 const ICON: Record<string, string> = {
+  order_quoted: "💰",
   order_accepted: "✅",
   order_declined: "❌",
   order_delivered: "🎉",
@@ -45,7 +46,7 @@ export function NotificationsPage() {
         <ul className="grid gap-2">
           {data.rows.map((n) => (
             <li key={n.id}>
-              <button onClick={() => n.link && navigate(n.link)} className={`card flex w-full items-start gap-3 rounded-2xl p-3.5 text-start ${n.readAt ? "" : "border-brand/40 bg-brand/5"}`}>
+              <button onClick={() => n.link && navigate(n.link)} className={`card flex w-full items-start gap-3 rounded-2xl p-3.5 text-start ${n.readAt ? "" : "border-brand/40 bg-brand/5"} ${n.kind === "order_quoted" && !n.readAt ? "portal-glow !border-brand" : ""}`}>
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sunken text-lg" aria-hidden>
                   {ICON[n.kind] ?? "🔔"}
                 </span>

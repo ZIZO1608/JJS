@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrowserRouter, Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
 import { SupportLink } from "../components/SupportLink";
 import { Spinner } from "../components/ui";
-import { get } from "../lib/api";
+import { get, post } from "../lib/api";
 import { chime } from "../lib/chime";
 import { useI18n } from "../lib/i18n";
 import { useToast } from "../lib/toast";
@@ -13,7 +13,7 @@ import { NotificationsPage } from "./pages/Notifications";
 import { NewOrderPage } from "./pages/NewOrder";
 import { RequestDetailPage, RequestsPage } from "./pages/Requests";
 import { SubscriptionPage } from "./pages/Subscription";
-import { REFRESH_EVENT, type PortalNotification } from "./shared";
+import { REFRESH_EVENT, Sheet, type PortalNotification } from "./shared";
 
 export function PortalApp() {
   return (
@@ -63,11 +63,32 @@ export function PIcon({ d, className = "h-6 w-6" }: { d: keyof typeof ICONS; cla
   );
 }
 
-/** Polls the unread count; a new notification rings, shows a toast and refreshes the page. */
+/** Price notifications already shown as a pop-up in this visit, so "Later" really means later. */
+const SHOWN_KEY = "jjs.portal.quotes-shown";
+const shownQuotes = (): string[] => {
+  try {
+    return JSON.parse(sessionStorage.getItem(SHOWN_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+};
+const rememberShown = (id: string) => {
+  try {
+    sessionStorage.setItem(SHOWN_KEY, JSON.stringify([...shownQuotes(), id].slice(-50)));
+  } catch {
+    /* private mode: it may pop up once more */
+  }
+};
+
+/**
+ * Polls the unread count; a new notification rings, shows a toast and refreshes the page.
+ * Prices from the shop get more than a toast: a pop-up the client can't miss, also when they open the app later.
+ */
 function useNotificationWatch() {
   const { pick } = useI18n();
   const toast = useToast();
   const [unread, setUnread] = useState(0);
+  const [quote, setQuote] = useState<PortalNotification | null>(null);
   const last = useRef<number | null>(null);
   useEffect(() => {
     let alive = true;
@@ -75,12 +96,21 @@ function useNotificationWatch() {
       try {
         const { unread: n } = await get<{ unread: number }>("/portal/notifications/unread-count");
         if (!alive) return;
-        if (last.current !== null && n > last.current) {
+        const first = last.current === null;
+        const grew = !first && n > last.current!;
+        if ((first && n > 0) || grew) {
           const { rows } = await get<{ rows: PortalNotification[] }>("/portal/notifications");
-          const newest = rows[0];
-          if (newest) toast(pick({ ar: newest.titleAr, en: newest.titleEn }));
-          chime();
-          window.dispatchEvent(new Event(REFRESH_EVENT));
+          if (!alive) return;
+          const seen = shownQuotes();
+          const priced = rows.find((x) => x.kind === "order_quoted" && !x.readAt && !seen.includes(x.id));
+          if (priced) {
+            rememberShown(priced.id);
+            setQuote(priced);
+          } else if (grew && rows[0]) toast(pick({ ar: rows[0].titleAr, en: rows[0].titleEn }));
+          if (grew) {
+            chime();
+            window.dispatchEvent(new Event(REFRESH_EVENT));
+          }
         }
         last.current = n;
         setUnread(n);
@@ -90,7 +120,7 @@ function useNotificationWatch() {
     };
     void tick();
     // only while the app is on screen
-    const id = setInterval(() => document.visibilityState === "visible" && void tick(), 30_000);
+    const id = setInterval(() => document.visibilityState === "visible" && void tick(), 20_000);
     const onFocus = () => void tick();
     const onShow = () => document.visibilityState === "visible" && void tick();
     document.addEventListener("visibilitychange", onShow);
@@ -102,14 +132,51 @@ function useNotificationWatch() {
       window.removeEventListener("portal:notifications-read", onFocus);
     };
   }, [pick, toast]);
-  return unread;
+  return { unread, quote, closeQuote: () => setQuote(null) };
+}
+
+/** "Your prices are ready": one tap takes the client to the prices to approve them. */
+function QuoteReadySheet({ n, onClose }: { n: PortalNotification; onClose: () => void }) {
+  const { tr, pick } = useI18n();
+  const navigate = useNavigate();
+  const open = () => {
+    post("/portal/notifications/read", { ids: [n.id] })
+      .then(() => window.dispatchEvent(new Event("portal:notifications-read")))
+      .catch(() => undefined);
+    onClose();
+    if (n.link) navigate(n.link);
+  };
+  return (
+    <Sheet
+      title={tr("وصلتك الأسعار!", "Your prices are here!")}
+      onClose={onClose}
+      footer={
+        <div className="grid gap-2">
+          <button className="btn btn-primary w-full !py-3.5 text-base font-bold" onClick={open} autoFocus>
+            💰 {tr("شوف الأسعار ووافق", "See the prices & approve")}
+          </button>
+          <button className="btn w-full !py-2.5 text-muted" onClick={onClose}>
+            {tr("بعدين", "Later")}
+          </button>
+        </div>
+      }
+    >
+      <div className="flex flex-col items-center py-3 text-center">
+        <span className="portal-coin grid h-24 w-24 place-items-center rounded-full bg-brand/15 text-5xl" aria-hidden>
+          💰
+        </span>
+        <div className="mt-4 text-lg font-bold">{pick({ ar: n.titleAr, en: n.titleEn })}</div>
+        {(n.bodyAr || n.bodyEn) && <p className="mt-1 text-muted">{pick({ ar: n.bodyAr, en: n.bodyEn })}</p>}
+      </div>
+    </Sheet>
+  );
 }
 
 function Shell() {
   const { tr, pick } = useI18n();
   const { business } = usePortalAuth();
   const navigate = useNavigate();
-  const unread = useNotificationWatch();
+  const { unread, quote, closeQuote } = useNotificationWatch();
   const tab = ({ isActive }: { isActive: boolean }) => `flex flex-1 flex-col items-center gap-0.5 py-2 text-[11.5px] font-semibold ${isActive ? "text-brand" : "text-faint"}`;
 
   return (
@@ -129,6 +196,7 @@ function Shell() {
       <main className="mx-auto w-full max-w-xl flex-1 px-4 pb-28 pt-4">
         <Outlet />
       </main>
+      {quote && <QuoteReadySheet n={quote} onClose={closeQuote} />}
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur" aria-label={tr("الأقسام", "Sections")}>
         <div className="mx-auto flex max-w-xl items-end px-2">

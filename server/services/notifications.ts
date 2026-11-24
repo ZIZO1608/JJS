@@ -50,6 +50,11 @@ export const listNotifications = (tx: Q, to: Recipient, limit = 30) => tx.select
 
 export const unreadCount = (tx: Q, to: Recipient) => tx.select({ n: count() }).from(notifications).where(and(whereFor(to), isNull(notifications.readAt))).get()?.n ?? 0;
 
+/** Opening the thing a notification points to counts as reading it (e.g. the client opened the priced order). */
+export function markReadFor(tx: Q, to: Recipient, refId: string) {
+  tx.update(notifications).set({ readAt: nowIso() }).where(and(whereFor(to), isNull(notifications.readAt), eq(notifications.refId, refId))).run();
+}
+
 /** Marks the given ids as read, or all of them when ids is empty. Only the recipient's own rows. */
 export function markRead(tx: Q, to: Recipient, ids: string[] = []) {
   tx.update(notifications)

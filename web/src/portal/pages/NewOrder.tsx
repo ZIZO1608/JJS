@@ -30,7 +30,8 @@ interface MenuProduct {
   nameAr: string;
   nameEn: string;
   allergens: string;
-  price: number;
+  /** null when the shop prices this client's orders by hand */
+  price: number | null;
   currency: Currency;
   special: boolean;
   photo: string;
@@ -40,6 +41,7 @@ interface Menu {
   categories: { id: string; nameAr: string; nameEn: string }[];
   products: MenuProduct[];
   groups: MenuGroup[];
+  showPrices: boolean;
 }
 interface Quote {
   currency: Currency;
@@ -140,6 +142,33 @@ function OptionsSheet({ product, groups, onAdd, onClose }: { product: MenuProduc
   );
 }
 
+/** For clients the shop prices by hand: what happens after they send their list. */
+function PriceSteps() {
+  const { tr } = useI18n();
+  const steps = [
+    { icon: "📝", title: tr("ابعت طلبك", "Send your list"), sub: tr("بدون أسعار، بس الكميات", "Just the items and amounts") },
+    { icon: "🔔", title: tr("بتوصلك الأسعار", "Get your prices"), sub: tr("إشعار فوري من المحل", "A notification from the shop") },
+    { icon: "✅", title: tr("وافق ونحنا منجهّز", "Approve and we make it"), sub: tr("ما في شي بينعمل قبل موافقتك", "Nothing is made before you approve") },
+  ];
+  return (
+    <ol className="grid gap-2 rounded-2xl bg-brand/10 p-4">
+      {steps.map((st, i) => (
+        <li key={i} className="flex items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-surface text-lg shadow-sm" aria-hidden>
+            {st.icon}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-bold">
+              <span className="num">{i + 1}.</span> {st.title}
+            </span>
+            <span className="block text-xs text-muted">{st.sub}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function Toggle<K extends string>({ value, onChange, items }: { value: K; onChange: (k: K) => void; items: { key: K; icon: string; label: string; sub?: string }[] }) {
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -173,14 +202,16 @@ export function NewOrderPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [sending, setSending] = useState(false);
-  const [sent, setSent] = useState<{ id: string; number: number } | null>(null);
+  const [sent, setSent] = useState<{ id: string; number: number; needsPrice: boolean } | null>(null);
+  const showPrices = menu?.showPrices ?? true;
 
   useEffect(() => saveDraft(cart), [cart]);
 
   // live price from the server (the client's own prices, discounts, subscription, taxes)
   useEffect(() => {
-    if (!cart.length) {
+    if (!cart.length || !showPrices) {
       setQuote(null);
+      setQuoteError("");
       return;
     }
     const id = setTimeout(() => {
@@ -192,7 +223,7 @@ export function NewOrderPage() {
         .catch((e) => setQuoteError(err(e)));
     }, 250);
     return () => clearTimeout(id);
-  }, [cart, fulfilment, err]);
+  }, [cart, fulfilment, err, showPrices]);
 
   const products = useMemo(() => {
     if (!menu) return [];
@@ -206,8 +237,12 @@ export function NewOrderPage() {
         <div className="portal-pop grid h-24 w-24 place-items-center rounded-full bg-good/15 text-5xl" aria-hidden>
           ✓
         </div>
-        <h1 className="mt-5 text-2xl font-bold">{tr("تم إرسال طلبك!", "Order sent!")}</h1>
-        <p className="mt-2 max-w-xs text-muted">{tr(`طلب #${sent.number} بانتظار موافقة المحل. سنرسل لك إشعاراً فور الرد.`, `Request #${sent.number} is waiting for the shop. You'll get a notification as soon as they answer.`)}</p>
+        <h1 className="mt-5 text-2xl font-bold">{sent.needsPrice ? tr("وصل طلبك للمحل!", "Your list reached the shop!") : tr("تم إرسال طلبك!", "Order sent!")}</h1>
+        <p className="mt-2 max-w-xs text-muted">
+          {sent.needsPrice
+            ? tr(`المحل عم يجهّز أسعار طلب #${sent.number}. رح يوصلك إشعار 🔔 لتشوفها وتوافق.`, `The shop is pricing request #${sent.number}. You'll get a notification 🔔 to see the prices and approve them.`)
+            : tr(`طلب #${sent.number} بانتظار موافقة المحل. سنرسل لك إشعاراً فور الرد.`, `Request #${sent.number} is waiting for the shop. You'll get a notification as soon as they answer.`)}
+        </p>
         <div className="mt-6 grid w-full max-w-xs gap-2">
           <Link to={`/portal/orders/${sent.id}`} className="btn btn-primary w-full !py-3">
             {tr("تابع الطلب", "Follow the order")}
@@ -247,7 +282,7 @@ export function NewOrderPage() {
   const send = async () => {
     setSending(true);
     try {
-      const r = await post<{ id: string; number: number }>("/portal/order-requests", { fulfilment, paymentChoice: payment, note, lines: cart.map((l) => ({ productId: l.productId, qty: l.qty, optionIds: l.optionIds })) });
+      const r = await post<{ id: string; number: number; needsPrice: boolean }>("/portal/order-requests", { fulfilment, paymentChoice: payment, note, lines: cart.map((l) => ({ productId: l.productId, qty: l.qty, optionIds: l.optionIds })) });
       setCart([]);
       setNote("");
       setCheckout(false);
@@ -290,7 +325,7 @@ export function NewOrderPage() {
                 <div className="flex flex-1 flex-col p-3">
                   <div className="line-clamp-2 font-semibold leading-snug">{pick(p)}</div>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-1 pt-2">
-                    <span className="font-bold num ltr">{m(p.price, p.currency)}</span>
+                    {p.price !== null ? <span className="font-bold num ltr">{m(p.price, p.currency)}</span> : <span className="text-xs font-semibold text-faint">{tr("السعر من المحل", "Priced by the shop")}</span>}
                     {line ? (
                       <QtySelect value={line.qty} onChange={(n) => setQty(line.key, n)} removable className="!w-full" />
                     ) : (
@@ -313,7 +348,7 @@ export function NewOrderPage() {
               <span className="grid h-7 min-w-7 place-items-center rounded-full bg-brand px-1.5 text-sm text-white num">{count}</span>
               {tr("عرض السلة", "View cart")}
             </span>
-            <span className="font-bold num ltr">{quote ? m(quote.total, quote.currency) : "…"}</span>
+            {showPrices ? <span className="font-bold num ltr">{quote ? m(quote.total, quote.currency) : "…"}</span> : <span className="text-sm font-bold">💰 {tr("اطلب الأسعار", "Ask for prices")}</span>}
           </button>
         </div>
       )}
@@ -335,9 +370,11 @@ export function NewOrderPage() {
           title={tr("سلتك", "Your cart")}
           onClose={() => setCheckout(false)}
           footer={
-            <button className="btn btn-primary w-full !py-3.5 text-base" disabled={sending || !quote || !!quoteError} onClick={send}>
+            <button className="btn btn-primary w-full !py-3.5 text-base" disabled={sending || !cart.length || (showPrices && (!quote || !!quoteError))} onClick={send}>
               {sending ? (
                 "…"
+              ) : !showPrices ? (
+                <>💰 {tr("ابعت واطلب الأسعار", "Send & ask for prices")}</>
               ) : (
                 <>
                   {tr("أرسل الطلب", "Send order")} · <span className="num ltr">{quote ? m(quote.total, quote.currency) : ""}</span>
@@ -423,7 +460,13 @@ export function NewOrderPage() {
             </dl>
           )}
           {quoteError && <p className="mt-3 text-sm text-bad">{quoteError}</p>}
-          <p className="mt-3 text-xs text-faint">{tr("يُرسل الطلب للمحل للموافقة. السعر النهائي يُثبّت عند القبول.", "The order goes to the shop for approval. The final price is set when it's accepted.")}</p>
+          {showPrices ? (
+            <p className="mt-3 text-xs text-faint">{tr("يُرسل الطلب للمحل للموافقة. السعر النهائي يُثبّت عند القبول.", "The order goes to the shop for approval. The final price is set when it's accepted.")}</p>
+          ) : (
+            <div className="mt-5">
+              <PriceSteps />
+            </div>
+          )}
         </Sheet>
       )}
     </div>

@@ -10,9 +10,9 @@ import { getSetting } from "../lib/settings.js";
 import { h, HttpError, notFound, nowIso, parse } from "../lib/util.js";
 import { loyaltyStatus, subscriptionStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
-import { listNotifications, markRead, unreadCount } from "../services/notifications.js";
+import { listNotifications, markRead, markReadFor, unreadCount } from "../services/notifications.js";
 import { assertOrderQtys } from "../services/orders.js";
-import { createOrderReport, createOrderRequest, createSubscriptionRequest, deliveryPersonOf, portalQuote } from "../services/portal.js";
+import { approveQuote, createOrderReport, createOrderRequest, createSubscriptionRequest, deliveryPersonOf, portalQuote, quoteOf, rejectQuote, showsPrices } from "../services/portal.js";
 import { receiptOf } from "./orders.js";
 
 /**
@@ -104,6 +104,10 @@ const requestOut = (r: typeof orderRequests.$inferSelect, order?: typeof orders.
   declineReason: r.declineReason,
   decidedAt: r.decidedAt,
   createdAt: r.createdAt,
+  needsPrice: r.needsPrice,
+  quotedAt: r.quotedAt,
+  approvedAt: r.approvedAt,
+  clientReply: r.clientReply,
   order: order ? { id: order.id, number: order.number, status: order.status, total: order.total, currency: order.currency, paymentStatus: order.paymentStatus, updatedAt: order.updatedAt } : null,
 });
 
@@ -146,6 +150,13 @@ portalRouter.get(
       month: { orders: monthOrders.length, items: monthOrders.reduce((s, o) => s + o.items, 0) },
       requests: myRequests(clientId, 5),
       unread: unreadCount(db, { clientId }),
+      showPrices: showsPrices(db, clientId),
+      quotesWaiting: db
+        .select({ id: orderRequests.id, number: orderRequests.number, total: orderRequests.quotedTotal, currency: orderRequests.currency, itemsCount: orderRequests.itemsCount })
+        .from(orderRequests)
+        .where(and(eq(orderRequests.clientId, clientId), eq(orderRequests.status, "quoted"), isNull(orderRequests.deletedAt)))
+        .orderBy(desc(orderRequests.number))
+        .all(),
     });
   }),
 );
@@ -155,6 +166,8 @@ portalRouter.get(
   "/menu",
   h((req, res) => {
     const c = db.select().from(clients).where(eq(clients.id, req.portalClient!.clientId)).get()!;
+    // A client the shop prices by hand never receives a price: not in the page, not in the data.
+    const showPrices = showsPrices(db, c.id);
     const cats = db.select().from(categories).where(and(isNull(categories.deletedAt), eq(categories.active, true))).orderBy(asc(categories.sort), asc(categories.nameEn)).all();
     const prods = db.select().from(products).where(and(isNull(products.deletedAt), eq(products.active, true))).orderBy(asc(products.sort), asc(products.nameEn)).all();
     const listPrices = c.priceListId ? db.select().from(priceListItems).where(and(eq(priceListItems.listId, c.priceListId), isNull(priceListItems.deletedAt))).all() : [];
@@ -173,9 +186,9 @@ portalRouter.get(
           nameAr: p.nameAr,
           nameEn: p.nameEn,
           allergens: p.allergens,
-          price: sp?.price ?? p.price,
+          price: showPrices ? (sp?.price ?? p.price) : null,
           currency: sp?.currency ?? p.currency,
-          special: !!sp,
+          special: showPrices && !!sp,
           photo: p.photo ? `/api/portal/products/${p.id}/photo` : "",
           groupIds: [...new Set(links.filter((l) => l.productId === p.id || l.categoryId === p.categoryId).map((l) => l.groupId))].filter((g) => groups.some((x) => x.id === g)),
         };
@@ -186,9 +199,10 @@ portalRouter.get(
         nameEn: g.nameEn,
         minSelect: g.minSelect,
         maxSelect: g.maxSelect,
-        options: opts.filter((o) => o.groupId === g.id).map((o) => ({ id: o.id, nameAr: o.nameAr, nameEn: o.nameEn, priceDelta: o.priceDelta, currency: o.currency })),
+        options: opts.filter((o) => o.groupId === g.id).map((o) => ({ id: o.id, nameAr: o.nameAr, nameEn: o.nameEn, priceDelta: showPrices ? o.priceDelta : 0, currency: o.currency })),
       })),
-      deliveryFee: getSetting("orders").defaultDeliveryFee,
+      showPrices,
+      deliveryFee: showPrices ? getSetting("orders").defaultDeliveryFee : 0,
       currency: getSetting("currency.default"),
     });
   }),
@@ -215,6 +229,7 @@ portalRouter.post(
     const body = parse(quoteSchema, req.body);
     if (!body.lines.length) return res.json({ empty: true });
     assertOrderQtys(body.lines);
+    if (!showsPrices(db, req.portalClient!.clientId)) return res.json({ hidden: true });
     res.json(db.transaction((tx) => portalQuote(tx, req.portalClient!.clientId, body)));
   }),
 );
@@ -244,6 +259,8 @@ portalRouter.get(
   "/order-requests/:id",
   h((req, res) => {
     const r = ownRequest(req.portalClient!.clientId, String(req.params.id));
+    // The client is looking at this order now: its notifications are read (the bell and the pop-up stop asking).
+    markReadFor(db, { clientId: req.portalClient!.clientId }, r.id);
     const order = r.orderId ? (db.select().from(orders).where(eq(orders.id, r.orderId)).get() ?? null) : null;
     // Accepted → the real invoice lines; otherwise price the request as it would be now.
     let lines: { nameAr: string; nameEn: string; qty: number; freeQty: number; unitPrice: number; lineTotal: number; options: { nameAr: string; nameEn: string }[] }[] = [];
@@ -251,6 +268,10 @@ portalRouter.get(
     if (order) {
       lines = db.select().from(orderLines).where(eq(orderLines.orderId, order.id)).all().map((l) => ({ nameAr: l.nameAr, nameEn: l.nameEn, qty: l.qty, freeQty: l.freeQty, unitPrice: l.unitPrice, lineTotal: l.lineTotal, options: JSON.parse(l.optionsJson) }));
       totals = { subtotal: order.subtotal, discount: order.discount, taxTotal: order.taxTotal, deliveryFee: order.deliveryFee, total: order.total, currency: order.currency };
+    } else if (quoteOf(r) && (r.status === "quoted" || r.status === "approved")) {
+      const q = quoteOf(r)!;
+      lines = q.lines.map((l) => ({ nameAr: l.nameAr, nameEn: l.nameEn, qty: l.qty, freeQty: 0, unitPrice: l.unitPrice, lineTotal: l.lineTotal, options: l.options.map((o) => ({ nameAr: o.nameAr, nameEn: o.nameEn })) }));
+      totals = { subtotal: q.subtotal, discount: 0, taxTotal: q.taxTotal, deliveryFee: q.deliveryFee, total: q.total, currency: q.currency };
     } else {
       const raw = JSON.parse(r.linesJson) as { productId: string; qty: number; optionIds: string[] }[];
       const names = new Map(db.select({ id: products.id, nameAr: products.nameAr, nameEn: products.nameEn }).from(products).where(inArray(products.id, raw.map((l) => l.productId).concat(["-"]))).all().map((p) => [p.id, p]));
@@ -263,7 +284,8 @@ portalRouter.get(
       .where(and(eq(orderReports.requestId, r.id), isNull(orderReports.deletedAt)))
       .orderBy(desc(orderReports.createdAt))
       .all();
-    res.json({ request: { ...requestOut(r, order), lines, totals, delivery: deliveryPersonOf(db, r.orderId), reports } });
+    const taxes = !order && (r.status === "quoted" || r.status === "approved") ? (quoteOf(r)?.taxes ?? []) : [];
+    res.json({ request: { ...requestOut(r, order), lines, totals, taxes, delivery: deliveryPersonOf(db, r.orderId), reports } });
   }),
 );
 
@@ -276,11 +298,30 @@ portalRouter.post(
   }),
 );
 
+/** The client approves the prices the shop sent: the order is placed straight away. */
+portalRouter.post(
+  "/order-requests/:id/approve",
+  h((req, res) => {
+    const id = ownRequest(req.portalClient!.clientId, String(req.params.id)).id;
+    res.json(db.transaction((tx) => approveQuote(tx, req.portalClient!.clientId, id)));
+  }),
+);
+
+portalRouter.post(
+  "/order-requests/:id/reject-prices",
+  h((req, res) => {
+    const { reason } = parse(z.object({ reason: z.string().trim().max(250).default("") }), req.body ?? {});
+    const id = ownRequest(req.portalClient!.clientId, String(req.params.id)).id;
+    db.transaction((tx) => rejectQuote(tx, req.portalClient!.clientId, id, reason));
+    res.json({ ok: true });
+  }),
+);
+
 portalRouter.post(
   "/order-requests/:id/cancel",
   h((req, res) => {
     const r = ownRequest(req.portalClient!.clientId, String(req.params.id));
-    if (r.status !== "pending") throw new HttpError(409, "not_pending", "Only a request still waiting can be cancelled.");
+    if (r.status !== "pending" && r.status !== "quoted") throw new HttpError(409, "not_pending", "Only a request still waiting can be cancelled.");
     db.update(orderRequests).set({ status: "cancelled", updatedAt: nowIso(), syncedAt: null }).where(eq(orderRequests.id, r.id)).run();
     res.json({ ok: true });
   }),
