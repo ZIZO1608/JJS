@@ -20,6 +20,9 @@
     "dist:win:server": "electron-builder --win --config electron-builder.server.json",
     "dist:win:client": "electron-builder --win --config electron-builder.client.json",
     "dist:win:two": "npm run build && npm run dist:win:server && npm run dist:win:client",
+    "postdist:win:two": "npm rebuild better-sqlite3",
+    "dist:win:kit": "npm run dist:win:two && node scripts/make-setup-kit.mjs",
+    "postdist:win": "npm rebuild better-sqlite3",
     "test": "node tests/run.mjs",
     "cloud:schema": "tsx scripts/gen-cloud-schema.ts"
   },
@@ -32,6 +35,7 @@
     "express": "^4.21.2",
     "jsbarcode": "^3.11.6",
     "leaflet": "^1.9.4",
+    "qrcode-generator": "^1.4.4",
     "uuid": "^11.0.5",
     "zod": "^3.24.1"
   },

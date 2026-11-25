@@ -31,7 +31,11 @@ purchasingRouter.use(
       paymentTermsDays: z.number().int().min(0).max(365).default(0),
     }),
     // no opening balance needs no rate: a pounds supplier starting at 0 must save even before a rate is set
-    beforeSave: (_tx, body) => ({ openingUsd: body.openingBalance ? round4(toUsd(body.openingBalance, body.openingCurrency, rateFor(body.openingCurrency))) : 0 }),
+    // The opening debt is fixed in dollars when it is entered: editing the phone must not re-price it at today's rate.
+    beforeSave: (_tx, body, before) =>
+      before && before.openingBalance === body.openingBalance && before.openingCurrency === body.openingCurrency
+        ? { openingUsd: before.openingUsd }
+        : { openingUsd: body.openingBalance ? round4(toUsd(body.openingBalance, body.openingCurrency, rateFor(body.openingCurrency))) : 0 },
     map: (r) => {
       const d = supplierDue(db, r.id);
       return { ...r, dueUsd: d.totalDueUsd, overdueUsd: d.overdueUsd, openInvoices: d.open.length };

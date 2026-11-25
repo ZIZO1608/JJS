@@ -1,5 +1,6 @@
 import JsBarcode from "jsbarcode";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import qrcode from "qrcode-generator";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
 import { INVOICE_TEMPLATE_DEFAULTS, readInvoiceTemplate, type InvoiceTemplate } from "@shared/invoiceTemplate";
@@ -9,6 +10,7 @@ import { InvoiceA4View, InvoiceEditBar, docTotals, type InvoiceDoc } from "./Inv
 import { useAppSettings, type AppSettings } from "../../lib/appSettings";
 import { money, qty as fq, today, usd, type Currency } from "../../lib/format";
 import { useI18n, type Lang } from "../../lib/i18n";
+import { desktop, getRoll, readDevicePrinters, receiptLinkUrl, setRoll, waDigits, type PrintKind, type RollState } from "../../lib/print";
 import { useData } from "../../lib/useData";
 import type { Batch, PeriodReport } from "../../lib/types";
 import { waLink } from "../distribution/common";
@@ -28,30 +30,260 @@ const dateL = (lang: Lang, iso: string, withTime = false) =>
     ...(withTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
 
+/**
+ * Print-only rules for every print view: white page, no buttons, and nothing but the app itself,
+ * so icons that browser extensions add to every page (they sit outside #root) never reach the paper.
+ */
+const PRINT_CSS = "html, body { background: #fff !important; color: #000 !important; margin: 0 !important; } @media print { .no-print { display: none !important; } body > *:not(#root), html > *:not(head):not(body) { display: none !important; } }";
+
 /** Sets the paper size and prints once when `ready` turns true. */
 function usePrintOnce(ready: boolean, page: string) {
   const done = useRef(false);
   useEffect(() => {
     const st = document.createElement("style");
-    st.textContent = `@page { ${page} } html, body { background: #fff !important; color: #000 !important; } @media print { .no-print { display: none !important; } }`;
+    st.textContent = `@page { ${page} } ${PRINT_CSS}`;
     document.head.appendChild(st);
     return () => st.remove();
   }, [page]);
   useEffect(() => {
     if (!ready || done.current) return;
-    done.current = true;
-    const t = setTimeout(() => window.print(), 450);
+    const t = setTimeout(() => {
+      if (done.current) return;
+      done.current = true;
+      window.print();
+    }, 450);
     return () => clearTimeout(t);
   }, [ready]);
 }
 
-function Toolbar({ children }: { children?: ReactNode }) {
+/** A label or receipt job: which printer it needs and its paper size. `heightMm: "auto"` measures the receipt. */
+interface Job {
+  kind: PrintKind;
+  widthMm: number;
+  heightMm: number | "auto";
+}
+type Stage = "idle" | "swap" | "printing" | "done" | "error";
+
+/**
+ * Like usePrintOnce, but in the desktop app a label or receipt goes straight to this PC's chosen printer.
+ * When labels and receipts share one printer and the other roll is in, it first asks to swap the roll.
+ * Anywhere else (a browser, no printer chosen, A4) it opens the normal print window.
+ */
+function useSmartPrint(ready: boolean, page: string, job: Job | null) {
+  const styleRef = useRef<HTMLStyleElement | null>(null);
+  const done = useRef(false);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [error, setError] = useState("");
+  const [loaded, setLoaded] = useState<RollState | null>(null);
+  const cfg = useMemo(readDevicePrinters, []);
+  const api = desktop();
+  const device = job ? cfg[job.kind] : "";
+  const direct = !!(api && job && device && cfg.direct);
+
+  useEffect(() => {
+    const st = document.createElement("style");
+    st.textContent = `@page { ${page} } ${PRINT_CSS}`;
+    document.head.appendChild(st);
+    styleRef.current = st;
+    return () => st.remove();
+  }, [page]);
+
+  /** Sets the page to the job's exact size (receipts measured), so neither Electron nor Chrome's print window needs a paper size picked. */
+  const exactPage = (j: Job) => {
+    let height = j.heightMm;
+    if (height === "auto") {
+      const root = document.getElementById("print-root");
+      // px → mm, plus a few mm so the last line clears the tear bar
+      height = Math.ceil(((root?.offsetHeight ?? 400) * 25.4) / 96) + 4;
+    }
+    if (styleRef.current) styleRef.current.textContent = `@page { size: ${j.widthMm}mm ${height}mm; margin: 0 } ${PRINT_CSS}`;
+    return height;
+  };
+
+  const send = async () => {
+    if (!job) return;
+    const height = exactPage(job);
+    if (!direct || !api) {
+      // browser (or no printer chosen): the print window opens at the right size; the hint says which printer to pick
+      setStage("idle");
+      window.print();
+      return;
+    }
+    setStage("printing");
+    const r = await api.print({ deviceName: device, widthMm: job.widthMm, heightMm: height });
+    if (r.ok) {
+      setStage("done");
+      if (window.opener) setTimeout(() => window.close(), 1500);
+    } else {
+      setError(r.error ?? "");
+      setStage("error");
+    }
+  };
+
+  const start = async () => {
+    if (!job) {
+      window.print();
+      return;
+    }
+    if (cfg.sharedRoll) {
+      try {
+        const r = await getRoll();
+        if (r.roll !== job.kind) {
+          setLoaded(r);
+          setStage("swap");
+          return;
+        }
+      } catch {
+        /* server unreachable: print anyway rather than block the sale */
+      }
+    }
+    await send();
+  };
+
+  const swapped = async () => {
+    if (!job) return;
+    try {
+      await setRoll(job.kind);
+    } catch {
+      /* the print still goes out; the next job will ask again */
+    }
+    await send();
+  };
+
+  // Exact size and zero margin as soon as the content is there, so even Ctrl+P gets no browser header/footer.
+  useEffect(() => {
+    if (!ready || !job) return;
+    const f = requestAnimationFrame(() => exactPage(job));
+    return () => cancelAnimationFrame(f);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, job?.kind, job?.widthMm, job?.heightMm]);
+
+  useEffect(() => {
+    if (!ready || done.current) return;
+    // mark "done" only when the timer fires: a cleared timer (React re-running effects) must not eat the print
+    const t = setTimeout(() => {
+      if (done.current) return;
+      done.current = true;
+      void start();
+    }, 450);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
+
+  const panel = (
+    <PrintStatus
+      stage={stage}
+      job={job}
+      device={device || (job ? DEFAULT_PRINTER[job.kind] : "")}
+      direct={direct}
+      loaded={loaded}
+      error={error}
+      onSwapped={swapped}
+      onCancel={() => setStage("idle")}
+    />
+  );
+  return { print: () => void start(), dialog: () => window.print(), direct, panel };
+}
+
+const ROLL_NAME: Record<PrintKind, [string, string]> = { label: ["رول الملصقات", "label roll"], receipt: ["رول الفواتير 80 ملم", "80 mm receipt roll"] };
+/** The Windows names set up for the XP-236B; used in the browser hint when this PC has none saved. */
+const DEFAULT_PRINTER: Record<PrintKind, string> = { label: "XP-236B Labels", receipt: "XP-236B Invoices" };
+
+function PrintStatus({
+  stage,
+  job,
+  device,
+  direct,
+  loaded,
+  error,
+  onSwapped,
+  onCancel,
+}: {
+  stage: Stage;
+  job: Job | null;
+  device: string;
+  direct: boolean;
+  loaded: RollState | null;
+  error: string;
+  onSwapped: () => void;
+  onCancel: () => void;
+}) {
+  const { tr } = useI18n();
+  if (!job) return null;
+  if (stage === "idle") {
+    if (direct) return null;
+    // browser: the print window can't be told which printer, so say it plainly
+    return (
+      <div className="no-print mx-2 mb-3 rounded-lg border border-line bg-sunken px-3 py-2 text-sm" role="note">
+        <b>{tr("بنافذة الطباعة:", "In the print window:")}</b> {tr("الطابعة", "Printer")} <b className="ltr">{device}</b> · {tr("الهوامش «بلا»", "Margins “None”")} ·{" "}
+        {tr("شيل «الرأس والتذييل»", "untick “Headers and footers”")}
+      </div>
+    );
+  }
+  if (stage === "swap") {
+    const need = ROLL_NAME[job.kind];
+    const have = ROLL_NAME[loaded?.roll ?? (job.kind === "label" ? "receipt" : "label")];
+    return (
+      <div className="no-print fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+        <div className="card grid w-full max-w-sm gap-3 text-center">
+          <div className="text-4xl" aria-hidden>
+            🔄
+          </div>
+          <h2 className="text-lg font-bold">{tr("بدّل الرول أولاً", "Swap the roll first")}</h2>
+          <p className="text-sm">
+            {tr(`بالطابعة هلق ${have[0]}. هالطباعة بدها ${need[0]}.`, `The ${have[1]} is in the printer. This print needs the ${need[1]}.`)}
+          </p>
+          <ol className="grid gap-1 text-start text-sm">
+            <li>1. {tr(`طلّع ${have[0]} وحط ${need[0]}`, `Take out the ${have[1]} and put in the ${need[1]}`)}</li>
+            <li>2. {tr("سكّر الغطا واضغط FEED لحتى تزمّر", "Close the cover and hold FEED until it beeps")}</li>
+            <li>3. {tr("اضغط «بدّلت، اطبع»", "Press “Swapped, print”")}</li>
+          </ol>
+          {loaded?.changedBy && (
+            <p className="text-xs text-faint">
+              {tr(`آخر تبديل: ${loaded.changedBy}`, `Last swapped by ${loaded.changedBy}`)}
+            </p>
+          )}
+          <div className="grid gap-2">
+            <button className="btn btn-primary min-h-[48px] text-base" onClick={onSwapped}>
+              {tr("بدّلت، اطبع", "Swapped, print")}
+            </button>
+            <button className="btn btn-ghost" onClick={onCancel}>
+              {tr("إلغاء", "Cancel")}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const tone = stage === "error" ? "text-bad" : stage === "done" ? "text-good" : "text-muted";
+  return (
+    <div className={`no-print mx-2 mb-3 rounded-lg bg-sunken px-3 py-2 text-center text-sm font-semibold ${tone}`} role="status">
+      {stage === "printing" && tr(`عم يطبع على ${device}…`, `Printing on ${device}…`)}
+      {stage === "done" && tr(`انبعتت على ${device} ✓`, `Sent to ${device} ✓`)}
+      {stage === "error" && (
+        <>
+          {tr("ما زبطت الطباعة", "Printing didn't work")}: {error || "—"}
+          <button className="btn ms-2 px-2 py-1 text-xs" onClick={() => window.print()}>
+            {tr("افتح نافذة الطباعة", "Open print window")}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Toolbar({ children, onPrint, onDialog }: { children?: ReactNode; onPrint?: () => void; onDialog?: () => void }) {
   const { tr } = useI18n();
   return (
     <div className="no-print mb-4 flex flex-wrap items-center gap-2 border-b border-line bg-surface p-2">
-      <button className="btn btn-primary px-3 py-1.5" onClick={() => window.print()}>
+      <button className="btn btn-primary px-3 py-1.5" onClick={onPrint ?? (() => window.print())}>
         {tr("اطبع", "Print")}
       </button>
+      {onDialog && (
+        <button className="btn px-3 py-1.5" onClick={onDialog} title={tr("اختار الطابعة بنفسك", "Pick the printer yourself")}>
+          {tr("نافذة الطباعة…", "Print window…")}
+        </button>
+      )}
       {children}
       <button className="btn btn-ghost ms-auto px-3 py-1.5" onClick={() => (window.opener ? window.close() : window.history.back())}>
         {tr("إغلاق", "Close")}
@@ -64,8 +296,8 @@ function Loading() {
   return <p className="p-6 text-center text-faint">…</p>;
 }
 
-function Logo({ s, className }: { s: AppSettings | null; className: string }) {
-  return <img src={s?.business.logo || "/logo.png"} alt="" className={className} />;
+function Logo({ s, className, style }: { s: AppSettings | null; className: string; style?: CSSProperties }) {
+  return <img src={s?.business.logo || "/logo.png"} alt="" className={className} style={style} />;
 }
 
 /* ------------------------------------------------------------------ */
@@ -81,6 +313,8 @@ interface Receipt {
   loyalty: { enabled: boolean; buyQty: number; progress: number; available: number } | null;
   payment: { paid: number; remaining: number };
   account: { beforeUsd: number; afterUsd: number; nowUsd: number } | null;
+  /** Signed key for the digital receipt page at /r/<link>. */
+  link?: string;
 }
 
 export function PrintReceipt() {
@@ -97,7 +331,11 @@ export function PrintReceipt() {
   // editing works on the A4 page
   const size = editing || chosen === "a4" ? "a4" : "thermal";
   const width = rc?.printing.receiptWidthMm ?? 80;
-  usePrintOnce(!!rc, size === "a4" ? "size: A4; margin: 12mm" : `size: ${width}mm auto; margin: 2mm`);
+  const sp2 = useSmartPrint(
+    !!rc,
+    size === "a4" ? "size: A4; margin: 12mm" : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
+    size === "a4" ? null : { kind: "receipt", widthMm: PRINTABLE_MM[width] ?? width, heightMm: "auto" },
+  );
   const lang: Lang = rc?.client?.language ?? ui.lang;
   const fresh = useCallback(() => (rc ? docFromReceipt(rc, lang, s, rc.client?.template ?? INVOICE_TEMPLATE_DEFAULTS) : null), [rc, lang, s]);
   const [doc, setDoc] = useState<InvoiceDoc | null>(null);
@@ -134,7 +372,7 @@ export function PrintReceipt() {
   };
   return (
     <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
-      <Toolbar>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
         <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group">
           {(["thermal", "a4"] as const).map((k) => (
             <button
@@ -160,6 +398,7 @@ export function PrintReceipt() {
           </a>
         )}
       </Toolbar>
+      {sp2.panel}
       {editing && (
         <InvoiceEditBar
           d={doc}
@@ -379,69 +618,233 @@ function lineOptions(l: Receipt["lines"][number], lang: Lang) {
   return l.options.length ? l.options.map((x) => pickL(lang)(x)).join("، ") : "";
 }
 
+/** What a thermal head can actually burn: 58 mm paper → 48 mm, 80 mm paper → 72 mm. Wider content gets cut at the edge. */
+const PRINTABLE_MM: Record<number, number> = { 58: 48, 80: 72 };
+
+/** Content width and sideways shift for a thermal receipt, from Settings → Printing. */
+export function receiptBox(p: Partial<AppSettings["printing"]> | undefined, width: number, override?: { side?: number; x?: number }) {
+  const side = override?.side ?? p?.receiptSideMm ?? 4;
+  const content = Math.max(30, Math.min(width - 2 * side, PRINTABLE_MM[width] ?? width - 8));
+  return { content, x: override?.x ?? p?.receiptOffsetXMm ?? 0 };
+}
+
+/**
+ * The receipt is laid out at the full design width (72 mm on 80 mm paper) and then shrunk as one piece to the strip
+ * from Settings → Printing. Without this, a narrower strip (the XP-236B head burns only ~56 mm of an 80 mm roll) keeps
+ * every font, the QR and the totals at full size, so they spill past the strip and get cut on both sides.
+ */
+function ReceiptFit({ width, content, children }: { width: number; content: number; children: ReactNode }) {
+  const design = PRINTABLE_MM[width] ?? width - 8;
+  const zoom = content / design;
+  if (zoom >= 0.999) return <>{children}</>;
+  return <div style={{ width: `${design}mm`, zoom }}>{children}</div>;
+}
+
+/** Tahoma: crisp at small sizes on a 203 dpi head, and it has Arabic. Pure black, no smoothing greys. */
+const RECEIPT_STYLE = { fontFamily: 'Tahoma, "Segoe UI", Arial, sans-serif', color: "#000", WebkitFontSmoothing: "none", printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" } as const;
+/** Logos are often grey line art; push them to solid black so the head prints them sharp. */
+const LOGO_INK = { filter: "grayscale(1) contrast(4) brightness(0.85)" } as const;
+/** Same, flipped to white for the black header banner. */
+const LOGO_INK_ON_BLACK = { filter: "grayscale(1) contrast(4) brightness(0.85) invert(1)" } as const;
+
+/** A QR code as one crisp SVG path (no image smoothing), sized in mm for the thermal head. */
+function Qr({ text, sizeMm }: { text: string; sizeMm: number }) {
+  const { n, d } = useMemo(() => {
+    const q = qrcode(0, "M");
+    q.addData(text);
+    q.make();
+    const count = q.getModuleCount();
+    let path = "";
+    for (let r = 0; r < count; r++) for (let c = 0; c < count; c++) if (q.isDark(r, c)) path += `M${c},${r}h1v1h-1z`;
+    return { n: count, d: path };
+  }, [text]);
+  return (
+    <svg viewBox={`0 0 ${n} ${n}`} style={{ width: `${sizeMm}mm`, height: `${sizeMm}mm` }} shapeRendering="crispEdges" aria-hidden>
+      <path d={d} fill="#000" />
+    </svg>
+  );
+}
+
+/**
+ * A millimetre ruler across the whole page, for the test invoice: a long tick and number every 5 mm, short ticks
+ * every mm. Whatever numbers make it onto the paper show exactly which part of the page the printer can burn.
+ */
+function PageRuler({ mm }: { mm: number }) {
+  const ticks = Array.from({ length: Math.floor(mm) + 1 }, (_, i) => i);
+  return (
+    <svg viewBox={`0 0 ${mm} 9`} style={{ width: `${mm}mm`, height: "9mm", display: "block", direction: "ltr" }} direction="ltr" shapeRendering="crispEdges" aria-hidden>
+      <rect x="0" y="0" width={mm} height="0.5" fill="#000" />
+      {ticks.map((i) => (
+        <rect key={i} x={Math.min(i, mm - 0.35)} y="0" width="0.35" height={i % 5 === 0 ? 3.2 : 1.6} fill="#000" />
+      ))}
+      {ticks
+        .filter((i) => i % 5 === 0)
+        .map((i) => (
+          <text key={`n${i}`} x={i} y="7.4" fontSize="3" fontWeight="700" fontFamily="Tahoma, Arial, sans-serif" textAnchor={i === 0 ? "start" : i >= mm - 2 ? "end" : "middle"} fill="#000">
+            {i}
+          </text>
+        ))}
+    </svg>
+  );
+}
+
+/** Bottom of every receipt: thanks, then "chat / order on WhatsApp" with the number and a QR that opens the chat. */
+function ReceiptFooter({ p, phone, lang, linkUrl }: { p: Partial<AppSettings["printing"]>; phone: string; lang: Lang; linkUrl?: string }) {
+  const t = L(lang);
+  const wa = (p.receiptWhatsapp || phone || "").trim();
+  const digits = wa ? waDigits(wa) : "";
+  return (
+    <>
+      <div className="whitespace-pre-line text-center text-[17px] font-bold">{lang === "ar" ? p.receiptFooterAr : p.receiptFooterEn}</div>
+      {linkUrl && (
+        <div className="mt-2 overflow-hidden rounded-[6px] border-2 border-black">
+          <div className="bg-black py-0.5 text-center text-[12px] font-black uppercase tracking-[0.2em] text-white">{t("فاتورتك أونلاين", "Digital receipt")}</div>
+          <div className="flex items-center gap-2.5 p-1.5">
+            <Qr text={linkUrl} sizeMm={21} />
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="text-[15px] font-black">{t("امسح وشوف فاتورتك", "Scan for your receipt")}</div>
+              <div className="mt-0.5 text-[12px]">{t("افتحها، احفظها أو ابعتها من تلفونك", "View, save or share it on your phone")}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      {digits && (
+        <div className="mt-2 flex items-center gap-2.5 rounded-[3px] border-2 border-black p-1.5">
+          {p.receiptQr !== false && <Qr text={`https://wa.me/${digits}`} sizeMm={19} />}
+          <div className={`min-w-0 flex-1 leading-tight ${p.receiptQr === false ? "text-center" : ""}`}>
+            <div className="text-[14px] font-bold">{t("اطلب عبر واتساب", "Order on WhatsApp")}</div>
+            <div className="num ltr mt-0.5 text-[16px] font-bold">{wa}</div>
+            {p.receiptQr !== false && <div className="mt-0.5 text-[11px]">{t("امسح الكود لتراسلنا", "Scan to chat with us")}</div>}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ReceiptThermal({ rc, lang, s, width, tpl }: { rc: Receipt; lang: Lang; s: AppSettings | null; width: number; tpl: InvoiceTemplate }) {
   const t = L(lang);
   const pk = pickL(lang);
   const o = rc.order;
   const m = (v: number) => money(v, o.currency, lang);
   const bw = (v: number) => balanceWords(v, lang, o.fxRate, o.currency === "SYP");
-  const row = (a: ReactNode, b: ReactNode, bold = false) => (
-    <div className={`flex justify-between gap-2 ${bold ? "text-[15px] font-bold" : ""}`}>
+  const box = receiptBox(rc.printing, width);
+  const row = (a: ReactNode, b: ReactNode, strong = false) => (
+    // a long amount (a balance with its SYP value) drops under the label instead of running off the paper
+    <div className={`flex flex-wrap items-baseline justify-between gap-x-2 ${strong ? "text-[16px] font-bold" : "text-[14px]"}`}>
       <span>{a}</span>
-      <span className="num ltr">{b}</span>
+      <span className="num ltr ms-auto whitespace-nowrap">{b}</span>
     </div>
   );
+  const thin = <div className="my-1.5 border-t border-dashed border-black" />;
+  const pieces = rc.lines.reduce((n, l) => n + l.qty, 0);
+  const stamp = o.status === "cancelled" ? null : payStamp(o.total, rc.payment, t);
   return (
-    <div className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
-      <div className="text-center">
-        {tpl.showLogo && <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />}
-        <div className="text-[15px] font-bold">{pk(rc.business)}</div>
-        {rc.business.phone && (
-          <div>
-            <span className="ltr">{rc.business.phone}</span>
-          </div>
-        )}
-        {rc.business.address && <div>{rc.business.address}</div>}
+    <div
+      id="print-root"
+      className="mx-auto bg-white pb-2 pt-1 leading-snug"
+      style={{ ...RECEIPT_STYLE, width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}
+    >
+      <ReceiptFit width={width} content={box.content}>
+      {/* Black banner: logo and shop name in white */}
+      <div className="rounded-[6px] bg-black px-2 pb-2 pt-2.5 text-center text-white">
+        {tpl.showLogo && <Logo s={s} className="mx-auto mb-1 h-14 w-auto" style={LOGO_INK_ON_BLACK} />}
+        <div className="text-[23px] font-black leading-tight tracking-wide">{pk(rc.business)}</div>
+        {rc.printing.receiptSocial && <div className="mt-0.5 text-[14px] font-bold">{rc.printing.receiptSocial}</div>}
       </div>
-      <div className="my-1.5 border-t border-dashed border-black" />
-      {row(`${tpl.title || t("فاتورة", "Invoice")} #${o.number}`, dateL(lang, o.createdAt ?? o.businessDate, true))}
-      {rc.client && row(t("الزبون", "Client"), rc.client.name)}
-      {o.type !== "normal" && <div className="font-bold">{discountWords(o.type, t) || o.type}</div>}
-      {o.status === "cancelled" && <Cancelled lang={lang} />}
-      {tpl.intro && <div className="mt-1 whitespace-pre-line">{tpl.intro}</div>}
-      <div className="my-1.5 border-t border-dashed border-black" />
-      {rc.lines.map((l) => (
-        <div key={l.id} className="mb-1">
-          <div className="flex justify-between gap-2">
-            <span className="font-semibold">
-              {l.qty} × {pk(l)}
-            </span>
-            <span className="num ltr">{m(l.lineTotal)}</span>
-          </div>
-          {lineOptions(l, lang) && <div className="ps-3 text-[11px]">+ {lineOptions(l, lang)}</div>}
-          {l.freeQty > 0 && <div className="ps-3 text-[11px]">{t(`منها ${l.freeQty} مجاناً`, `${l.freeQty} free`)}</div>}
-          <div className="ps-3 text-[11px] num ltr text-start">@ {m(l.unitPrice)}</div>
+      {(rc.business.address || rc.business.phone) && (
+        <div className="mt-1 text-center text-[13px] leading-tight">
+          {rc.business.address && <div>{rc.business.address}</div>}
+          {rc.business.phone && (
+            <div className="font-bold">
+              ☎ <span className="ltr">{rc.business.phone}</span>
+            </div>
+          )}
         </div>
-      ))}
-      <div className="my-1.5 border-t border-dashed border-black" />
-      {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
-      {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
-      {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
-      {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
-      {row(t("المجموع", "Total"), m(o.total), true)}
-      {o.currency === "SYP" && o.fxRate ? <div className="text-end text-[11px] num ltr">≈ {usd(o.totalUsd)}</div> : null}
-      <div className="my-1.5 border-t border-dashed border-black" />
-      {o.method && row(t("طريقة الدفع", "Payment"), pk(o.method))}
-      {rc.payment.paid > 0 && row(t("المدفوع", "Paid"), m(rc.payment.paid))}
-      {rc.payment.remaining > 0 && row(t("الباقي على الحساب", "Remaining on account"), m(rc.payment.remaining), true)}
+      )}
+
+      {/* Invoice number, date, client */}
+      <div className="mt-2 flex items-stretch gap-1.5">
+        <div className="flex flex-col justify-center rounded-[4px] border-2 border-black px-1.5 py-0.5 text-center leading-none">
+          <div className="text-[10px] font-bold uppercase tracking-wider">{tpl.title || t("فاتورة", "Invoice")}</div>
+          <div className="num ltr mt-0.5 text-[19px] font-black">#{o.number}</div>
+        </div>
+        <div className="flex min-w-0 flex-1 flex-col justify-center text-end leading-tight">
+          <div className="num text-[13px] font-bold">{dateL(lang, o.createdAt ?? o.businessDate, true)}</div>
+          {rc.client && <div className="truncate text-[14px] font-bold">{rc.client.name}</div>}
+        </div>
+      </div>
+      {o.type !== "normal" && <div className="mt-1 text-center text-[14px] font-bold">★ {discountWords(o.type, t) || o.type} ★</div>}
+      {o.status === "cancelled" && <Cancelled lang={lang} />}
+      {tpl.intro && <div className="mt-1 whitespace-pre-line text-[13px]">{tpl.intro}</div>}
+
+      {/* Lines */}
+      <div className="mt-2 flex items-baseline justify-between border-b-2 border-black pb-0.5 text-[11px] font-bold uppercase tracking-wider">
+        <span>{t("الصنف", "Item")}</span>
+        <span>{t("المبلغ", "Amount")}</span>
+      </div>
+      <div className="mt-1">
+        {rc.lines.map((l, i) => (
+          <div key={l.id}>
+            {i > 0 && thin}
+            <div className="flex items-start gap-1.5">
+              <span className="num ltr mt-[1px] shrink-0 rounded-[3px] bg-black px-1 text-[13px] font-bold leading-[18px] text-white">{l.qty}×</span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[15px] font-bold leading-tight">{pk(l)}</div>
+                {lineOptions(l, lang) && <div className="text-[12px] leading-tight">+ {lineOptions(l, lang)}</div>}
+                <div className="num ltr text-[12px]">
+                  @ {m(l.unitPrice)}
+                  {l.freeQty > 0 && <b> · {t(`${l.freeQty} مجاناً`, `${l.freeQty} FREE`)}</b>}
+                </div>
+              </div>
+              <span className="num ltr whitespace-nowrap text-[15px] font-bold">{m(l.lineTotal)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Totals */}
+      <div className="mt-2 border-t-2 border-black pt-1.5">
+        {row(t("الأصناف / القطع", "Items / pieces"), `${rc.lines.length} / ${pieces}`)}
+        {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
+        {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
+        {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
+        {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
+        <span className="text-[18px] font-black tracking-wider">{t("المجموع", "TOTAL")}</span>
+        <span className="num ltr whitespace-nowrap text-[24px] font-black">{m(o.total)}</span>
+      </div>
+      {o.currency === "SYP" && o.fxRate ? <div className="mt-0.5 text-end text-[13px] num ltr">≈ {usd(o.totalUsd)}</div> : null}
+      {o.discount > 0 && o.status !== "cancelled" && (
+        <div className="mt-1.5 rounded-[4px] border-2 border-dashed border-black py-1 text-center text-[15px] font-bold">
+          ✂ {t("وفّرت", "You saved")} <span className="num ltr">{m(o.discount)}</span> ✂
+        </div>
+      )}
+
+      {/* Payment */}
+      {(o.method || rc.payment.paid > 0 || rc.payment.remaining > 0) && (
+        <div className="mt-1.5">
+          {o.method && row(t("طريقة الدفع", "Payment"), pk(o.method))}
+          {rc.payment.paid > 0 && row(t("المدفوع", "Paid"), m(rc.payment.paid))}
+          {rc.payment.remaining > 0 && row(t("الباقي على الحساب", "Remaining on account"), m(rc.payment.remaining), true)}
+        </div>
+      )}
+      {stamp && (
+        <div className="mb-1 mt-3 flex justify-center">
+          <div className="rotate-[-4deg] rounded-[6px] border-[3px] border-black px-3 py-0.5 text-center leading-tight" style={{ outline: "1px solid #000", outlineOffset: "2px" }}>
+            <div className="text-[20px] font-black tracking-[0.2em]">{stamp}</div>
+          </div>
+        </div>
+      )}
       {rc.account && (
-        <>
+        <div className="mt-2 rounded-[4px] border-2 border-black px-1.5 py-1">
           {row(t("الرصيد السابق", "Previous balance"), bw(rc.account.beforeUsd))}
           {row(t("الرصيد الجديد", "New balance"), bw(rc.account.afterUsd), true)}
-        </>
+        </div>
       )}
       {rc.loyalty?.enabled && (
-        <div className="mt-1 text-center text-[11px]">
+        <div className="mt-1.5 text-center text-[13px]">
           {t("الولاء", "Loyalty")}:{" "}
           <span className="num ltr">
             {rc.loyalty.progress} / {rc.loyalty.buyQty}
@@ -449,15 +852,51 @@ function ReceiptThermal({ rc, lang, s, width, tpl }: { rc: Receipt; lang: Lang; 
           {rc.loyalty.available > 0 && ` · ${t(`لك ${rc.loyalty.available} مجاناً`, `${rc.loyalty.available} free waiting`)}`}
         </div>
       )}
-      <div className="my-1.5 border-t border-dashed border-black" />
-      <div className="whitespace-pre-line text-center">{tpl.footer || (lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn)}</div>
+
+      {/* Footer */}
+      <div className="my-2 border-t-2 border-black" />
+      <ReceiptFooter p={tpl.footer ? { ...rc.printing, receiptFooterAr: tpl.footer, receiptFooterEn: tpl.footer } : rc.printing} phone={rc.business.phone ?? ""} lang={lang} linkUrl={o.status === "cancelled" ? "" : receiptLinkUrl(rc.printing, rc.link)} />
+      <div className="mt-2" dir="ltr">
+        <Barcode value={String(o.number)} height={34} />
+      </div>
+      </ReceiptFit>
     </div>
   );
+}
+
+/** PAID / PARTLY PAID / ON ACCOUNT for the stamp; nothing for a free (zero-total) invoice. */
+function payStamp(total: number, pay: Receipt["payment"], t: (ar: string, en: string) => string) {
+  if (total <= 0.009) return null;
+  if (pay.remaining <= 0.009) return t("مدفوعة", "PAID");
+  if (pay.paid > 0.009) return t("مدفوعة جزئياً", "PART PAID");
+  return t("على الحساب", "ON ACCOUNT");
 }
 
 /* ------------------------------------------------------------------ */
 /* Expiry labels                                                       */
 /* ------------------------------------------------------------------ */
+
+/** Settings → Printing: shift (+ right / down) and inner margin, all in mm. */
+interface LabelMargins {
+  x: number;
+  y: number;
+  pad: number;
+}
+const labelMargins = (p?: AppSettings["printing"]): LabelMargins => ({ x: p?.labelOffsetXMm ?? 0, y: p?.labelOffsetYMm ?? 0, pad: p?.labelPaddingMm ?? 1.2 });
+
+/** One label page: the paper stays put, the content moves by the saved shift. `frame` draws the content's edge (for tests). */
+function LabelBox({ w, h, m, children, frame, className = "border border-dashed border-gray-400 print:border-0", pageBreak = true }: { w: number; h: number; m: LabelMargins; children: ReactNode; frame?: boolean; className?: string; pageBreak?: boolean }) {
+  return (
+    <div
+      className={`overflow-hidden bg-white text-black ${className}`}
+      style={{ width: `${w}mm`, height: `${h}mm`, ...(pageBreak ? { pageBreakAfter: "always" as const, breakAfter: "page" as const } : {}) }}
+    >
+      <div className="flex h-full w-full flex-col justify-between" style={{ padding: `${m.pad}mm`, transform: m.x || m.y ? `translate(${m.x}mm, ${m.y}mm)` : undefined }}>
+        {frame ? <div className="flex h-full w-full flex-col justify-between border border-black p-[0.6mm]">{children}</div> : children}
+      </div>
+    </div>
+  );
+}
 
 function Barcode({ value, height }: { value: string; height: number }) {
   const ref = useRef<SVGSVGElement>(null);
@@ -486,22 +925,19 @@ export function PrintLabels() {
     const n = copiesParam ? Math.max(1, Math.min(500, Number(copiesParam) || 1)) : b.item.kind === "product" ? Math.max(1, Math.min(200, Math.round(b.qtyLeft || b.qtyIn))) : 1;
     return Array.from({ length: n }, (_, i) => ({ b, key: `${b.id}-${i}` }));
   });
-  usePrintOnce(!!all.data && !!s, `size: ${w}mm ${h}mm; margin: 0`);
+  const sp2 = useSmartPrint(!!all.data && !!s && labels.length > 0, `size: ${w}mm ${h}mm; margin: 0`, { kind: "label", widthMm: w, heightMm: h });
   if (!all.data || !s) return <Loading />;
   const fmt = (iso: string) => new Date(iso).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   return (
     <div className="bg-white">
-      <Toolbar>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
         <span className="text-sm text-muted">{ui.tr(`${labels.length} ملصق · ${w}×${h} ملم`, `${labels.length} labels · ${w}×${h} mm`)}</span>
       </Toolbar>
+      {sp2.panel}
       {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في دفعات", "No batches")}</p>}
       <div className="flex flex-col items-center gap-2 print:block print:gap-0">
         {labels.map(({ b, key }) => (
-          <div
-            key={key}
-            className="flex flex-col justify-between overflow-hidden border border-dashed border-gray-400 bg-white p-[1.2mm] text-black print:border-0"
-            style={{ width: `${w}mm`, height: `${h}mm`, pageBreakAfter: "always", breakAfter: "page" }}
-          >
+          <LabelBox key={key} w={w} h={h} m={labelMargins(s.printing)}>
             <div className="text-center leading-tight">
               <div className="truncate text-[9pt] font-bold" dir="rtl">
                 {b.item.nameAr}
@@ -525,8 +961,189 @@ export function PrintLabels() {
                 {b.allergens}
               </div>
             )}
-            <Barcode value={b.batchCode} height={Math.max(14, Math.round(h * 0.9))} />
+            <Barcode value={b.batchCode} height={Math.max(12, Math.round(h * 0.45))} />
+          </LabelBox>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Printer test (receipt or label)                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One sample receipt or label at the sizes in the URL (so a size can be tried before saving).
+ * The edge marks show whether anything is cut off; the barcode shows whether it scans.
+ */
+export function PrintTest() {
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { tr } = ui;
+  const { s } = useAppSettings();
+  const kind = sp.get("kind") === "label" ? "label" : "receipt";
+  const clamp = (v: string | null, lo: number, hi: number, d: number) => Math.min(hi, Math.max(lo, Number(v) || d));
+  const width = clamp(sp.get("width"), 58, 80, s?.printing.receiptWidthMm ?? 58) === 80 ? 80 : 58;
+  const w = clamp(sp.get("w"), 20, 120, s?.printing.labelWidthMm ?? 50);
+  const h = clamp(sp.get("h"), 15, 120, s?.printing.labelHeightMm ?? 30);
+  // margins from the URL too, so the Settings screen can test them before saving
+  const num0 = (k: string, lo: number, hi: number, d: number) => {
+    const v = sp.get(k);
+    return v === null || v === "" || !Number.isFinite(Number(v)) ? d : Math.min(hi, Math.max(lo, Number(v)));
+  };
+  const saved = labelMargins(s?.printing);
+  const m: LabelMargins = { x: num0("ox", -15, 15, saved.x), y: num0("oy", -15, 15, saved.y), pad: num0("pad", 0, 8, saved.pad) };
+  const box = receiptBox(s?.printing, width, { side: num0("rm", 0, 25, s?.printing.receiptSideMm ?? 4), x: num0("rx", -15, 15, s?.printing.receiptOffsetXMm ?? 0) });
+  const sp2 = useSmartPrint(
+    !!s,
+    kind === "label" ? `size: ${w}mm ${h}mm; margin: 0` : `size: ${PRINTABLE_MM[width] ?? width}mm 200mm; margin: 0`,
+    kind === "label" ? { kind: "label", widthMm: w, heightMm: h } : { kind: "receipt", widthMm: PRINTABLE_MM[width] ?? width, heightMm: "auto" },
+  );
+  if (!s) return <Loading />;
+  const now = new Date().toLocaleString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const item = (name: string, qty: string, total: string) => (
+    <div className="mb-1.5">
+      <div className="text-[15px] font-bold leading-tight">{name}</div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="num ltr text-[14px]">{qty}</span>
+        <span className="num ltr text-[15px] font-bold">{total}</span>
+      </div>
+    </div>
+  );
+  return (
+    <div className="bg-white" dir={ui.lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
+        <span className="text-sm text-muted">
+          {kind === "label" ? tr(`ملصق تجربة · ${w}×${h} ملم`, `Test label · ${w}×${h} mm`) : tr(`فاتورة تجربة · ${width} ملم`, `Test invoice · ${width} mm`)}
+        </span>
+      </Toolbar>
+      {sp2.panel}
+      {kind === "label" ? (
+        <div className="flex justify-center">
+          <LabelBox w={w} h={h} m={m} frame className="border border-dashed border-gray-400 print:border-0" pageBreak={false}>
+            <div className="flex justify-between text-[6pt] leading-none" dir="ltr">
+              <span>┌ TEST</span>
+              <span>{w}×{h}</span>
+              <span>┐</span>
+            </div>
+            <div className="text-center leading-tight">
+              <div className="truncate text-[9pt] font-bold" dir="rtl">
+                كرواسان زعتر
+              </div>
+              <div className="truncate text-[7pt]" dir="ltr">
+                Zaatar croissant · $1.50
+              </div>
+            </div>
+            <Barcode value="TEST-123456" height={Math.max(14, Math.round(h * 0.45))} />
+          </LabelBox>
+        </div>
+      ) : (
+        <div id="print-root" className="mx-auto bg-white pb-2 pt-1" style={{ ...RECEIPT_STYLE, width: `${PRINTABLE_MM[width] ?? width}mm` }}>
+          {/* Page ruler (not shifted): the first and last number you can read go into Settings → Printing → Auto-centre */}
+          <PageRuler mm={PRINTABLE_MM[width] ?? width} />
+          <div className="mx-auto leading-snug" style={{ width: `${box.content}mm`, transform: box.x ? `translateX(${box.x}mm)` : undefined }}>
+          <ReceiptFit width={width} content={box.content}>
+          {/* edge bars: both must print fully, or move it with Settings → Printing */}
+          <div className="mt-2 flex justify-between text-[12px] font-bold" dir="ltr">
+            <span>|◄ EDGE</span>
+            <span>EDGE ►|</span>
           </div>
+          <div className="border-t-[3px] border-black" />
+          <div className="mt-2 rounded-[6px] bg-black px-2 pb-2 pt-2.5 text-center text-white">
+            <Logo s={s} className="mx-auto mb-1 h-14 w-auto" style={LOGO_INK_ON_BLACK} />
+            <div className="text-[22px] font-black leading-tight tracking-wide">{ui.pick(s.business)}</div>
+            <div className="mt-0.5 text-[14px] font-bold">{tr("فاتورة تجربة", "TEST INVOICE")}</div>
+          </div>
+          <div className="my-2 border-t-2 border-black" />
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-[17px] font-bold">
+              {tr("فاتورة", "Invoice")} <span className="num ltr">#0000</span>
+            </span>
+            <span className="num ltr whitespace-nowrap text-[13px]">{now}</span>
+          </div>
+          <div className="my-2 border-t-2 border-black" />
+          {item("كرواسان زعتر", "2 × $1.50", "$3.00")}
+          {item("Turkey & Cheddar", "1 × $4.25", "$4.25")}
+          {item("قهوة عربية", "3 × 15,000", "45,000 ل.س")}
+          <div className="my-2 flex items-center justify-between gap-2 rounded-[6px] bg-black px-2 py-1.5 text-white">
+            <span className="text-[18px] font-black tracking-wider">{tr("المجموع", "TOTAL")}</span>
+            <span className="num ltr text-[24px] font-black">$10.75</span>
+          </div>
+          <div className="mb-2 text-center text-[13px] font-bold">{tr("إذا الحافتين مطبوعين كاملين، الإعداد صح ✓", "Both EDGE marks fully printed = setup is right ✓")}</div>
+          {/* sample link: shows the code prints and scans; the real one opens that receipt */}
+          <ReceiptFooter p={s.printing} phone={s.business.phone ?? ""} lang={ui.lang} linkUrl={receiptLinkUrl(s.printing, "test")} />
+          <div className="mt-1 text-center text-[12px] num ltr">
+            {width} mm · {box.content} mm {tr("عرض الطباعة", "print width")} · {box.x >= 0 ? "+" : ""}
+            {box.x} mm
+          </div>
+          </ReceiptFit>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Product price labels                                                */
+/* ------------------------------------------------------------------ */
+
+interface LabelProduct {
+  id: string;
+  code: string;
+  nameAr: string;
+  nameEn: string;
+  price: number;
+  currency: Currency;
+}
+
+/** `?items=<productId>:<copies>,…` — name, price and the product code as a barcode that New Order scans. */
+export function PrintProductLabels() {
+  const [sp] = useSearchParams();
+  const ui = useI18n();
+  const { s } = useAppSettings();
+  const wanted = useMemo(
+    () =>
+      (sp.get("items") ?? "")
+        .split(",")
+        .map((x) => x.split(":"))
+        .filter(([id]) => !!id)
+        .map(([id, n]) => ({ id: id ?? "", n: Math.max(1, Math.min(500, Math.round(Number(n) || 1))) })),
+    [sp],
+  );
+  const prods = useData<{ rows: LabelProduct[] }>("/menu/products");
+  const w = s?.printing.labelWidthMm ?? 50;
+  const h = s?.printing.labelHeightMm ?? 30;
+  const byId = new Map((prods.data?.rows ?? []).map((p) => [p.id, p]));
+  const labels = wanted.flatMap(({ id, n }) => {
+    const p = byId.get(id);
+    return p ? Array.from({ length: n }, (_, i) => ({ p, key: `${id}-${i}` })) : [];
+  });
+  const sp2 = useSmartPrint(!!prods.data && !!s && labels.length > 0, `size: ${w}mm ${h}mm; margin: 0`, { kind: "label", widthMm: w, heightMm: h });
+  if (prods.error) return <p className="p-6 text-bad">{ui.err(prods.error)}</p>;
+  if (!prods.data || !s) return <Loading />;
+  return (
+    <div className="bg-white">
+      <Toolbar onPrint={sp2.print} onDialog={sp2.direct ? sp2.dialog : undefined}>
+        <span className="text-sm text-muted">{ui.tr(`${labels.length} ملصق سعر · ${w}×${h} ملم`, `${labels.length} price labels · ${w}×${h} mm`)}</span>
+      </Toolbar>
+      {sp2.panel}
+      {labels.length === 0 && <p className="p-6 text-center text-faint">{ui.tr("ما في منتجات", "No products")}</p>}
+      <div className="flex flex-col items-center gap-2 print:block print:gap-0">
+        {labels.map(({ p, key }) => (
+          <LabelBox key={key} w={w} h={h} m={labelMargins(s.printing)}>
+            <div className="text-center leading-tight">
+              <div className="truncate text-[9pt] font-bold" dir="rtl">
+                {p.nameAr}
+              </div>
+              <div className="truncate text-[7pt]" dir="ltr">
+                {p.nameEn}
+              </div>
+            </div>
+            <div className="text-center text-[13pt] font-black leading-none num ltr">{money(p.price, p.currency, "en")}</div>
+            <Barcode value={p.code} height={Math.max(12, Math.round(h * 0.4))} />
+          </LabelBox>
         ))}
       </div>
     </div>

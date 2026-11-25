@@ -263,5 +263,138 @@ await step("admin can choose the username and password (no forced change)", asyn
   ok(await sz("POST", "/portal/login", { username: "study.zone", password: "newpass99" }));
 });
 
+/* ---------- price requests: hidden prices, the shop prices, the client approves ---------- */
+await step("a client with hidden prices sees no price anywhere and sends a price request", async () => {
+  const c = ok(await admin("POST", "/clients", { type: "business", name: "Price Ask Café" }), 201);
+  S.pa = { id: c.row.id, ...c.portal, call: client() };
+  ok(await S.pa.call("POST", "/portal/login", { username: S.pa.username, password: S.pa.password }));
+  ok(await S.pa.call("PUT", "/portal/me/password", { current: S.pa.password, next: "cafepass1" }));
+  assert.equal((await member("PUT", `/clients/${S.pa.id}/portal`, { showPrices: false })).status, 403);
+  const acc = ok(await admin("PUT", `/clients/${S.pa.id}/portal`, { showPrices: false })).account;
+  assert.equal(acc.showPrices, false);
+  assert.equal(acc.active, true, "turning prices off keeps the login active");
+  const menu = ok(await S.pa.call("GET", "/portal/menu"));
+  assert.equal(menu.showPrices, false);
+  assert.ok(menu.products.every((p) => p.price === null), "no product price");
+  assert.ok(menu.groups.every((g) => g.options.every((o) => o.priceDelta === 0)), "no add-on price");
+  assert.equal(ok(await S.pa.call("POST", "/portal/quote", { fulfilment: "pickup", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] })).hidden, true);
+  const r = ok(await S.pa.call("POST", "/portal/order-requests", { fulfilment: "delivery", paymentChoice: "on_account", note: "", lines: [{ productId: S.p.TC.id, qty: 10, optionIds: [] }] }), 201);
+  assert.equal(r.needsPrice, true);
+  assert.equal(r.quote, null, "no price in the answer either");
+  S.pa.req = r;
+  const d = ok(await S.pa.call("GET", `/portal/order-requests/${r.id}`)).request;
+  assert.equal(d.totals, null);
+  assert.ok(d.lines.every((l) => l.lineTotal === 0 && l.unitPrice === 0));
+  assert.ok(ok(await admin("GET", "/notifications")).rows.some((n) => n.kind === "price_request" && n.refId === r.id), "staff bell rings");
+});
+
+await step("staff can't accept it unpriced; they set prices with a live preview and send them", async () => {
+  assert.equal((await admin("POST", `/requests/orders/${S.pa.req.id}/accept`)).status, 409);
+  const row = ok(await admin("GET", "/requests/orders")).rows.find((x) => x.id === S.pa.req.id);
+  assert.equal(row.needsPrice, true);
+  assert.equal(row.quote, null);
+  const sug = ok(await admin("GET", `/requests/orders/${S.pa.req.id}/suggested-prices`));
+  assert.equal(sug.lines.length, 1);
+  assert.ok(sug.lines[0].basePrice > 0, "starts at the client's current price");
+  assert.equal((await admin("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [] })).status, 400, "a price for every item");
+  assert.equal((await admin("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [-1], deliveryFee: 0 })).status, 400);
+  const pv = ok(await admin("POST", `/requests/orders/${S.pa.req.id}/quote-preview`, { prices: [2], deliveryFee: 3 }));
+  assert.ok(near(pv.subtotal, 20));
+  assert.ok(near(pv.deliveryFee, 3));
+  assert.equal(ok(await admin("GET", "/requests/orders")).rows.find((x) => x.id === S.pa.req.id).status, "pending", "a preview saves nothing");
+  assert.equal((await member("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [2], deliveryFee: 3 })).status, 403);
+  const sent = ok(await manager("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [2], deliveryFee: 3 })).quote;
+  S.pa.total = sent.total;
+  assert.ok(near(sent.total, pv.total));
+  const n = ok(await S.pa.call("GET", "/portal/notifications")).rows.find((x) => x.kind === "order_quoted");
+  assert.ok(n && n.link === `/portal/orders/${S.pa.req.id}` && !n.readAt, "the client is notified with a link");
+  const home = ok(await S.pa.call("GET", "/portal/home"));
+  assert.equal(home.showPrices, false);
+  assert.equal(home.quotesWaiting.length, 1);
+  assert.ok(near(home.quotesWaiting[0].total, sent.total));
+  const d = ok(await S.pa.call("GET", `/portal/order-requests/${S.pa.req.id}`)).request;
+  assert.equal(d.status, "quoted");
+  assert.ok(near(d.lines[0].unitPrice, 2));
+  assert.ok(near(d.totals.total, sent.total));
+  assert.equal(ok(await S.pa.call("GET", "/portal/notifications")).rows.find((x) => x.id === n.id).readAt !== null, true, "opening the order reads its notification");
+  // prices can change until the client answers
+  const again = ok(await admin("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [2.5], deliveryFee: 3 })).quote;
+  assert.ok(again.total > sent.total);
+  S.pa.total = again.total;
+  assert.equal(ok(await S.pa.call("GET", "/portal/notifications")).rows.filter((x) => x.kind === "order_quoted").length, 2);
+  // the counts badge only counts what needs staff
+  const counts = ok(await admin("GET", "/requests/counts"));
+  assert.ok(!ok(await admin("GET", "/requests/orders")).rows.some((x) => x.id === S.pa.req.id && x.status === "pending"));
+  assert.equal(typeof counts.orders, "number");
+});
+
+await step("another client can't answer these prices; approving makes the order at exactly those prices", async () => {
+  assert.equal((await sara("POST", `/portal/order-requests/${S.pa.req.id}/approve`)).status, 404);
+  const before = ok(await admin("GET", `/clients/${S.pa.id}`)).client.balanceUsd;
+  const out = ok(await S.pa.call("POST", `/portal/order-requests/${S.pa.req.id}/approve`));
+  assert.equal(out.placed, true);
+  assert.ok(out.orderNumber > 0);
+  const d = ok(await S.pa.call("GET", `/portal/order-requests/${S.pa.req.id}`)).request;
+  assert.equal(d.status, "accepted");
+  assert.ok(near(d.order.total, S.pa.total), "the invoice matches the approved prices");
+  assert.ok(near(d.lines[0].unitPrice, 2.5));
+  const after = ok(await admin("GET", `/clients/${S.pa.id}`)).client.balanceUsd;
+  assert.ok(after < before, "charged to the client's account");
+  assert.ok(ok(await admin("GET", "/notifications")).rows.some((n) => n.kind === "quote_approved" && n.refId === S.pa.req.id), "staff are told");
+  assert.equal((await S.pa.call("POST", `/portal/order-requests/${S.pa.req.id}/approve`)).status, 409, "only once");
+  assert.equal((await admin("POST", `/requests/orders/${S.pa.req.id}/quote`, { prices: [1], deliveryFee: 0 })).status, 409, "no re-pricing after approval");
+});
+
+await step("the client can turn prices down, with a reason staff see", async () => {
+  const r = ok(await S.pa.call("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal((await S.pa.call("POST", `/portal/order-requests/${r.id}/reject-prices`, {})).status, 409, "nothing to turn down yet");
+  ok(await admin("POST", `/requests/orders/${r.id}/quote`, { prices: [9] }));
+  ok(await S.pa.call("POST", `/portal/order-requests/${r.id}/reject-prices`, { reason: "Too expensive" }));
+  const row = ok(await admin("GET", "/requests/orders?status=all")).rows.find((x) => x.id === r.id);
+  assert.equal(row.status, "cancelled");
+  assert.equal(row.clientReply, "Too expensive");
+  assert.ok(ok(await admin("GET", "/notifications")).rows.some((n) => n.kind === "quote_rejected" && n.refId === r.id));
+  // a priced request the shop declines tells the client
+  const r2 = ok(await S.pa.call("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
+  ok(await admin("POST", `/requests/orders/${r2.id}/quote`, { prices: [3] }));
+  ok(await admin("POST", `/requests/orders/${r2.id}/decline`, { reason: "Sold out today" }));
+  assert.equal((await S.pa.call("POST", `/portal/order-requests/${r2.id}/approve`)).status, 409);
+});
+
+await step("turning prices back on: the client orders the usual way again", async () => {
+  ok(await admin("PUT", `/clients/${S.pa.id}/portal`, { showPrices: true }));
+  const menu = ok(await S.pa.call("GET", "/portal/menu"));
+  assert.ok(menu.products.every((p) => typeof p.price === "number"));
+  const r = ok(await S.pa.call("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
+  assert.equal(r.needsPrice, false);
+  assert.equal((await admin("POST", `/requests/orders/${r.id}/quote`, { prices: [1] })).status, 409, "priced requests only");
+  ok(await admin("POST", `/requests/orders/${r.id}/accept`));
+});
+
+await step("approved but the order can't be made (credit limit): the OK is kept and staff finish it", async () => {
+  const c = ok(await admin("POST", "/clients", { type: "business", name: "Tight Credit", creditLimitUsd: 1, creditBlock: true }), 201);
+  const call = client();
+  ok(await call("POST", "/portal/login", { username: c.portal.username, password: c.portal.password }));
+  ok(await call("PUT", "/portal/me/password", { current: c.portal.password, next: "tightpass1" }));
+  ok(await admin("PUT", `/clients/${c.row.id}/portal`, { showPrices: false }));
+  const r = ok(await call("POST", "/portal/order-requests", { fulfilment: "pickup", paymentChoice: "on_account", note: "", lines: [{ productId: S.p.TC.id, qty: 5, optionIds: [] }] }), 201);
+  ok(await admin("POST", `/requests/orders/${r.id}/quote`, { prices: [4] }));
+  const out = ok(await call("POST", `/portal/order-requests/${r.id}/approve`));
+  assert.equal(out.placed, false);
+  const row = ok(await admin("GET", "/requests/orders")).rows.find((x) => x.id === r.id);
+  assert.equal(row.status, "approved", "the client's approval survived the failed order");
+  assert.equal(row.order, null);
+  assert.ok(ok(await admin("GET", "/notifications")).rows.some((n) => n.kind === "quote_approved" && n.refId === r.id && n.titleEn.includes("finish")));
+  assert.equal(ok(await call("GET", `/portal/order-requests/${r.id}`)).request.status, "approved");
+  // staff raise the limit and place it at the approved prices
+  ok(await admin("PUT", `/clients/${c.row.id}`, { type: "business", name: "Tight Credit", creditLimitUsd: 1000, creditBlock: true }));
+  const placed = ok(await admin("POST", `/requests/orders/${r.id}/accept`));
+  assert.ok(placed.number > 0);
+  const d = ok(await call("GET", `/portal/order-requests/${r.id}`)).request;
+  assert.equal(d.status, "accepted");
+  assert.ok(near(d.lines[0].unitPrice, 4));
+  assert.ok(ok(await call("GET", "/portal/notifications")).rows.some((n) => n.kind === "order_accepted" && n.refId === r.id), "client told it's confirmed");
+});
+
 console.log(failed ? `\n${failed} step(s) failed` : "\nAll portal steps passed");
 process.exit(failed ? 1 : 0);

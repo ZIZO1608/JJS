@@ -1,3 +1,4 @@
+import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,8 +42,24 @@ if (fs.existsSync(RESTORE_PENDING)) {
   const d = new Date();
   const p2 = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
-  if (fs.existsSync(DB_PATH)) fs.renameSync(DB_PATH, path.join(BACKUP_DIR, `jjs-${stamp}-before-restore.db`));
-  for (const ext of ["-wal", "-shm"]) fs.rmSync(DB_PATH + ext, { force: true });
+  const before = path.join(BACKUP_DIR, `jjs-${stamp}-before-restore.db`);
+  if (fs.existsSync(DB_PATH)) fs.renameSync(DB_PATH, before);
+  // After a power cut the newest sales may still be only in the -wal file: keep it with the copy,
+  // so SQLite folds it in when that copy is opened or restored.
+  for (const ext of ["-wal", "-shm"]) {
+    if (fs.existsSync(DB_PATH + ext)) fs.renameSync(DB_PATH + ext, before + ext);
+  }
+  // Fold the -wal into the copy so it is one complete file (backups are single .db files).
+  if (fs.existsSync(before + "-wal")) {
+    try {
+      const old = new Database(before);
+      old.pragma("wal_checkpoint(TRUNCATE)");
+      old.pragma("journal_mode = DELETE");
+      old.close();
+    } catch (e) {
+      console.error("[jjs] could not fold the last changes into the before-restore copy", e);
+    }
+  }
   fs.renameSync(RESTORE_PENDING, DB_PATH);
   console.log("[jjs] backup restored");
 }

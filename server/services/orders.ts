@@ -3,6 +3,7 @@ import { formatMoney, type Currency } from "../../shared/money.js";
 import { isOrderQty } from "../../shared/orderQty.js";
 import {
   cashBoxes,
+  clientMoves,
   clientPrices,
   clientTiers,
   clients,
@@ -504,16 +505,29 @@ export function cancelOrder(tx: Q, orderId: string, userId: string, reason = "")
     if (p.boxId) {
       // Cash the delivery person already handed in sits in the main box now: give it back from there,
       // or the driver's box would go negative and swallow their next takings.
-      const box = tx.select({ kind: cashBoxes.kind }).from(cashBoxes).where(eq(cashBoxes.id, p.boxId)).get();
-      const handedIn = box?.kind === "rep" && boxBalance(tx, p.boxId) < p.amount - 0.001;
+      const box = tx.select({ kind: cashBoxes.kind, currency: cashBoxes.currency }).from(cashBoxes).where(eq(cashBoxes.id, p.boxId)).get();
+      // The box balance is in the box's currency; the payment may be in the other one.
+      const inBoxCcy = box ? convert(p.amount, p.currency, box.currency, p.fxRate) : p.amount;
+      const handedIn = box?.kind === "rep" && boxBalance(tx, p.boxId) < inBoxCcy - 0.001;
       const fromBox = handedIn ? systemBox(tx, "main_cash").id : p.boxId;
       addBoxMove(tx, { boxId: fromBox, type: "sale", amount: -p.amount, currency: p.currency, rate: p.fxRate, refType: "order_cancel", refId: o.id, note: `Cancel #${o.number}`, userId, date });
     }
     tx.update(payments).set({ deletedAt: nowIso(), syncedAt: null }).where(eq(payments.id, p.id)).run();
   }
   if (o.consignmentId) throw new HttpError(409, "consignment_order", "This invoice came from a consignment. Record a return instead.");
-  const onAccount = o.paymentStatus === "credit" ? o.total : o.paymentStatus === "partial" ? roundMoney(o.total - o.paidAmount, o.currency) : 0;
-  if (onAccount > 0 && o.clientId) addClientMove(tx, { clientId: o.clientId, type: "refund", amount: onAccount, currency: o.currency, rate: o.fxRate, orderId: o.id, note: `Cancel #${o.number}`, userId, date });
+  // Undo exactly what this order did to the client's box: the charge, and any payment taken on delivery
+  // (that cash went back out of the box above). Payments the client made on account earlier stay as credit.
+  if (o.clientId) {
+    const moves = tx
+      .select()
+      .from(clientMoves)
+      .where(and(eq(clientMoves.orderId, o.id), isNull(clientMoves.deletedAt), inArray(clientMoves.type, ["charge", "payment"])))
+      .all();
+    for (const m of moves) {
+      if (m.amount === 0) continue;
+      addClientMove(tx, { clientId: m.clientId, type: "refund", amount: -m.amount, currency: m.currency, rate: m.fxRate, orderId: o.id, note: `Cancel #${o.number}`, userId, date });
+    }
+  }
   tx.update(orders).set({ status: "cancelled", cancelledAt: nowIso(), cancelReason: reason, updatedAt: nowIso(), syncedAt: null }).where(eq(orders.id, o.id)).run();
   return o;
 }

@@ -4,23 +4,171 @@ import { put } from "../../lib/api";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { num } from "../../lib/format";
+import { desktop, getRoll, guessDevicePrinters, openPrint, readDevicePrinters, receiptLinkBase, setRoll, writeDevicePrinters, type DesktopPrinter, type DevicePrinters, type PrintKind, type RollState } from "../../lib/print";
 import { useI18n } from "../../lib/i18n";
-import { NumInput, useSaver } from "../kit";
+import { Check, NumInput, useSaver } from "../kit";
+
+const readAutoPrint = () => {
+  try {
+    return localStorage.getItem("jjs.autoPrint") === "1";
+  } catch {
+    return false;
+  }
+};
+
+/** This PC's printers, the roll in the shared printer, and auto-print after a sale. Saved as soon as you change them. */
+function ThisComputer() {
+  const { tr } = useI18n();
+  const api = desktop();
+  const [list, setList] = useState<DesktopPrinter[] | null>(null);
+  const [cfg, setCfg] = useState<DevicePrinters>(readDevicePrinters);
+  const [roll, setRollState] = useState<RollState | null>(null);
+  const [auto, setAuto] = useState(readAutoPrint);
+  useEffect(() => {
+    void getRoll()
+      .then(setRollState)
+      .catch(() => undefined);
+    if (!api) return;
+    void api.printers().then((ps) => {
+      setList(ps);
+      const guessed = guessDevicePrinters(ps, readDevicePrinters());
+      setCfg(guessed);
+      writeDevicePrinters(guessed);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const change = (v: Partial<DevicePrinters>) => {
+    const next = { ...cfg, ...v };
+    setCfg(next);
+    writeDevicePrinters(next);
+  };
+  const pickRoll = async (r: PrintKind) => {
+    try {
+      setRollState(await setRoll(r));
+    } catch {
+      /* offline: leave as it was */
+    }
+  };
+  const printerSelect = (kind: PrintKind, id: string, label: string) => (
+    <Field label={label} htmlFor={id}>
+      <Select id={id} value={cfg[kind]} onChange={(e) => change({ [kind]: e.target.value })}>
+        <option value="">{tr("— افتح نافذة الطباعة —", "— Open the print window —")}</option>
+        {(list ?? []).map((p) => (
+          <option key={p.name} value={p.name}>
+            {p.displayName}
+          </option>
+        ))}
+        {cfg[kind] && list && !list.some((p) => p.name === cfg[kind]) && <option value={cfg[kind]}>{tr(`${cfg[kind]} (مو موجودة)`, `${cfg[kind]} (not found)`)}</option>}
+      </Select>
+    </Field>
+  );
+  return (
+    <section className="card grid gap-3 md:col-span-2">
+      <h2 className="text-lg font-bold">{tr("هالكمبيوتر", "This computer")}</h2>
+      {api ? (
+        <>
+          <p className="text-sm text-muted">
+            {tr(
+              "اختار طابعة لكل نوع. لما تضغط اطبع، بتروح الفاتورة أو الملصق دغري عالطابعة الصح بالحجم الصح، بلا نافذة.",
+              "Pick a printer for each kind. When you press Print, the invoice or label goes straight to the right printer at the right size, no window.",
+            )}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {printerSelect("label", "dp-label", tr("طابعة الملصقات والباركود", "Labels & barcodes printer"))}
+            {printerSelect("receipt", "dp-receipt", tr("طابعة الفواتير (حراري)", "Invoices printer (thermal)"))}
+          </div>
+          <Check checked={cfg.direct} onChange={(v) => change({ direct: v })}>
+            {tr("اطبع دغري بلا نافذة الطباعة", "Print straight away, without the print window")}
+          </Check>
+          <Check checked={cfg.sharedRoll} onChange={(v) => change({ sharedRoll: v })}>
+            {tr("الملصقات والفواتير على نفس الطابعة (ذكّرني بدّل الرول)", "Labels and invoices share one printer (remind me to swap the roll)")}
+          </Check>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-muted">
+            {tr(
+              "من المتصفح بتطلع نافذة الطباعة كل مرة، بس الحجم بيكون مضبوط لحاله، وفوق بيكتبلك أي طابعة تختار. اكتب أسماء الطابعات متل ما هي بويندوز.",
+              "In a browser the print window opens every time, but the paper size is set for you and a note on top says which printer to pick. Type the printer names as they are in Windows.",
+            )}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={tr("طابعة الملصقات والباركود", "Labels & barcodes printer")} htmlFor="bp-label">
+              <TextInput id="bp-label" dir="ltr" placeholder="XP-236B Labels" value={cfg.label} onChange={(e) => change({ label: e.target.value })} />
+            </Field>
+            <Field label={tr("طابعة الفواتير (حراري)", "Invoices printer (thermal)")} htmlFor="bp-receipt">
+              <TextInput id="bp-receipt" dir="ltr" placeholder="XP-236B Invoices" value={cfg.receipt} onChange={(e) => change({ receipt: e.target.value })} />
+            </Field>
+          </div>
+          <Check checked={cfg.sharedRoll} onChange={(v) => change({ sharedRoll: v })}>
+            {tr("الملصقات والفواتير على نفس الطابعة (ذكّرني بدّل الرول)", "Labels and invoices share one printer (remind me to swap the roll)")}
+          </Check>
+        </>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted">{tr("الرول اللي بالطابعة هلق:", "Roll in the printer now:")}</span>
+        {(["label", "receipt"] as const).map((r) => (
+          <button key={r} className={`btn px-3 py-1 text-sm ${roll?.roll === r ? "btn-primary" : ""}`} onClick={() => void pickRoll(r)}>
+            {r === "label" ? tr("🏷️ ملصقات", "🏷️ Labels") : tr("🧾 فواتير 80 ملم", "🧾 Receipts 80 mm")}
+          </button>
+        ))}
+        {roll?.changedBy && <span className="text-xs text-faint">{tr(`آخر تبديل: ${roll.changedBy}`, `Last swapped by ${roll.changedBy}`)}</span>}
+      </div>
+      <Check
+        checked={auto}
+        onChange={(v) => {
+          setAuto(v);
+          try {
+            localStorage.setItem("jjs.autoPrint", v ? "1" : "0");
+          } catch {
+            /* storage unavailable */
+          }
+        }}
+      >
+        {tr("اطبع الفاتورة لحالها بعد كل بيعة (على هالكمبيوتر)", "Print the invoice by itself after every sale (on this computer)")}
+      </Check>
+    </section>
+  );
+}
 
 export function PrintingTab() {
   const { tr, t } = useI18n();
   const { can } = useAuth();
   const { s, reload } = useAppSettings();
   const { busy, run } = useSaver();
-  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "" });
+  const [seen, setSeen] = useState({ left: "0", right: "72" });
+  const [f, setF] = useState({ receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: "50", labelHeightMm: "30", receiptFooterAr: "", receiptFooterEn: "", ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0", wa: "", social: "", qr: true, linkQr: true, linkBase: "" });
   useEffect(() => {
     if (!s) return;
-    const p = s.printing as typeof s.printing & { invoiceSize?: string };
-    setF({ receiptWidthMm: String(p.receiptWidthMm), invoiceSize: p.invoiceSize ?? "thermal", labelWidthMm: String(p.labelWidthMm), labelHeightMm: String(p.labelHeightMm), receiptFooterAr: p.receiptFooterAr, receiptFooterEn: p.receiptFooterEn });
+    const p = s.printing as Partial<typeof s.printing> & typeof s.printing;
+    setF({
+      receiptWidthMm: String(p.receiptWidthMm),
+      invoiceSize: p.invoiceSize ?? "thermal",
+      labelWidthMm: String(p.labelWidthMm),
+      labelHeightMm: String(p.labelHeightMm),
+      receiptFooterAr: p.receiptFooterAr,
+      receiptFooterEn: p.receiptFooterEn,
+      ox: String(p.labelOffsetXMm ?? 0),
+      oy: String(p.labelOffsetYMm ?? 0),
+      pad: String(p.labelPaddingMm ?? 1.2),
+      rm: String(p.receiptSideMm ?? 4),
+      rx: String(p.receiptOffsetXMm ?? 0),
+      wa: p.receiptWhatsapp ?? "",
+      social: p.receiptSocial ?? "",
+      qr: p.receiptQr ?? true,
+      linkQr: p.receiptLinkQr ?? true,
+      linkBase: p.receiptLinkBase ?? "",
+    });
   }, [s]);
   if (!s) return <Spinner />;
   const w = Math.min(120, Math.max(20, num(f.labelWidthMm) || 50));
   const h = Math.min(120, Math.max(15, num(f.labelHeightMm) || 30));
+  const clampMm = (v: string, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, num(v) || 0)) * 10) / 10;
+  const ox = clampMm(f.ox, -15, 15);
+  const oy = clampMm(f.oy, -15, 15);
+  const pad = clampMm(f.pad, 0, 8);
+  const rm = clampMm(f.rm, 0, 25);
+  const rx = clampMm(f.rx, -15, 15);
   const save = async () => {
     const ok = await run(() =>
       put("/system/settings/printing", {
@@ -30,12 +178,176 @@ export function PrintingTab() {
         labelHeightMm: h,
         receiptFooterAr: f.receiptFooterAr,
         receiptFooterEn: f.receiptFooterEn,
+        labelOffsetXMm: ox,
+        labelOffsetYMm: oy,
+        labelPaddingMm: pad,
+        receiptSideMm: rm,
+        receiptOffsetXMm: rx,
+        receiptWhatsapp: f.wa.trim(),
+        receiptSocial: f.social.trim(),
+        receiptQr: f.qr,
+        receiptLinkQr: f.linkQr,
+        receiptLinkBase: f.linkBase.trim(),
       }),
     );
     if (ok) await reload();
   };
+  const nudge = (k: "ox" | "oy" | "pad" | "rm" | "rx", d: number, lo: number, hi: number) => setF({ ...f, [k]: String(clampMm(String(clampMm(f[k], lo, hi) + d), lo, hi)) });
+  const stepper = (k: "ox" | "oy" | "pad" | "rm" | "rx", id: string, label: string, hint: string, lo: number, hi: number) => (
+    <Field label={label} htmlFor={id} hint={hint}>
+      <div className="flex items-center gap-1">
+        <button type="button" className="btn min-w-[44px] px-2 py-1 text-lg" aria-label="−0.5" onClick={() => nudge(k, -0.5, lo, hi)}>
+          −
+        </button>
+        <NumInput id={id} value={f[k]} onChange={(v) => setF({ ...f, [k]: v })} />
+        <button type="button" className="btn min-w-[44px] px-2 py-1 text-lg" aria-label="+0.5" onClick={() => nudge(k, 0.5, lo, hi)}>
+          +
+        </button>
+      </div>
+    </Field>
+  );
+  const PX = 4; // preview scale: px per mm
+  /** Auto-centre: from the first and last ruler numbers the printer burned, centre the receipt in that strip, 1 mm clear each side. */
+  const paperW = f.receiptWidthMm === "58" ? 58 : 80;
+  const pageW = paperW === 58 ? 48 : 72;
+  const autoCentre = () => {
+    const a = Math.min(pageW, Math.max(0, num(seen.left) || 0));
+    const b = Math.min(pageW, Math.max(0, num(seen.right) || pageW));
+    if (b - a < 20) return;
+    const content = Math.max(30, Math.min(pageW, b - a - 2));
+    const side = Math.round(((paperW - content) / 2) * 10) / 10;
+    const x = Math.round(((a + b) / 2 - pageW / 2) * 2) / 2;
+    setF({ ...f, rm: String(side), rx: String(x) });
+  };
+  /**
+   * This shop's printer takes an 80 mm receipt roll, but its head burns a narrower strip, so the receipt width and
+   * position come from the ruler (Auto-centre) and are left alone here. Labels up to 80 mm.
+   */
+  const applyXp236b = (lw = f.labelWidthMm, lh = f.labelHeightMm) =>
+    setF({ ...f, receiptWidthMm: "80", invoiceSize: "thermal", labelWidthMm: String(Math.min(80, num(lw) || 50)), labelHeightMm: lh });
+  const test = (kind: "receipt" | "label") =>
+    openPrint(`/print/test?kind=${kind}&width=${f.receiptWidthMm}&w=${w}&h=${h}&ox=${ox}&oy=${oy}&pad=${pad}&rm=${rm}&rx=${rx}`);
+  const tooWide = w > 80;
   return (
     <div className="grid max-w-4xl gap-5 md:grid-cols-2">
+      <section className="card grid gap-3 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{tr("الطابعة: Xprinter XP-236B", "Printer: Xprinter XP-236B")}</h2>
+          <button className="btn" onClick={() => applyXp236b()}>
+            {tr("اضبط الإعدادات لهالطابعة", "Use settings for this printer")}
+          </button>
+        </div>
+        <p className="text-sm text-muted">
+          {tr(
+            "نفس الطابعة للفواتير والباركود. ورق الفواتير 80 ملم، بس راس الطابعة بيطبع شريط أضيق بالنص، فاضبط عرض الفاتورة من «توسيط الفاتورة تلقائياً» تحت، والفاتورة بتصغر كلها لتركب فيه. بعد ما تغيّر نوع الرول (ملصقات ↔ فواتير) اضغط زر FEED لحتى تصفّر، وبعدين اطبع تجربة.",
+            "One printer for invoices and barcodes. Receipt paper is 80 mm, but the head only prints a narrower strip in the middle, so set the receipt width with “Auto-centre the invoice” below; the whole receipt shrinks to fit it. After you swap the roll (labels ↔ receipts), hold FEED until it beeps, then print a test.",
+          )}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">{tr("حجم الملصق:", "Label size:")}</span>
+          {[
+            [40, 30],
+            [50, 30],
+            [58, 40],
+          ].map(([lw, lh]) => (
+            <button
+              key={`${lw}x${lh}`}
+              className={`btn px-2.5 py-1 text-sm num ltr ${w === lw && h === lh ? "btn-primary" : ""}`}
+              onClick={() => applyXp236b(String(lw), String(lh))}
+            >
+              {lw}×{lh}
+            </button>
+          ))}
+        </div>
+        {tooWide && (
+          <p className="text-sm font-semibold text-bad">
+            {tr("انتبه: هالطابعة ما بتطبع أعرض من 80 ملم.", "Careful: this printer can't print wider than 80 mm.")}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <button className="btn" onClick={() => test("receipt")}>
+            {tr("اطبع فاتورة تجربة", "Print test invoice")}
+          </button>
+          <button className="btn" onClick={() => test("label")}>
+            {tr("اطبع ملصق تجربة", "Print test label")}
+          </button>
+        </div>
+        <p className="text-xs text-faint">
+          {tr(
+            "بنافذة الطباعة: اختار XP-236B، الهوامش «بلا»، وشيل «الرأس والتذييل». التجربة بتطبع بالأحجام اللي هون حتى لو ما حفظت بعد.",
+            "In the print window: pick XP-236B, Margins “None”, and untick “Headers and footers”. The test uses the sizes on this screen even before you save.",
+          )}
+        </p>
+      </section>
+      <section className="card grid gap-4 md:col-span-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold">{tr("الهوامش ومكان الطباعة", "Margins & position")}</h2>
+          <button className="btn btn-ghost text-sm" onClick={() => setF({ ...f, ox: "0", oy: "0", pad: "1.2", rm: "4", rx: "0" })}>
+            {tr("رجّع الافتراضي", "Reset")}
+          </button>
+        </div>
+        <p className="text-sm text-muted">
+          {tr(
+            "إذا الطباعة نازلة شوي عن الملصق، حرّكها من هون. كل ضغطة = نص ملم. اطبع تجربة، شوف وين نزلت، عدّل، واطبع كمان مرة. بعدين اضغط «حفظ».",
+            "If the print lands a little off the sticker, move it here. Each press = half a millimetre. Print a test, see where it landed, adjust, print again. Then press Save.",
+          )}
+        </p>
+        <div className="grid gap-5 md:grid-cols-[1fr_auto]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {stepper("ox", "pm-ox", tr("الملصق: يمين / يسار (ملم)", "Label: right / left (mm)"), tr("+ يمين · − يسار", "+ right · − left"), -15, 15)}
+            {stepper("oy", "pm-oy", tr("الملصق: تحت / فوق (ملم)", "Label: down / up (mm)"), tr("+ لتحت · − لفوق", "+ down · − up"), -15, 15)}
+            {stepper("pad", "pm-pad", tr("هامش جوّا الملصق (ملم)", "Margin inside the label (mm)"), tr("فراغ حوالين الكتابة", "Space around the print"), 0, 8)}
+            {stepper("rm", "pm-rm", tr("هامش الفاتورة من الجنبين (ملم)", "Invoice side margin (mm)"), tr("إذا الكتابة مقصوصة من الجنب، زيدها", "Raise it if text is cut at the sides"), 0, 25)}
+            <div className="grid gap-2 rounded-xl border border-line p-3 sm:col-span-2">
+              <div className="font-semibold">{tr("🎯 توسيط الفاتورة تلقائياً", "🎯 Auto-centre the invoice")}</div>
+              <p className="text-sm text-muted">
+                {tr(
+                  "اطبع «جرّب فاتورة». فوق في مسطرة أرقام. اكتب أول رقم مطبوع كامل من اليسار وآخر رقم من اليمين، واضغط «وسّطها»، وبعدين جرّب كمان مرة واحفظ.",
+                  "Print “Test invoice”. There is a ruler with numbers at the top. Type the first number fully printed on the left and the last on the right, press “Centre it”, test again, then Save.",
+                )}
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <Field label={tr("أول رقم (يسار)", "First number (left)")} htmlFor="ac-l">
+                  <NumInput id="ac-l" value={seen.left} onChange={(v) => setSeen({ ...seen, left: v })} />
+                </Field>
+                <Field label={tr("آخر رقم (يمين)", "Last number (right)")} htmlFor="ac-r">
+                  <NumInput id="ac-r" value={seen.right} onChange={(v) => setSeen({ ...seen, right: v })} />
+                </Field>
+                <button type="button" className="btn btn-primary" onClick={autoCentre}>
+                  {tr("وسّطها", "Centre it")}
+                </button>
+              </div>
+            </div>
+            {stepper("rx", "pm-rx", tr("الفاتورة: يمين / يسار (ملم)", "Invoice: right / left (mm)"), tr("إذا الفاتورة مزاحة لجنب، حرّكها", "Move it if the invoice sits off to one side"), -15, 15)}
+          </div>
+          <div className="grid content-start justify-items-center gap-2 rounded-xl bg-sunken p-4">
+            <div className="relative overflow-hidden rounded-[6px] border-2 border-dashed border-faint bg-white" style={{ width: `${w * PX}px`, height: `${h * PX}px` }} aria-label={tr("معاينة مكان الطباعة", "Print position preview")}>
+              <div
+                className="absolute flex flex-col justify-between border border-black text-center text-[9px] leading-tight text-black"
+                style={{ left: `${(ox + pad) * PX}px`, top: `${(oy + pad) * PX}px`, width: `${Math.max(4, w - 2 * pad) * PX}px`, height: `${Math.max(4, h - 2 * pad) * PX}px` }}
+              >
+                <b className="pt-0.5">كرواسان زعتر</b>
+                <span>$1.50</span>
+                <span className="mx-auto mb-1 h-4 w-3/4 bg-[repeating-linear-gradient(90deg,#000_0_1px,transparent_1px_3px)]" />
+              </div>
+            </div>
+            <span className="text-xs text-faint num ltr">
+              {w}×{h} mm · {ox >= 0 ? "+" : ""}
+              {ox} / {oy >= 0 ? "+" : ""}
+              {oy} mm
+            </span>
+            <div className="flex flex-wrap justify-center gap-2">
+              <button className="btn px-3 py-1 text-sm" onClick={() => test("label")}>
+                {tr("جرّب ملصق", "Test label")}
+              </button>
+              <button className="btn px-3 py-1 text-sm" onClick={() => test("receipt")}>
+                {tr("جرّب فاتورة", "Test invoice")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <ThisComputer />
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("الفواتير", "Invoices")}</h2>
         <Field label={tr("الحجم الافتراضي", "Default size")} htmlFor="pr-s" hint={tr("فيك تغيّر وقت الطباعة", "You can switch when printing")}>
@@ -56,6 +368,32 @@ export function PrintingTab() {
         <Field label={tr("سطر آخر الفاتورة (إنكليزي)", "Footer line (English)")} htmlFor="pr-fe">
           <TextInput id="pr-fe" dir="ltr" value={f.receiptFooterEn} onChange={(e) => setF({ ...f, receiptFooterEn: e.target.value })} />
         </Field>
+        <Field label={tr("رقم الواتساب على الفاتورة", "WhatsApp number on receipts")} htmlFor="pr-wa" hint={tr(`فاضي = رقم المحل${s.business.phone ? ` (${s.business.phone})` : ""}`, `Empty = shop phone${s.business.phone ? ` (${s.business.phone})` : ""}`)}>
+          <TextInput id="pr-wa" dir="ltr" inputMode="tel" placeholder="+963 9xx xxx xxx" value={f.wa} onChange={(e) => setF({ ...f, wa: e.target.value })} />
+        </Field>
+        <Field label={tr("سطر تحت اسم المحل", "Line under the shop name")} htmlFor="pr-so" hint={tr("مثلاً: انستغرام @jjsdeli", "e.g. Instagram @jjsdeli")}>
+          <TextInput id="pr-so" dir="auto" value={f.social} onChange={(e) => setF({ ...f, social: e.target.value })} />
+        </Field>
+        <Check checked={f.qr} onChange={(v) => setF({ ...f, qr: v })}>
+          {tr("اطبع كود QR للواتساب آخر الفاتورة", "Print a WhatsApp QR code at the bottom")}
+        </Check>
+        <Check checked={f.linkQr} onChange={(v) => setF({ ...f, linkQr: v })}>
+          {tr("اطبع كود QR «فاتورتك أونلاين» (الزبون بيفتح الفاتورة عتلفونه)", "Print a “digital receipt” QR (the client opens the receipt on their phone)")}
+        </Check>
+        {f.linkQr && (
+          <Field
+            label={tr("عنوان روابط الفواتير", "Receipt link address")}
+            htmlFor="pr-lb"
+            hint={(() => {
+              const base = receiptLinkBase({ receiptLinkBase: f.linkBase });
+              return base
+                ? tr(`الروابط رح تفتح على ${base}`, `Links will open at ${base}`)
+                : tr("هالجهاز فاتح السيستم من عنوان محلي، فما رح ينطبع الكود. اكتب عنوان السيستم أونلاين (نفس السيستم ونفس البيانات).", "This system is open at a local address, so the code won't print. Type this same system's online address.");
+            })()}
+          >
+            <TextInput id="pr-lb" dir="ltr" inputMode="url" placeholder={tr("فاضي = العنوان الحالي", "Empty = the current address")} value={f.linkBase} onChange={(e) => setF({ ...f, linkBase: e.target.value })} />
+          </Field>
+        )}
       </section>
       <section className="card grid gap-3">
         <h2 className="text-lg font-bold">{tr("ملصقات الصلاحية", "Expiry labels")}</h2>

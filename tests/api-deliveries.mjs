@@ -408,6 +408,20 @@ await step("the rate API comes set up for the Syrian service, and its key never 
   assert.equal(ok(await admin("GET", "/fx/current")).rate, 14000, "and the shop keeps working on the last rate");
 });
 
+await step("cancelling a delivered order keeps what the client paid on account as credit", async () => {
+  // Settle older debts first, so the dollar paid below goes to this order's charge.
+  const owing = -(await balance());
+  if (owing > 0) ok(await admin("POST", `/clients/${S.sara.id}/payments`, { amount: Math.ceil(owing * 100) / 100, currency: "USD", methodId: S.m.cash.id }), 201);
+  const before = await balance();
+  const o = await newCreditOrder({ fulfilment: "pickup" });
+  ok(await admin("POST", `/clients/${S.sara.id}/payments`, { amount: 1, currency: "USD", methodId: S.m.cash.id }), 201);
+  const box = await boxBalance(S.main.id);
+  ok(await manager("POST", `/orders/${o.id}/deliver`, { collection: { mode: "full", methodId: S.m.cash.id } }));
+  ok(await manager("POST", `/orders/${o.id}/cancel`, { reason: "test" }));
+  assert.ok(near(await balance(), before + 1), `the dollar paid on account is still the client's: ${await balance()} vs ${before + 1}`);
+  assert.ok(near(await boxBalance(S.main.id), box), "the cash taken on delivery went back out");
+});
+
 await step("the dashboard is gone from the role names", async () => {
   const perms = JSON.stringify(ok(await admin("GET", "/roles")));
   assert.equal(perms.includes("لوحة التحكم"), false);

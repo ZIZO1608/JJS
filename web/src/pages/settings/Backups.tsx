@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Empty, Modal, Spinner } from "../../components/ui";
 import { get, post } from "../../lib/api";
+import { restartShop } from "../../lib/restart";
 import { useAuth } from "../../lib/auth";
 import { useI18n } from "../../lib/i18n";
 import { useToast } from "../../lib/toast";
@@ -21,6 +22,16 @@ export function BackupsTab() {
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
   const [restore, setRestore] = useState<BackupFile | null>(null);
+  const [restarting, setRestarting] = useState(false);
+  const restartNow = async () => {
+    setRestarting(true);
+    try {
+      await restartShop();
+    } catch (e) {
+      toast(err(e), "error");
+      setRestarting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setData(await get("/backups"));
@@ -74,11 +85,16 @@ export function BackupsTab() {
       </div>
       {pending && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn bg-warn/10 p-3 text-sm">
-          <span>{tr("في نسخة جاهزة للاسترجاع. سكّر البرنامج وافتحه مرة تانية لتنطبق.", "A backup is waiting to be restored. Close the app and open it again to apply it.")}</span>
+          <span>{tr("في نسخة جاهزة للاسترجاع. اضغط «أعد تشغيل المحل الآن» لتنطبق.", "A backup is waiting to be restored. Press “Restart the shop now” to apply it.")}</span>
           {can("settings", "edit") && (
-            <button className="btn px-3 py-1 text-sm" onClick={cancelRestore}>
-              {tr("إلغاء الاسترجاع", "Cancel restore")}
-            </button>
+            <span className="flex flex-wrap gap-2">
+              <button className="btn btn-primary px-3 py-1 text-sm" onClick={restartNow} disabled={restarting}>
+                {restarting ? tr("عم يعيد التشغيل…", "Restarting…") : tr("أعد تشغيل المحل الآن", "Restart the shop now")}
+              </button>
+              <button className="btn px-3 py-1 text-sm" onClick={cancelRestore} disabled={restarting}>
+                {tr("إلغاء الاسترجاع", "Cancel restore")}
+              </button>
+            </span>
           )}
         </div>
       )}
@@ -139,7 +155,7 @@ export function BackupsTab() {
           }
         >
           <p className="text-sm">
-            {tr(`البيانات رح ترجع متل ما كانت بـ ${fmtDate(restore.createdAt, true)}. الاسترجاع بينطبق لما تسكّر البرنامج وتفتحه، والبيانات الحالية بتنحفظ كنسخة احتياطية لحتى تقدر ترجعلها.`, `The data will go back to how it was on ${fmtDate(restore.createdAt, true)}. It applies when you close and reopen the app; the current data is kept as a backup so you can go back to it.`)}
+            {tr(`البيانات رح ترجع متل ما كانت بـ ${fmtDate(restore.createdAt, true)}. الاسترجاع بينطبق لما تعيد تشغيل المحل، والبيانات الحالية بتنحفظ كنسخة احتياطية لحتى تقدر ترجعلها.`, `The data will go back to how it was on ${fmtDate(restore.createdAt, true)}. It applies when you restart the shop; the current data is kept as a backup so you can go back to it.`)}
           </p>
         </Modal>
       )}

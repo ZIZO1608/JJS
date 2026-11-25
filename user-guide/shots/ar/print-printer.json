@@ -1,0 +1,36 @@
+{
+  "image": "print-printer.png",
+  "width": 720,
+  "height": 286.5,
+  "url": "http://127.0.0.1:4396/settings/printing",
+  "display_url": "JJ's ERP/settings/printing",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "preset": [
+      25,
+      25.0,
+      185.1,
+      41.2
+    ],
+    "size": [
+      475.7,
+      150.2,
+      64.0,
+      30
+    ],
+    "invoice": [
+      560.2,
+      192.2,
+      134.8,
+      41.2
+    ],
+    "label": [
+      414.2,
+      192.2,
+      138.0,
+      41.2
+    ]
+  },
+  "captured": "2026-11-19 01:45"
+}

@@ -36,6 +36,21 @@ const printingSchema = z.object({
   receiptFooterAr: z.string().max(120),
   receiptFooterEn: z.string().max(120),
   invoiceSize: z.enum(["thermal", "a4"]).default("thermal"),
+  labelOffsetXMm: z.number().min(-15).max(15).default(0),
+  labelOffsetYMm: z.number().min(-15).max(15).default(0),
+  labelPaddingMm: z.number().min(0).max(8).default(1.2),
+  receiptSideMm: z.number().min(0).max(25).default(4),
+  receiptOffsetXMm: z.number().min(-15).max(15).default(0),
+  receiptWhatsapp: z.string().trim().max(30).default(""),
+  receiptSocial: z.string().trim().max(60).default(""),
+  receiptQr: z.boolean().default(true),
+  receiptLinkQr: z.boolean().default(true),
+  receiptLinkBase: z
+    .string()
+    .trim()
+    .max(200)
+    .refine((v) => v === "" || /^(https?:\/\/)?[a-z0-9.-]+(:\d+)?(\/\S*)?$/i.test(v), "Use an address like https://jjs.example.com")
+    .default(""),
 });
 
 for (const [key, schema] of [
@@ -95,6 +110,26 @@ systemRouter.put(
   }),
 );
 
+/**
+ * The roll in the shared label/receipt printer. Anyone who prints can say they swapped it,
+ * so it only needs a login, not settings rights.
+ */
+systemRouter.get(
+  "/printer-roll",
+  requireAuth,
+  h((_req, res) => res.json(getSetting("printing.roll"))),
+);
+systemRouter.put(
+  "/printer-roll",
+  requireAuth,
+  h((req, res) => {
+    const { roll } = parse(z.object({ roll: z.enum(["label", "receipt"]) }), req.body);
+    const value = { roll, changedAt: new Date().toISOString(), changedBy: req.user!.name };
+    setSetting("printing.roll", value);
+    res.json(value);
+  }),
+);
+
 /** Network: let the admin's phone on the same Wi-Fi open the system. */
 systemRouter.get(
   "/network",
@@ -115,6 +150,22 @@ systemRouter.put(
     setSetting("network", body);
     writeAudit(db, { userId: req.user!.id, action: "edit", entity: "settings.network", after: body });
     res.json({ ...body, restartNeeded: true });
+  }),
+);
+
+/**
+ * Restart the shop so a pending restore or the phone-access setting applies.
+ * Only the desktop server can restart itself (it sets globalThis.__jjsRestart).
+ */
+systemRouter.post(
+  "/restart",
+  requirePerm("settings", "edit"),
+  h((req, res) => {
+    const restart = (globalThis as { __jjsRestart?: () => void }).__jjsRestart;
+    if (!restart) throw new HttpError(409, "restart_unavailable", "Stop the server and start it again to apply this.");
+    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "system.restart" });
+    res.json({ ok: true });
+    setTimeout(restart, 500);
   }),
 );
 

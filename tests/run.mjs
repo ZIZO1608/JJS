@@ -2,15 +2,25 @@
 // Starts the built server on a throwaway data folder for each suite, runs it, stops it.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"], ["api-member-rules.mjs"], ["api-deliveries.mjs"], ["api-drop-menu.mjs"]];
+const suites = [["api-smoke.mjs"], ["api-full.mjs", "api-sync.mjs"], ["api-wholesale.mjs"], ["api-portal.mjs"], ["api-day-and-route.mjs"], ["api-money-rules.mjs"], ["api-manager-rules.mjs"], ["api-member-rules.mjs"], ["api-deliveries.mjs"], ["api-receipt-link.mjs"], ["api-drop-menu.mjs"]];
 let failed = 0;
-let port = 4391;
+/** A port nobody is listening on, so a suite never talks to another run's server. */
+const freePort = () =>
+  new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const { port } = srv.address();
+      srv.close(() => resolve(port));
+    });
+  });
 for (const files of suites) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "jjs-test-"));
-  const p = port++;
+  const p = await freePort();
   const server = spawn(process.execPath, ["dist/server/server/index.js"], { env: { ...process.env, JJS_DATA_DIR: dir, PORT: String(p) }, stdio: "ignore" });
   const base = `http://127.0.0.1:${p}`;
   for (let i = 0; i < 60; i++) {

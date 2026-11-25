@@ -4,6 +4,7 @@ const { app, BrowserWindow, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { registerPrinting, webPreferences } = require("./printing.cjs");
 
 const ROOT = path.join(__dirname, "..");
 const PORT = Number(process.env.PORT || 4310);
@@ -11,7 +12,9 @@ const URL = `http://127.0.0.1:${PORT}`;
 const INFO_FILE = path.join(app.getPath("appData"), "jjs-erp", "server.json");
 app.setPath("userData", path.join(app.getPath("appData"), "jjs-erp-client"));
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// A second copy must stop here: quit() alone would still run boot() below.
+const isFirstCopy = app.requestSingleInstanceLock();
+if (!isFirstCopy) app.exit(0);
 
 let win = null;
 
@@ -51,12 +54,20 @@ async function openWhenReady() {
     } else {
       await win.loadURL(waitingPage("The shop is not started", "Open “JJ's ERP Server” first — شغّل “JJ's ERP Server” أولاً"));
     }
-    while (!(await shopIsUp())) await new Promise((r) => setTimeout(r, 1000));
+    // Give up after two minutes with a clear page instead of "Starting…" forever.
+    for (let i = 0; !(await shopIsUp()); i++) {
+      if (i >= 120) {
+        await win.loadURL(waitingPage("The shop could not start", "Open “JJ's ERP Server” from the Start menu and read its message, then open this app again — المحل ما اشتغل: افتح “JJ's ERP Server” من قائمة ابدأ"));
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
   await win.loadURL(URL);
 }
 
 function boot() {
+  registerPrinting(URL);
   win = new BrowserWindow({
     width: 1366,
     height: 820,
@@ -65,12 +76,12 @@ function boot() {
     title: "JJ's ERP",
     icon: path.join(ROOT, "dist", "web", "logo.png"),
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: webPreferences(),
   });
   // Receipts, labels and statements open in a small window of the app itself;
   // anything else (help links) opens in the normal browser.
   win.webContents.setWindowOpenHandler(({ url: target }) => {
-    if (target.startsWith(URL)) return { action: "allow", overrideBrowserWindowOptions: { width: 480, height: 760, autoHideMenuBar: true, title: "JJ's ERP" } };
+    if (target.startsWith(URL)) return { action: "allow", overrideBrowserWindowOptions: { width: 480, height: 760, autoHideMenuBar: true, title: "JJ's ERP", webPreferences: webPreferences() } };
     void shell.openExternal(target);
     return { action: "deny" };
   });
@@ -83,5 +94,5 @@ app.on("second-instance", () => {
     win.focus();
   }
 });
-app.whenReady().then(boot);
+if (isFirstCopy) app.whenReady().then(boot);
 app.on("window-all-closed", () => app.quit());

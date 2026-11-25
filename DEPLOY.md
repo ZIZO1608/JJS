@@ -78,6 +78,7 @@ Clients sign in at **https://your-domain/portal**. Their login is separate from 
   node scripts/client-login.mjs        # lists all client logins
   ```
 - With a made-up password, the client chooses their own on first sign-in.
+- **Clients who get their prices from you:** open the client → **Client login** → untick **Show prices in the portal**. That client then sees no prices at all. They send their list, it arrives in **Client requests** marked **💰 Needs prices**, you tap **Set prices** (it starts at the client's current price), and **Send prices to the client**. These prices are for that request only. The client gets a notification and a pop-up, taps **Approve & place order**, and the order is made at exactly those prices. If it can't be made right then (closed day, credit limit), the request waits in Client requests as **Client approved** with a **Place order** button. You can change the prices until the client answers.
 - **Orders from clients:** a client's order is a *request*. Admin and Manager hear a chime and see it under the bell and in **Client requests**. **Accept** turns it into a normal invoice on the client's account (stock, balance and receipt as usual). **Decline** asks for a reason, which the client sees. Members do not get these requests.
 - "Pay on delivery" orders are on the client's account too, marked 💵 on the invoice. Record the cash with **Record payment** when you collect it.
 - To accept orders, the business day must be open and an active "On credit" payment method must exist (it does by default).

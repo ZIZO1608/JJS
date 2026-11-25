@@ -397,19 +397,25 @@ export function NewOrderPage() {
     }),
     [who, clientId, employeeId, fulfilment, fee, assignedTo, methodId, manualPct, manualMode, useLoyalty, note, cart, can, noPay, paidValue],
   );
+  const quoteSeq = useRef(0);
   useEffect(() => {
     if (!cart.length) {
+      quoteSeq.current++;
       setQuote(null);
       setQuoteErr("");
       return;
     }
     if (who === "staff" && !employeeId) return;
+    // Only the newest answer counts: a slow older one must not overwrite the total.
+    const ask = ++quoteSeq.current;
     const h = setTimeout(async () => {
       try {
         const q = await post<Quote>("/orders/quote", payload);
+        if (ask !== quoteSeq.current) return;
         setQuote(q.empty ? null : q);
         setQuoteErr("");
       } catch (e) {
+        if (ask !== quoteSeq.current) return;
         setQuoteErr(err(e));
       }
     }, 220);

@@ -77,8 +77,12 @@ export async function syncNow(): Promise<{ pushed: number; skipped?: string }> {
         const stamp = nowIso();
         if (clean.length) await upsert(cfg.supabaseUrl, cfg.serviceKey, table, clean.map((r) => ({ ...r, synced_at: stamp })));
         const k = keyOf(table);
-        const mark = sqlite.prepare(`update "${table}" set synced_at = ? where "${k}" = ?`);
-        sqlite.transaction(() => rows.forEach((r) => mark.run(stamp, r[k])))();
+        // A row changed while the upload was in flight keeps synced_at empty, so its new values go next time.
+        const versioned = "updated_at" in (rows[0] ?? {});
+        const mark = versioned
+          ? sqlite.prepare(`update "${table}" set synced_at = ? where "${k}" = ? and updated_at is ?`)
+          : sqlite.prepare(`update "${table}" set synced_at = ? where "${k}" = ?`);
+        sqlite.transaction(() => rows.forEach((r) => (versioned ? mark.run(stamp, r[k], r.updated_at) : mark.run(stamp, r[k]))))();
         pushed += rows.length;
         if (rows.length < BATCH) break;
       }

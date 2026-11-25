@@ -18,7 +18,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=4310 \
     JJS_DATA_DIR=/data \
-    JJS_TRUST_PROXY=1 \n    JJS_ONLINE=1 \
+    JJS_TRUST_PROXY=1 \
+    JJS_ONLINE=1 \
     TZ=Asia/Damascus
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
@@ -26,6 +27,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/scripts/reset-password.mjs ./scripts/reset-password.mjs
 COPY --from=build /app/scripts/client-login.mjs ./scripts/client-login.mjs
+COPY --from=build /app/scripts/clear-test-data.mjs ./scripts/clear-test-data.mjs
 VOLUME /data
 EXPOSE 4310
 # Coolify may set its own PORT (e.g. 3000), so check whichever port the server really uses.

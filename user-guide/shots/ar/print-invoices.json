@@ -1,0 +1,36 @@
+{
+  "image": "print-invoices.png",
+  "width": 358,
+  "height": 792.5,
+  "url": "http://127.0.0.1:4396/settings/printing",
+  "display_url": "JJ's ERP/settings/printing",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "wa": [
+      25,
+      402,
+      308,
+      41.2
+    ],
+    "social": [
+      25,
+      499.2,
+      308,
+      41.2
+    ],
+    "qr": [
+      25,
+      607.8,
+      308,
+      46.5
+    ],
+    "save": [
+      287.2,
+      788.5,
+      62.8,
+      41.2
+    ]
+  },
+  "captured": "2026-11-19 01:45"
+}

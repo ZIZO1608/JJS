@@ -65,6 +65,8 @@ export function renewSubscriptions(tx: Q, today: string, rate: number | null) {
   const ended = tx.select().from(subscriptions).where(and(eq(subscriptions.status, "active"), sql`${subscriptions.endDate} < ${today}`, isNull(subscriptions.deletedAt))).all();
   let renewed = 0;
   for (const s of ended) {
+    const planCcy = tx.select({ currency: subscriptionPlans.currency }).from(subscriptionPlans).where(eq(subscriptionPlans.id, s.planId)).get();
+    if (s.autoRenew && planCcy?.currency === "SYP" && !rate) continue; // stays active: renewed once a rate exists
     tx.update(subscriptions).set({ status: "ended", updatedAt: nowIso(), syncedAt: null }).where(eq(subscriptions.id, s.id)).run();
     const client = tx.select().from(clients).where(eq(clients.id, s.clientId)).get();
     const plan = tx.select().from(subscriptionPlans).where(eq(subscriptionPlans.id, s.planId)).get();

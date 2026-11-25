@@ -1,0 +1,30 @@
+{
+  "image": "print-centre.png",
+  "width": 434,
+  "height": 329,
+  "url": "http://127.0.0.1:4396/settings/printing",
+  "display_url": "JJ's ERP/settings/printing",
+  "clipped": true,
+  "device": "desktop",
+  "boxes": {
+    "first": [
+      21,
+      144.2,
+      294,
+      41.2
+    ],
+    "last": [
+      21,
+      217.5,
+      294,
+      41.2
+    ],
+    "centre": [
+      21,
+      266.8,
+      93.9,
+      41.2
+    ]
+  },
+  "captured": "2026-11-19 01:45"
+}
