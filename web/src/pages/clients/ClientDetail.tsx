@@ -939,6 +939,10 @@ export function ClientDetailPage() {
             )}
             {!simple && can("clients", "edit") && (
               <>
+                <button className="btn btn-ghost" onClick={() => openPrint(`/print/invoice-design/${c.id}`)} title={tr("عنوان ونصوص ولون وأقسام فواتير هالزبون", "Title, texts, colour and parts of this client's invoices")}>
+                  🧾 {tr("تصميم الفاتورة", "Invoice design")}
+                  {c.invoiceTemplate && <span className="ms-1 text-xs text-good">●</span>}
+                </button>
                 <button className="btn btn-ghost" onClick={() => setDialog("edit")}>
                   {tr("تعديل", "Edit")}
                 </button>
@@ -957,7 +961,7 @@ export function ClientDetailPage() {
             {x}
           </span>
         ))}
-        {c.consignment && <span className="chip">{tr("بالأمانة", "Consignment")}</span>}
+        {c.dropPoint ? <span className="chip">{tr("نقطة بيع إلنا", "Drop point")}</span> : c.consignment && <span className="chip">{tr("بالأمانة", "Consignment")}</span>}
       </div>
       <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className="card">

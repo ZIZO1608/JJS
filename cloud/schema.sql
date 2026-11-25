@@ -346,7 +346,13 @@ create table if not exists public."clients" (
   "rep_id" text,
   "lat" double precision,
   "lng" double precision,
-  "map_url" text
+  "map_url" text,
+  "drop_point" boolean,
+  "drop_cut_type" text,
+  "drop_cut_value" double precision,
+  "drop_cut_currency" text,
+  "drop_money" text,
+  "invoice_template" text
 );
 alter table public."clients" add column if not exists "created_at" text;
 alter table public."clients" add column if not exists "updated_at" text;
@@ -373,6 +379,12 @@ alter table public."clients" add column if not exists "rep_id" text;
 alter table public."clients" add column if not exists "lat" double precision;
 alter table public."clients" add column if not exists "lng" double precision;
 alter table public."clients" add column if not exists "map_url" text;
+alter table public."clients" add column if not exists "drop_point" boolean;
+alter table public."clients" add column if not exists "drop_cut_type" text;
+alter table public."clients" add column if not exists "drop_cut_value" double precision;
+alter table public."clients" add column if not exists "drop_cut_currency" text;
+alter table public."clients" add column if not exists "drop_money" text;
+alter table public."clients" add column if not exists "invoice_template" text;
 alter table public."clients" enable row level security;
 
 create table if not exists public."consignment_lines" (
@@ -1057,7 +1069,10 @@ create table if not exists public."products" (
   "sort" bigint,
   "active" boolean,
   "weight_g" double precision,
-  "extra_cost_usd" double precision
+  "extra_cost_usd" double precision,
+  "show_on_menu" boolean,
+  "menu_desc_ar" text,
+  "menu_desc_en" text
 );
 alter table public."products" add column if not exists "created_at" text;
 alter table public."products" add column if not exists "updated_at" text;
@@ -1076,6 +1091,9 @@ alter table public."products" add column if not exists "sort" bigint;
 alter table public."products" add column if not exists "active" boolean;
 alter table public."products" add column if not exists "weight_g" double precision;
 alter table public."products" add column if not exists "extra_cost_usd" double precision;
+alter table public."products" add column if not exists "show_on_menu" boolean;
+alter table public."products" add column if not exists "menu_desc_ar" text;
+alter table public."products" add column if not exists "menu_desc_en" text;
 alter table public."products" enable row level security;
 
 create table if not exists public."purchase_lines" (

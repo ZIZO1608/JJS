@@ -159,6 +159,11 @@ export const products = sqliteTable(
     weightG: real("weight_g").notNull().default(0),
     /** Any other direct cost per piece (gas, labour share…), in USD. */
     extraCostUsd: real("extra_cost_usd").notNull().default(0),
+    /** Shown on the public menu page (/menu). */
+    showOnMenu: integer("show_on_menu", { mode: "boolean" }).notNull().default(false),
+    /** A short line under the product on the public menu. */
+    menuDescAr: text("menu_desc_ar").notNull().default(""),
+    menuDescEn: text("menu_desc_en").notNull().default(""),
   },
   (t) => [uniqueIndex("products_code_uq").on(t.code), index("products_category_idx").on(t.categoryId)],
 );
@@ -394,6 +399,16 @@ export const clients = sqliteTable(
     lat: real("lat"),
     lng: real("lng"),
     mapUrl: text("map_url").notNull().default(""),
+    /** Our own stand / fridge at this place: the goods stay ours, the place takes a cut of what sells. */
+    dropPoint: integer("drop_point", { mode: "boolean" }).notNull().default(false),
+    /** pct = % of sales, piece = fixed amount per piece sold, rent = we pay a monthly rent (no cut at settlement). */
+    dropCutType: text("drop_cut_type", { enum: ["pct", "piece", "rent"] }).notNull().default("pct"),
+    dropCutValue: real("drop_cut_value").notNull().default(0),
+    dropCutCurrency: text("drop_cut_currency", { enum: ["USD", "SYP"] }).notNull().default("USD"),
+    /** cash = the rep collects our share at each visit; balance = it goes on the place's account. */
+    dropMoney: text("drop_money", { enum: ["cash", "balance"] }).notNull().default("cash"),
+    /** This client's own invoice design (JSON), empty = the standard invoice. */
+    invoiceTemplate: text("invoice_template").notNull().default(""),
   },
   (t) => [index("clients_name_idx").on(t.name)],
 );

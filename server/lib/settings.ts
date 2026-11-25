@@ -56,6 +56,24 @@ export interface NetworkSettings {
   /** Let phones on the same Wi-Fi open the system (needs a restart). */
   lanAccess: boolean;
 }
+/** The public menu page (/menu): a small landing page anyone can open. */
+export interface PublicMenuSettings {
+  enabled: boolean;
+  showPrices: boolean;
+  /** WhatsApp number orders go to, international digits (963…). */
+  whatsapp: string;
+  heroTitleAr: string;
+  heroTitleEn: string;
+  heroSubtitleAr: string;
+  heroSubtitleEn: string;
+  aboutAr: string;
+  aboutEn: string;
+  hoursAr: string;
+  hoursEn: string;
+  instagram: string;
+  facebook: string;
+  mapUrl: string;
+}
 export interface SyncSettings {
   enabled: boolean;
   supabaseUrl: string;
@@ -83,6 +101,7 @@ export interface SettingsShape {
   /** Bumped when new default lists are added for existing installs. */
   "seed.version": number;
   network: NetworkSettings;
+  publicMenu: PublicMenuSettings;
   sync: SyncSettings;
   "sync.status": SyncStatus;
   /** Users whose password someone else chose (server variables, the admin): they are asked to pick their own. */
@@ -105,6 +124,22 @@ export const SETTING_DEFAULTS: SettingsShape = {
   printing: { receiptWidthMm: 80, labelWidthMm: 50, labelHeightMm: 30, receiptFooterAr: "شكراً لكم", receiptFooterEn: "Thank you", invoiceSize: "thermal" },
   "seed.version": 1,
   network: { lanAccess: false },
+  publicMenu: {
+    enabled: false,
+    showPrices: true,
+    whatsapp: "",
+    heroTitleAr: "ساندويشات طازة كل يوم",
+    heroTitleEn: "Fresh sandwiches, made every morning",
+    heroSubtitleAr: "اختار اللي بدك ياه وابعتلنا الطلب على واتساب.",
+    heroSubtitleEn: "Pick what you like and send us the order on WhatsApp.",
+    aboutAr: "",
+    aboutEn: "",
+    hoursAr: "",
+    hoursEn: "",
+    instagram: "",
+    facebook: "",
+    mapUrl: "",
+  },
   sync: { enabled: false, supabaseUrl: "", serviceKey: "" },
   "sync.status": { lastRunAt: null, lastOkAt: null, lastError: null, pushed: 0 },
   "auth.tempPasswords": [],

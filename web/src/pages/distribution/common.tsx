@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Field, Modal, Select, TextInput } from "../../components/ui";
 import { ApiError, post } from "../../lib/api";
 import { useI18n } from "../../lib/i18n";
@@ -157,6 +157,8 @@ export interface Consignment {
   qty: number;
   lines: (ConsLine & { returnedQty: number })[];
   orderNumber: number | null;
+  /** Set when the client is our own drop point (stand / fridge). */
+  drop: { cutType: "pct" | "piece" | "rent"; cutValue: number; cutCurrency: Currency; cutPerPiece: number; money: "cash" | "balance" } | null;
 }
 
 /** Count what is left at the shop: returns come back, the sold part becomes an invoice. */
@@ -170,6 +172,19 @@ export function SettleDialog({ c, onClose, onDone }: { c: Consignment; onClose: 
   const [paid, setPaid] = useState("");
   const [saving, setSaving] = useState(false);
   const soldTotal = useMemo(() => c.lines.reduce((s, l) => s + (l.qty - (back[l.productId] ?? 0)) * l.unitPrice, 0), [c, back]);
+  const soldQty = c.lines.reduce((s, l) => s + l.qty - (back[l.productId] ?? 0), 0);
+  // the same sum the server makes: a % of the sale, or a fixed amount per piece (rent is paid as an expense)
+  const cut = !c.drop ? 0 : c.drop.cutType === "pct" ? (soldTotal * Math.min(100, c.drop.cutValue)) / 100 : c.drop.cutType === "piece" ? Math.min(soldTotal, soldQty * c.drop.cutPerPiece) : 0;
+  const ours = soldTotal - cut;
+  // a stand whose rep collects cash: start on the cash box instead of "on account"
+  const cashPreset = useRef(false);
+  useEffect(() => {
+    if (cashPreset.current || c.drop?.money !== "cash" || !methods.length) return;
+    cashPreset.current = true;
+    const boxes = methods.filter((x) => x.kind === "box");
+    const cash = boxes.find((x) => x.systemKey === "cash") ?? boxes[0];
+    if (cash) setMethod(cash.id);
+  }, [c.drop, methods]);
   const m = methods.find((x) => x.id === method);
   const save = async () => {
     setSaving(true);
@@ -226,10 +241,33 @@ export function SettleDialog({ c, onClose, onDone }: { c: Consignment; onClose: 
         ))}
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="card bg-sunken sm:col-span-1">
-          <div className="text-sm text-muted">{tr("قيمة المباع", "Sold value")}</div>
-          <div className="text-2xl font-bold num ltr text-start">{money(soldTotal, c.currency, lang)}</div>
-        </div>
+        {c.drop ? (
+          <div className="card bg-sunken sm:col-span-3">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="text-sm text-muted">{tr("المبيع", "Sold")}</div>
+                <div className="text-xl font-bold num ltr">{money(soldTotal, c.currency, lang)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">
+                  {tr("حصة المكان", "Place's share")}
+                  {c.drop.cutType === "pct" && <span className="num ltr"> ({c.drop.cutValue}%)</span>}
+                  {c.drop.cutType === "rent" && <span> ({tr("أجار", "rent")})</span>}
+                </div>
+                <div className="text-xl font-bold num ltr">− {money(cut, c.currency, lang)}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted">{tr("حصتنا", "Our share")}</div>
+                <div className="text-xl font-bold text-good num ltr">{money(ours, c.currency, lang)}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="card bg-sunken sm:col-span-1">
+            <div className="text-sm text-muted">{tr("قيمة المباع", "Sold value")}</div>
+            <div className="text-2xl font-bold num ltr text-start">{money(soldTotal, c.currency, lang)}</div>
+          </div>
+        )}
         <Field label={tr("طريقة الدفع", "Payment")} htmlFor="st-m" hint={tr("فاضي = على الحساب", "Empty = on account")}>
           <Select id="st-m" value={method} onChange={(e) => setMethod(e.target.value)}>
             <option value="">{tr("على الحساب", "On account")}</option>

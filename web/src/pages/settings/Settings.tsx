@@ -10,14 +10,16 @@ import { MoneyTab } from "./Money";
 import { NetworkTab } from "./Network";
 import { PriceListsTab } from "./PriceLists";
 import { PrintingTab } from "./Printing";
+import { PublicMenuTab } from "./PublicMenu";
 import { SalesTab } from "./Sales";
 
-const TABS = ["business", "lists", "currency", "taxes", "money", "sales", "prices", "printing", "network", "backups"] as const;
+const TABS = ["business", "lists", "currency", "taxes", "money", "sales", "prices", "printing", "public-menu", "network", "backups"] as const;
 const EXTRA_LABEL: Record<string, { ar: string; en: string }> = {
   money: { ar: "الصناديق والدفع", en: "Money" },
   sales: { ar: "البيع والولاء", en: "Sales rules" },
   prices: { ar: "قوائم الأسعار", en: "Price lists" },
   printing: { ar: "الطباعة", en: "Printing" },
+  "public-menu": { ar: "المنيو العام", en: "Public menu" },
   network: { ar: "الشبكة والسحابة", en: "Network & cloud" },
 };
 
@@ -49,6 +51,7 @@ export function SettingsPage() {
         <Route path="sales" element={<SalesTab />} />
         <Route path="prices" element={<PriceListsTab />} />
         <Route path="printing" element={<PrintingTab />} />
+        <Route path="public-menu" element={<PublicMenuTab />} />
         <Route path="network" element={<NetworkTab />} />
         <Route path="backups" element={<BackupsTab />} />
       </Routes>

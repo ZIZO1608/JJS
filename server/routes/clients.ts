@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client.js";
 import { categories, clientAccounts, clientMoves, clientSessions, clientPrices, clientTiers, clients, consignments, employees, lookups, orderLines, orders, payments, priceListItems, priceLists, products, recurringOrders, returns, salesCalls, subscriptionPlans, subscriptions, users } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
+import { readInvoiceTemplate } from "../../shared/invoiceTemplate.js";
 import { MAP_HOSTS, parseLatLng } from "../../shared/maps.js";
 import { can, hashPassword, requireAnyPerm, requirePerm } from "../lib/auth.js";
 import { generatePassword, suggestUsername } from "../lib/clientAuth.js";
@@ -138,7 +139,12 @@ const clientSchema = z.object({
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
   mapUrl: z.string().trim().max(500).default(""),
-});
+  dropPoint: z.boolean().default(false),
+  dropCutType: z.enum(["pct", "piece", "rent"]).default("pct"),
+  dropCutValue: z.number().min(0).max(100_000_000).default(0),
+  dropCutCurrency: z.enum(["USD", "SYP"]).default("USD"),
+  dropMoney: z.enum(["cash", "balance"]).default("cash"),
+}).refine((b) => !(b.dropPoint && b.dropCutType === "pct" && b.dropCutValue > 100), { message: "A percentage cannot be above 100", path: ["dropCutValue"] });
 /** On a new client only: what they already owed (+) or had prepaid (−) before the system. */
 const openingSchema = z.object({ openingBalance: z.number().default(0), openingCurrency: z.enum(["USD", "SYP"]).optional() });
 const nullables = (b: z.infer<typeof clientSchema>) => ({
@@ -150,6 +156,8 @@ const nullables = (b: z.infer<typeof clientSchema>) => ({
   // a pasted long Google Maps link fills the pin when none was picked on the map
   ...(b.lat != null && b.lng != null ? { lat: b.lat, lng: b.lng } : (parseLatLng(b.mapUrl) ?? { lat: null, lng: null })),
   paymentTermsDays: b.paymentTermsDays ?? getSetting("orders").defaultPaymentTermsDays,
+  // our own stand works like consignment: goods are left there and settled on each visit
+  consignment: b.consignment || b.dropPoint,
 });
 
 const lastOrderDate = (clientId: string) => db.select({ d: max(orders.businessDate) }).from(orders).where(and(eq(orders.clientId, clientId), ne(orders.status, "cancelled"))).get()?.d ?? null;
@@ -487,6 +495,37 @@ clientsRouter.get(
       products: productsTaken.map((p) => ({ nameAr: p.name_ar, nameEn: p.name_en, qty: p.qty, usd: round4(p.usd) })),
       summary,
     });
+  }),
+);
+
+/** This client's own invoice design (title, texts, which parts show, colour). */
+const invoiceTemplateSchema = z.object({
+  size: z.enum(["default", "a4", "thermal"]),
+  title: z.string().trim().max(80),
+  intro: z.string().trim().max(1000),
+  footer: z.string().trim().max(500),
+  showLogo: z.boolean(),
+  showUnitPrice: z.boolean(),
+  showAccount: z.boolean(),
+  showPayment: z.boolean(),
+  showSignatures: z.boolean(),
+  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Pick a colour"),
+});
+clientsRouter.put(
+  "/:id/invoice-template",
+  requirePerm("clients", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const before = db.select({ t: clients.invoiceTemplate }).from(clients).where(and(eq(clients.id, id), isNull(clients.deletedAt))).get();
+    if (!before) throw notFound("client");
+    // null = back to the standard invoice
+    const body = req.body?.template === null ? null : parse(invoiceTemplateSchema, req.body?.template ?? {});
+    const json = body ? JSON.stringify(body) : "";
+    db.transaction((tx) => {
+      tx.update(clients).set({ invoiceTemplate: json, updatedAt: nowIso(), syncedAt: null }).where(eq(clients.id, id)).run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "client.invoice_template", entityId: id, before: before.t || null, after: body });
+    });
+    res.json({ template: readInvoiceTemplate(json), custom: !!json });
   }),
 );
 

@@ -57,6 +57,8 @@ export interface OrderOptions {
   source?: "staff" | "portal";
   /** A delivery fee the shop already agreed (a priced portal request): kept even with preset prices. */
   presetDeliveryFee?: number;
+  /** Drop point settlement: what the place keeps from the sale, in the order currency. */
+  dropCut?: number;
 }
 
 export interface PricedLine {
@@ -188,6 +190,7 @@ export function priceOrder(tx: Q, input: OrderInput, date = localDate(), opts: O
     addDiscount("staff", employee.staffDiscountPct, employee.staffDiscountAmount, employee.currency);
   }
   addDiscount("manual", Math.min(100, input.manualDiscountPct ?? 0), input.manualDiscountAmount ?? 0, currency);
+  if (opts.dropCut && opts.dropCut > 0) addDiscount("drop_cut", 0, opts.dropCut, currency);
   const worth = (c: Cand) => Math.min(discountable, discountable * (c.pct / 100) + c.amount);
   const stacking = getSetting("orders").allowStacking;
   const best = cands.reduce<Cand | null>((b, c) => (!b || worth(c) > worth(b) ? c : b), null);

@@ -12,6 +12,7 @@ import { loyaltyStatus } from "../services/clients.js";
 import { clientBalanceUsd } from "../services/money.js";
 import { assertOrderQtys, assignDelivery, cancelOrder, createOrder, deliverOrder, owedLookup, priceOrder } from "../services/orders.js";
 import { notifyDeliveryAssigned, notifyOrderStatus } from "../services/portal.js";
+import { readInvoiceTemplate } from "../../shared/invoiceTemplate.js";
 
 export const ordersRouter = Router();
 
@@ -277,7 +278,19 @@ export function receiptOf(orderId: string) {
     printing: getSetting("printing"),
     order: { ...listOut(r), taxes: JSON.parse(o.taxesJson) },
     lines: lines.map((l) => ({ ...l, options: JSON.parse(l.optionsJson) })),
-    client: client ? { name: client.name, phone: client.phone, address: client.address, contactPerson: client.contactPerson, language: client.receiptLanguage, balanceUsd: clientBalanceUsd(db, client.id) } : null,
+    client: client
+      ? {
+          id: client.id,
+          name: client.name,
+          phone: client.phone,
+          address: client.address,
+          contactPerson: client.contactPerson,
+          language: client.receiptLanguage,
+          balanceUsd: clientBalanceUsd(db, client.id),
+          template: readInvoiceTemplate(client.invoiceTemplate),
+          customTemplate: !!client.invoiceTemplate,
+        }
+      : null,
     loyalty: client && o.type === "normal" ? loyaltyStatus(db, client.id, o.businessDate) : null,
   };
 }

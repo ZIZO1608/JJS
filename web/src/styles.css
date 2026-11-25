@@ -47,6 +47,20 @@ body {
 .num {
   font-variant-numeric: tabular-nums;
 }
+/* Invoice "Word" editing: the boxes show while editing and never on paper. */
+.inv-ed {
+  width: 100%;
+  border: 1px dashed rgb(210 86 26 / 0.7);
+  border-radius: 4px;
+  background: #fffbea;
+  padding: 0 4px;
+  font: inherit;
+  color: inherit;
+  resize: vertical;
+}
+.inv-ed:focus {
+  outline: 2px solid rgb(210 86 26 / 0.35);
+}
 .ltr {
   direction: ltr;
   unicode-bidi: isolate;

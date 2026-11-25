@@ -162,6 +162,22 @@ export function deliverConsignment(tx: Q, input: { clientId: string; repId?: str
   return { id, number, value: roundMoney(valueTotal, q.currency), currency: q.currency };
 }
 
+/** What a drop point (our own stand) keeps from a sale: a % of it, a fixed amount per piece, or nothing (we pay rent). */
+export function dropPointCut(
+  client: Pick<typeof clients.$inferSelect, "dropPoint" | "dropCutType" | "dropCutValue" | "dropCutCurrency">,
+  sold: { qty: number; value: number },
+  currency: Currency,
+  rate: number | null,
+) {
+  if (!client.dropPoint || client.dropCutValue <= 0 || sold.qty <= 0) return 0;
+  if (client.dropCutType === "pct") return roundMoney((sold.value * Math.min(100, client.dropCutValue)) / 100, currency);
+  if (client.dropCutType === "piece") {
+    const r = client.dropCutCurrency === currency ? null : (rate ?? rateFor(client.dropCutCurrency, currency));
+    return roundMoney(Math.min(sold.value, sold.qty * convert(client.dropCutValue, client.dropCutCurrency, currency, r)), currency);
+  }
+  return 0;
+}
+
 /**
  * The rep counts what is left at the shop. Returned goods come back (fridge or waste),
  * the sold part becomes an invoice at the agreed prices, paid now or on account.
@@ -190,19 +206,22 @@ export function settleConsignment(
   if (returnsIn.length) returnId = createReturn(tx, { consignmentId: id, repId: c.repId, lines: returnsIn, settlement: "none", note: `Consignment C${c.number}` }, userId).id;
   let orderId: string | null = null;
   let orderNumber: number | null = null;
+  const client = tx.select().from(clients).where(eq(clients.id, c.clientId)).get()!;
+  const soldValue = roundMoney(sold.reduce((s, x) => s + x.qty * x.unit, 0), c.currency);
+  const cut = dropPointCut(client, { qty: sold.reduce((s, x) => s + x.qty, 0), value: soldValue }, c.currency, c.fxRate);
   if (sold.length) {
     const methodId = input.methodId ?? tx.select({ id: paymentMethods.id }).from(paymentMethods).where(eq(paymentMethods.systemKey, "credit")).get()?.id ?? null;
     const r = createOrder(
       tx,
       { clientId: c.clientId, type: "normal", fulfilment: "delivery", assignedTo: c.repId, methodId, paidAmount: input.paidAmount, note: input.note ?? `Consignment C${c.number}`, lines: sold.map((s) => ({ productId: s.productId, qty: s.qty, optionIds: [] })) },
       userId,
-      { presetPrices: sold.map((s) => s.unit), presetCosts: sold.map((s) => s.cost), presetCurrency: c.currency, presetRate: c.fxRate, consignmentId: id },
+      { presetPrices: sold.map((s) => s.unit), presetCosts: sold.map((s) => s.cost), presetCurrency: c.currency, presetRate: c.fxRate, consignmentId: id, dropCut: cut },
     );
     orderId = r.id;
     orderNumber = r.number;
   }
   tx.update(consignments).set({ status: "settled", settledAt: nowIso(), orderId, returnId, updatedAt: nowIso(), syncedAt: null }).where(eq(consignments.id, id)).run();
-  return { orderId, orderNumber, returnId, soldQty: sold.reduce((s, x) => s + x.qty, 0), returnedQty: returnsIn.reduce((s, x) => s + x.qty, 0) };
+  return { orderId, orderNumber, returnId, soldQty: sold.reduce((s, x) => s + x.qty, 0), returnedQty: returnsIn.reduce((s, x) => s + x.qty, 0), soldValue, cut, ourShare: roundMoney(soldValue - cut, c.currency) };
 }
 
 export function cancelConsignment(tx: Q, id: string, userId: string) {

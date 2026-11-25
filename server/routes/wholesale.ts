@@ -20,10 +20,10 @@ import {
 } from "../db/schema.js";
 import { writeAudit } from "../lib/audit.js";
 import { requirePerm } from "../lib/auth.js";
-import { localDate } from "../lib/biz.js";
+import { localDate, monthStart } from "../lib/biz.js";
 import { h, HttpError, notFound, parse } from "../lib/util.js";
 import { createOrder } from "../services/orders.js";
-import { cancelConsignment, clientAging, createProductionRun, createReturn, deliverConsignment, previewProduction, settleConsignment } from "../services/wholesale.js";
+import { cancelConsignment, clientAging, createProductionRun, createReturn, deliverConsignment, dropPointCut, previewProduction, settleConsignment } from "../services/wholesale.js";
 
 /** Wholesale & distribution: returns, consignment, production runs, route sheets, batch tracing. */
 export const wholesaleRouter = Router();
@@ -109,9 +109,16 @@ wholesaleRouter.get(
 );
 
 /* ---------- consignment ---------- */
+const perPieceCut = (cl: typeof clients.$inferSelect, currency: "USD" | "SYP", rate: number | null) => {
+  try {
+    return dropPointCut(cl, { qty: 1, value: Number.MAX_SAFE_INTEGER }, currency, rate);
+  } catch {
+    return 0; // no exchange rate yet: the settle step will ask for one
+  }
+};
 const consignmentOf = (id: string) => {
   const c = db
-    .select({ c: consignments, clientName: clients.name, repName: employees.name })
+    .select({ c: consignments, clientName: clients.name, repName: employees.name, cl: clients })
     .from(consignments)
     .innerJoin(clients, eq(consignments.clientId, clients.id))
     .leftJoin(employees, eq(consignments.repId, employees.id))
@@ -121,7 +128,19 @@ const consignmentOf = (id: string) => {
   const lines = db.select().from(consignmentLines).where(eq(consignmentLines.consignmentId, id)).all();
   const value = lines.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const orderNumber = c.c.orderId ? (db.select({ n: orders.number }).from(orders).where(eq(orders.id, c.c.orderId)).get()?.n ?? null) : null;
-  return { ...c.c, clientName: c.clientName, repName: c.repName, lines, value, qty: lines.reduce((s, l) => s + l.qty, 0), orderNumber };
+  const cl = c.cl;
+  // our own stand: the place's cut, so the settle screen can show our share before saving
+  const drop = cl.dropPoint
+    ? {
+        cutType: cl.dropCutType,
+        cutValue: cl.dropCutValue,
+        cutCurrency: cl.dropCutCurrency,
+        // the per-piece cut in this consignment's currency
+        cutPerPiece: cl.dropCutType === "piece" ? perPieceCut(cl, c.c.currency, c.c.fxRate) : 0,
+        money: cl.dropMoney,
+      }
+    : null;
+  return { ...c.c, clientName: c.clientName, repName: c.repName, lines, value, qty: lines.reduce((s, l) => s + l.qty, 0), orderNumber, drop };
 };
 
 wholesaleRouter.get(
@@ -195,6 +214,46 @@ wholesaleRouter.post(
       writeAudit(tx, { userId: req.user!.id, action: "delete", entity: "consignment", entityId: id, before: { number: c.number } });
     });
     res.json({ ok: true });
+  }),
+);
+
+/* ---------- drop points (our own stands) ---------- */
+/** Each stand: its terms, what is sitting there now, and this month's sales split between us and the place. */
+wholesaleRouter.get(
+  "/drop-points",
+  requirePerm("orders", "view"),
+  h((_req, res) => {
+    const today = localDate();
+    const from = monthStart(today);
+    const points = db.select().from(clients).where(and(eq(clients.dropPoint, true), isNull(clients.deletedAt))).orderBy(asc(clients.name)).all();
+    const area = (id: string | null) => (id ? (db.get<{ nameAr: string; nameEn: string }>(sql`select name_ar as nameAr, name_en as nameEn from lookups where id = ${id}`) ?? null) : null);
+    const rows = points.map((p) => {
+      const open = db.select({ id: consignments.id }).from(consignments).where(and(eq(consignments.clientId, p.id), eq(consignments.status, "open"), isNull(consignments.deletedAt))).orderBy(asc(consignments.number)).all();
+      const openCons = open.map((o) => consignmentOf(o.id)!);
+      // in USD, so stands paid in different currencies still add up
+      const usdOf = (col: string) => sql.raw(`coalesce(sum(case when currency = 'SYP' then (case when fx_rate > 0 then ${col} / fx_rate else 0 end) else ${col} end), 0)`);
+      const month = db.get<{ pieces: number; salesUsd: number; cutUsd: number; oursUsd: number; n: number }>(sql`
+        select coalesce(sum(items_count), 0) as pieces, ${usdOf("subtotal")} as salesUsd, ${usdOf("discount")} as cutUsd, coalesce(sum(total_usd), 0) as oursUsd, count(*) as n
+        from orders where client_id = ${p.id} and consignment_id is not null and status != 'cancelled' and deleted_at is null and business_date >= ${from}`);
+      const lastVisit = db.get<{ d: string | null }>(sql`select max(substr(settled_at, 1, 10)) as d from consignments where client_id = ${p.id} and status = 'settled'`)?.d ?? null;
+      return {
+        id: p.id,
+        name: p.name,
+        phone: p.phone,
+        area: area(p.areaId),
+        active: p.active,
+        cutType: p.dropCutType,
+        cutValue: p.dropCutValue,
+        cutCurrency: p.dropCutCurrency,
+        money: p.dropMoney,
+        balanceUsd: clientAging(db, p.id, today).balanceUsd,
+        open: openCons,
+        piecesThere: openCons.reduce((s, c) => s + c.qty, 0),
+        lastVisit,
+        month: month ?? { pieces: 0, salesUsd: 0, cutUsd: 0, oursUsd: 0, n: 0 },
+      };
+    });
+    res.json({ from, rows });
   }),
 );
 

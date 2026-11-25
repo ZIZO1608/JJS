@@ -135,7 +135,7 @@ export function ClientsPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1 font-semibold">
             {c.name} {!c.active && <span className="chip">{tr("موقوف", "inactive")}</span>}
-            {c.consignment && <span className="chip">{tr("بالأمانة", "consignment")}</span>}
+            {c.dropPoint ? <span className="chip">{tr("نقطة بيع إلنا", "drop point")}</span> : c.consignment && <span className="chip">{tr("بالأمانة", "consignment")}</span>}
             <LateBadge c={c} />
           </div>
           <div className="text-xs text-faint">

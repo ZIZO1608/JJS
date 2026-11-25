@@ -1,6 +1,11 @@
 import JsBarcode from "jsbarcode";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
+import { INVOICE_TEMPLATE_DEFAULTS, readInvoiceTemplate, type InvoiceTemplate } from "@shared/invoiceTemplate";
+import { put } from "../../lib/api";
+import { useToast } from "../../lib/toast";
+import { InvoiceA4View, InvoiceEditBar, docTotals, type InvoiceDoc } from "./InvoiceA4";
 import { useAppSettings, type AppSettings } from "../../lib/appSettings";
 import { money, qty as fq, today, usd, type Currency } from "../../lib/format";
 import { useI18n, type Lang } from "../../lib/i18n";
@@ -72,7 +77,7 @@ interface Receipt {
   printing: AppSettings["printing"];
   order: OrderRow & { taxes: AppliedTax[] };
   lines: { id: string; nameAr: string; nameEn: string; qty: number; freeQty: number; unitPrice: number; lineTotal: number; options: LineOption[] }[];
-  client: { name: string; phone: string; address: string; contactPerson: string; language: Lang; balanceUsd: number } | null;
+  client: { id: string; name: string; phone: string; address: string; contactPerson: string; language: Lang; balanceUsd: number; template: InvoiceTemplate; customTemplate: boolean } | null;
   loyalty: { enabled: boolean; buyQty: number; progress: number; available: number } | null;
   payment: { paid: number; remaining: number };
   account: { beforeUsd: number; afterUsd: number; nowUsd: number } | null;
@@ -82,34 +87,59 @@ export function PrintReceipt() {
   const { id } = useParams();
   const [sp, setSp] = useSearchParams();
   const ui = useI18n();
+  const toast = useToast();
   const { s } = useAppSettings();
   const r = useData<{ receipt: Receipt }>(`/orders/${id}/receipt`);
   const rc = r.data?.receipt;
-  const size = (sp.get("size") ?? s?.printing.invoiceSize ?? rc?.printing.invoiceSize ?? "thermal") === "a4" ? "a4" : "thermal";
+  const tpl = rc?.client?.template ?? INVOICE_TEMPLATE_DEFAULTS;
+  const [editing, setEditing] = useState(false);
+  const chosen = sp.get("size") ?? (tpl.size !== "default" ? tpl.size : null) ?? s?.printing.invoiceSize ?? rc?.printing.invoiceSize ?? "thermal";
+  // editing works on the A4 page
+  const size = editing || chosen === "a4" ? "a4" : "thermal";
   const width = rc?.printing.receiptWidthMm ?? 80;
   usePrintOnce(!!rc, size === "a4" ? "size: A4; margin: 12mm" : `size: ${width}mm auto; margin: 2mm`);
+  const lang: Lang = rc?.client?.language ?? ui.lang;
+  const fresh = useCallback(() => (rc ? docFromReceipt(rc, lang, s, rc.client?.template ?? INVOICE_TEMPLATE_DEFAULTS) : null), [rc, lang, s]);
+  const [doc, setDoc] = useState<InvoiceDoc | null>(null);
+  const [version, setVersion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setDoc(fresh()), [fresh]);
+  usePrintClean(setEditing);
   if (r.error) return <p className="p-6 text-bad">{ui.err(r.error)}</p>;
-  if (!rc) return <Loading />;
-  const lang: Lang = rc.client?.language ?? ui.lang;
+  if (!rc || !doc) return <Loading />;
   const t = L(lang);
   const o = rc.order;
   const m = (v: number) => money(v, o.currency, lang);
+  const tot = docTotals(doc);
   const summary = [
     `${pickL(lang)(rc.business)} · ${t("فاتورة", "Invoice")} #${o.number}`,
-    `${t("المجموع", "Total")}: ${m(o.total)}`,
-    rc.payment.paid ? `${t("المدفوع", "Paid")}: ${m(rc.payment.paid)}` : "",
-    rc.payment.remaining ? `${t("الباقي", "Remaining")}: ${m(rc.payment.remaining)}` : "",
-    rc.account ? `${t("رصيدكم", "Your balance")}: ${usd(rc.account.afterUsd)}` : "",
+    `${t("المجموع", "Total")}: ${m(tot.total)}`,
+    tot.paid ? `${t("المدفوع", "Paid")}: ${m(tot.paid)}` : "",
+    tot.remaining ? `${t("الباقي", "Remaining")}: ${m(tot.remaining)}` : "",
+    rc.account && !doc.edited ? `${t("رصيدكم", "Your balance")}: ${usd(rc.account.afterUsd)}` : "",
   ]
     .filter(Boolean)
     .join("\n");
+  const saveDesign = async () => {
+    if (!rc.client) return;
+    setSaving(true);
+    try {
+      await put(`/clients/${rc.client.id}/invoice-template`, { template: designOf(doc, tpl, rc, lang) });
+      toast(ui.tr("انحفظ التصميم. كل فواتير هالزبون رح تطلع هيك.", "Design saved. Every invoice for this client will look like this."));
+    } catch (e) {
+      toast(ui.err(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
   return (
-    <div className={size === "a4" ? "bg-white" : "bg-white"} dir={lang === "ar" ? "rtl" : "ltr"}>
+    <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
       <Toolbar>
         <div className="inline-flex rounded-lg bg-sunken p-0.5" role="group">
           {(["thermal", "a4"] as const).map((k) => (
             <button
               key={k}
+              disabled={editing}
               className={`rounded-md px-2.5 py-1 text-sm font-semibold ${size === k ? "bg-surface shadow-sm" : "text-muted"}`}
               onClick={() => {
                 const n = new URLSearchParams(sp);
@@ -121,13 +151,213 @@ export function PrintReceipt() {
             </button>
           ))}
         </div>
+        <button className={`btn px-3 py-1.5 ${editing ? "btn-primary" : ""}`} onClick={() => setEditing(!editing)}>
+          {editing ? ui.tr("✓ خلص التعديل", "✓ Done editing") : ui.tr("✏️ عدّل الفاتورة", "✏️ Edit invoice")}
+        </button>
         {rc.client?.phone && (
           <a className="btn px-3 py-1.5" href={waLink(rc.client.phone, summary)} target="_blank" rel="noreferrer">
             {ui.tr("واتساب", "WhatsApp")}
           </a>
         )}
       </Toolbar>
-      {size === "a4" ? <InvoiceA4 rc={rc} lang={lang} s={s} /> : <ReceiptThermal rc={rc} lang={lang} s={s} width={width} />}
+      {editing && (
+        <InvoiceEditBar
+          d={doc}
+          set={(patch) => setDoc({ ...doc, ...patch })}
+          clientName={rc.client?.name ?? null}
+          onSaveDesign={rc.client ? () => void saveDesign() : null}
+          onReset={() => {
+            setDoc(fresh());
+            setVersion((v) => v + 1);
+          }}
+          saving={saving}
+          ui={ui.tr}
+        />
+      )}
+      {size === "a4" ? <InvoiceA4View key={version} d={doc} editing={editing} set={(patch) => setDoc({ ...doc, ...patch })} /> : <ReceiptThermal rc={rc} lang={lang} s={s} width={width} tpl={tpl} />}
+    </div>
+  );
+}
+
+/** Printing while still editing: drop the edit boxes first so the paper shows plain text. */
+function usePrintClean(setEditing: (v: boolean) => void) {
+  useEffect(() => {
+    const before = () => flushSync(() => setEditing(false));
+    window.addEventListener("beforeprint", before);
+    return () => window.removeEventListener("beforeprint", before);
+  }, [setEditing]);
+}
+
+/** The words a template replaces, in the invoice's language. */
+const defaultTitle = (lang: Lang) => L(lang)("فاتورة مبيع", "Sales invoice");
+const defaultFooter = (rc: Pick<Receipt, "printing">, lang: Lang) => (lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn);
+
+/** A printed order → an editable document, with the client's design applied. */
+function docFromReceipt(rc: Receipt, lang: Lang, s: AppSettings | null, tpl: InvoiceTemplate): InvoiceDoc {
+  const t = L(lang);
+  const pk = pickL(lang);
+  const o = rc.order;
+  const bw = (v: number) => balanceWords(v, lang, o.fxRate, o.currency === "SYP");
+  const c = rc.client;
+  return {
+    lang,
+    currency: o.currency,
+    logoSrc: s?.business.logo || rc.business.logo || "/logo.png",
+    businessName: pk(rc.business),
+    businessLines: [rc.business.phone, rc.business.address].filter(Boolean).join("\n"),
+    title: tpl.title || defaultTitle(lang),
+    numberText: `# ${o.number}`,
+    dateText: dateL(lang, o.createdAt ?? o.businessDate, true),
+    billTo: c ? [c.name, c.contactPerson, c.phone, c.address].filter(Boolean).join("\n") : t("زبون عابر", "Walk-in client"),
+    meta: [
+      o.method ? `${t("طريقة الدفع", "Payment")}: ${pk(o.method)}` : "",
+      o.fulfilment === "delivery" ? `${t("توصيل", "Delivery")}${o.assignedName ? ` · ${o.assignedName}` : ""}` : "",
+      o.type !== "normal" ? discountWords(o.type, t) : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    intro: tpl.intro,
+    lines: rc.lines.map((l) => ({
+      key: l.id,
+      name: pk(l),
+      sub: [lineOptions(l, lang) ? `+ ${lineOptions(l, lang)}` : "", l.freeQty > 0 ? t(`منها ${l.freeQty} مجاناً`, `${l.freeQty} free`) : ""].filter(Boolean).join(" · "),
+      qty: l.qty,
+      unitPrice: l.unitPrice,
+    })),
+    discountLabel: `${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`,
+    discount: o.discount,
+    taxes: o.taxes.map((x, i) => ({ key: `${x.id ?? i}`, label: `${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, amount: x.amount })),
+    deliveryFee: o.deliveryFee,
+    paid: rc.payment.paid,
+    paidFull: rc.payment.remaining === 0 && rc.payment.paid > 0,
+    account: rc.account ? { before: bw(rc.account.beforeUsd), after: bw(rc.account.afterUsd) } : null,
+    usdText: o.currency === "SYP" && o.fxRate ? usd(o.totalUsd) : null,
+    note: o.note ?? "",
+    footer: tpl.footer || defaultFooter(rc, lang),
+    cancelled: o.status === "cancelled",
+    fixed: { subtotal: o.subtotal, total: o.total, remaining: rc.payment.remaining },
+    edited: false,
+    t: tpl,
+  };
+}
+
+/** What "Save as this client's design" keeps: never the items or amounts of one invoice. */
+function designOf(d: InvoiceDoc, base: InvoiceTemplate, rc: Pick<Receipt, "printing">, lang: Lang): InvoiceTemplate {
+  return {
+    ...base,
+    ...d.t,
+    // the standard words stay "standard", so a later change in Settings still reaches this client
+    title: d.title === defaultTitle(lang) ? "" : d.title,
+    footer: d.footer === defaultFooter(rc, lang) ? "" : d.footer,
+    intro: d.intro,
+    size: base.size === "default" ? "a4" : base.size,
+  };
+}
+
+/** Design a client's invoices before they have any: a sample invoice, ready to edit. */
+export function PrintInvoiceDesign() {
+  const { id } = useParams();
+  const ui = useI18n();
+  const toast = useToast();
+  const { s } = useAppSettings();
+  const r = useData<{ client: { id: string; name: string; phone: string; address: string; contactPerson: string; receiptLanguage: Lang; invoiceTemplate: string } }>(`/clients/${id}`);
+  const c = r.data?.client;
+  usePrintOnce(false, "size: A4; margin: 12mm");
+  const lang: Lang = c?.receiptLanguage ?? ui.lang;
+  const fresh = useCallback((): InvoiceDoc | null => {
+    if (!c || !s) return null;
+    const t = L(lang);
+    const tpl = readInvoiceTemplate(c.invoiceTemplate);
+    const cur = s.defaultCurrency;
+    const p = cur === "SYP" ? 25000 : 2.5;
+    const rc: Receipt = {
+      business: s.business as Receipt["business"],
+      printing: s.printing,
+      order: {
+        number: 1001,
+        businessDate: today(),
+        createdAt: new Date().toISOString(),
+        currency: cur,
+        fxRate: null,
+        subtotal: p * 15,
+        discount: 0,
+        discountReason: "",
+        deliveryFee: 0,
+        total: p * 15,
+        totalUsd: 0,
+        taxes: [],
+        type: "normal",
+        status: "done",
+        fulfilment: "delivery",
+        note: "",
+      } as unknown as Receipt["order"],
+      lines: [
+        { id: "a", nameAr: "سندويشة دجاج", nameEn: "Chicken sandwich", qty: 10, freeQty: 0, unitPrice: p, lineTotal: p * 10, options: [] },
+        { id: "b", nameAr: "سندويشة حلوم", nameEn: "Halloumi sandwich", qty: 5, freeQty: 0, unitPrice: p, lineTotal: p * 5, options: [] },
+      ],
+      client: { id: c.id, name: c.name, phone: c.phone, address: c.address, contactPerson: c.contactPerson, language: lang, balanceUsd: 0, template: tpl, customTemplate: !!c.invoiceTemplate },
+      loyalty: null,
+      payment: { paid: 0, remaining: p * 15 },
+      account: { beforeUsd: 0, afterUsd: -(cur === "USD" ? p * 15 : 0), nowUsd: 0 },
+    };
+    const d = docFromReceipt(rc, lang, s, tpl);
+    return { ...d, meta: t("مثال: هيك رح تطلع فواتير هالزبون", "Sample: this is how this client's invoices will look") };
+  }, [c, s, lang]);
+  const [doc, setDoc] = useState<InvoiceDoc | null>(null);
+  const [version, setVersion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [size, setSize] = useState<InvoiceTemplate["size"]>("default");
+  useEffect(() => {
+    setDoc(fresh());
+    if (c) setSize(readInvoiceTemplate(c.invoiceTemplate).size);
+  }, [fresh, c]);
+  if (r.error) return <p className="p-6 text-bad">{ui.err(r.error)}</p>;
+  if (!c || !doc || !s) return <Loading />;
+  const save = async (template: InvoiceTemplate | null) => {
+    setSaving(true);
+    try {
+      await put(`/clients/${c.id}/invoice-template`, { template });
+      toast(template ? ui.tr("انحفظ التصميم.", "Design saved.") : ui.tr("رجعت للفاتورة العادية.", "Back to the standard invoice."));
+      if (!template) void r.reload();
+    } catch (e) {
+      toast(ui.err(e), "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const base = readInvoiceTemplate(c.invoiceTemplate);
+  return (
+    <div className="bg-white" dir={lang === "ar" ? "rtl" : "ltr"}>
+      <Toolbar>
+        <span className="font-semibold">{ui.tr(`تصميم فواتير ${c.name}`, `${c.name}: invoice design`)}</span>
+        <label className="inline-flex items-center gap-1.5 text-sm">
+          {ui.tr("الورق", "Paper")}
+          <select className="input !w-auto !py-1" value={size} onChange={(e) => setSize(e.target.value as InvoiceTemplate["size"])}>
+            <option value="default">{ui.tr("حسب الإعدادات", "As in Settings")}</option>
+            <option value="a4">A4</option>
+            <option value="thermal">{ui.tr("حراري", "Thermal")}</option>
+          </select>
+        </label>
+        {c.invoiceTemplate && (
+          <button className="btn btn-ghost px-3 py-1.5 text-sm" disabled={saving} onClick={() => void save(null)}>
+            {ui.tr("رجّع الفاتورة العادية", "Back to the standard invoice")}
+          </button>
+        )}
+      </Toolbar>
+      <InvoiceEditBar
+        d={doc}
+        set={(patch) => setDoc({ ...doc, ...patch })}
+        clientName={c.name}
+        designing
+        onSaveDesign={() => void save({ ...designOf(doc, base, { printing: s.printing }, lang), size })}
+        onReset={() => {
+          setDoc(fresh());
+          setVersion((v) => v + 1);
+        }}
+        saving={saving}
+        ui={ui.tr}
+      />
+      <InvoiceA4View key={version} d={doc} editing set={(patch) => setDoc({ ...doc, ...patch })} />
     </div>
   );
 }
@@ -149,7 +379,7 @@ function lineOptions(l: Receipt["lines"][number], lang: Lang) {
   return l.options.length ? l.options.map((x) => pickL(lang)(x)).join("، ") : "";
 }
 
-function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: AppSettings | null; width: number }) {
+function ReceiptThermal({ rc, lang, s, width, tpl }: { rc: Receipt; lang: Lang; s: AppSettings | null; width: number; tpl: InvoiceTemplate }) {
   const t = L(lang);
   const pk = pickL(lang);
   const o = rc.order;
@@ -164,7 +394,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
   return (
     <div className="mx-auto bg-white p-1 text-[12px] leading-snug text-black" style={{ width: `${width - 4}mm` }}>
       <div className="text-center">
-        <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />
+        {tpl.showLogo && <Logo s={s} className="mx-auto mb-1 h-12 w-auto grayscale" />}
         <div className="text-[15px] font-bold">{pk(rc.business)}</div>
         {rc.business.phone && (
           <div>
@@ -174,10 +404,11 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         {rc.business.address && <div>{rc.business.address}</div>}
       </div>
       <div className="my-1.5 border-t border-dashed border-black" />
-      {row(`${t("فاتورة", "Invoice")} #${o.number}`, dateL(lang, o.createdAt ?? o.businessDate, true))}
+      {row(`${tpl.title || t("فاتورة", "Invoice")} #${o.number}`, dateL(lang, o.createdAt ?? o.businessDate, true))}
       {rc.client && row(t("الزبون", "Client"), rc.client.name)}
       {o.type !== "normal" && <div className="font-bold">{discountWords(o.type, t) || o.type}</div>}
       {o.status === "cancelled" && <Cancelled lang={lang} />}
+      {tpl.intro && <div className="mt-1 whitespace-pre-line">{tpl.intro}</div>}
       <div className="my-1.5 border-t border-dashed border-black" />
       {rc.lines.map((l) => (
         <div key={l.id} className="mb-1">
@@ -219,138 +450,7 @@ function ReceiptThermal({ rc, lang, s, width }: { rc: Receipt; lang: Lang; s: Ap
         </div>
       )}
       <div className="my-1.5 border-t border-dashed border-black" />
-      <div className="text-center">{lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn}</div>
-    </div>
-  );
-}
-
-function InvoiceA4({ rc, lang, s }: { rc: Receipt; lang: Lang; s: AppSettings | null }) {
-  const t = L(lang);
-  const pk = pickL(lang);
-  const o = rc.order;
-  const m = (v: number) => money(v, o.currency, lang);
-  const bw = (v: number) => balanceWords(v, lang, o.fxRate, o.currency === "SYP");
-  const row = (a: ReactNode, b: ReactNode, bold = false) => (
-    <div className={`flex justify-between gap-4 py-0.5 ${bold ? "border-t border-black pt-1 text-[15px] font-bold" : ""}`}>
-      <span>{a}</span>
-      <span className="num ltr">{b}</span>
-    </div>
-  );
-  return (
-    <div className="mx-auto max-w-[186mm] bg-white p-2 text-[12.5px] text-black">
-      <div className="flex items-start justify-between gap-6 border-b-2 border-black pb-3">
-        <div className="flex items-center gap-3">
-          <Logo s={s} className="h-16 w-auto" />
-          <div>
-            <div className="text-xl font-bold">{pk(rc.business)}</div>
-            {rc.business.phone && (
-              <div>
-                <span className="ltr">{rc.business.phone}</span>
-              </div>
-            )}
-            {rc.business.address && <div>{rc.business.address}</div>}
-          </div>
-        </div>
-        <div className="text-end">
-          <div className="text-2xl font-bold">{t("فاتورة مبيع", "Sales invoice")}</div>
-          <div>
-            # <b className="num">{o.number}</b>
-          </div>
-          <div>{dateL(lang, o.createdAt ?? o.businessDate, true)}</div>
-        </div>
-      </div>
-      {o.status === "cancelled" && <Cancelled lang={lang} />}
-      <div className="mt-3 grid grid-cols-2 gap-6">
-        <div>
-          <div className="text-[11px] text-gray-600">{t("إلى", "Bill to")}</div>
-          {rc.client ? (
-            <>
-              <div className="text-[15px] font-bold">{rc.client.name}</div>
-              {rc.client.contactPerson && <div>{rc.client.contactPerson}</div>}
-              {rc.client.phone && (
-                <div>
-                  <span className="ltr">{rc.client.phone}</span>
-                </div>
-              )}
-              {rc.client.address && <div>{rc.client.address}</div>}
-            </>
-          ) : (
-            <div className="font-bold">{t("زبون عابر", "Walk-in client")}</div>
-          )}
-        </div>
-        <div className="text-end">
-          {o.method && (
-            <div>
-              {t("طريقة الدفع", "Payment")}: <b>{pk(o.method)}</b>
-            </div>
-          )}
-          {o.fulfilment === "delivery" && (
-            <div>
-              {t("توصيل", "Delivery")}
-              {o.assignedName ? ` · ${o.assignedName}` : ""}
-            </div>
-          )}
-          {o.type !== "normal" && <div className="font-bold">{discountWords(o.type, t)}</div>}
-        </div>
-      </div>
-      <table className="mt-4 w-full border-collapse">
-        <thead>
-          <tr className="border-y border-black">
-            <th className="py-1.5 text-start">{t("الصنف", "Item")}</th>
-            <th className="w-16 px-2 py-1.5 text-end">{t("الكمية", "Qty")}</th>
-            <th className="w-28 py-1.5 text-end">{t("سعر الوحدة", "Unit price")}</th>
-            <th className="w-32 py-1.5 text-end">{t("الإجمالي", "Total")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rc.lines.map((l) => (
-            <tr key={l.id} className="border-b border-gray-300 align-top">
-              <td className="py-1.5">
-                <div className="font-semibold">{pk(l)}</div>
-                {lineOptions(l, lang) && <div className="text-[11px]">+ {lineOptions(l, lang)}</div>}
-                {l.freeQty > 0 && <div className="text-[11px]">{t(`منها ${l.freeQty} مجاناً`, `${l.freeQty} free`)}</div>}
-              </td>
-              <td className="px-2 py-1.5 text-end num">{l.qty}</td>
-              <td className="py-1.5 text-end num ltr">{m(l.unitPrice)}</td>
-              <td className="py-1.5 text-end num ltr">{m(l.lineTotal)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mt-3 grid grid-cols-2 gap-8">
-        <div>
-          {rc.account && (
-            <div className="rounded border border-black p-2">
-              <div className="mb-1 font-bold">{t("حساب الزبون", "Client account")}</div>
-              {row(t("الرصيد السابق", "Previous balance"), bw(rc.account.beforeUsd))}
-              {row(t("هذه الفاتورة على الحساب", "On account from this invoice"), m(rc.payment.remaining))}
-              {row(t("الرصيد الجديد", "New balance"), bw(rc.account.afterUsd), true)}
-            </div>
-          )}
-        </div>
-        <div>
-          {row(t("المجموع الفرعي", "Subtotal"), m(o.subtotal))}
-          {o.discount > 0 && row(`${t("خصم", "Discount")}${o.discountReason ? ` (${discountWords(o.discountReason, t)})` : ""}`, `− ${m(o.discount)}`)}
-          {o.taxes.map((x) => row(`${pk(x)}${x.kind === "percent" ? ` ${x.value}%` : ""}`, m(x.amount)))}
-          {o.deliveryFee > 0 && row(t("التوصيل", "Delivery"), m(o.deliveryFee))}
-          {row(t("المجموع", "Total"), m(o.total), true)}
-          {o.currency === "SYP" && o.fxRate ? row("≈ USD", usd(o.totalUsd)) : null}
-          {row(t("المدفوع", "Paid"), m(rc.payment.paid))}
-          {rc.payment.remaining > 0 && row(t("الباقي", "Remaining"), m(rc.payment.remaining), true)}
-        </div>
-      </div>
-      {o.note && (
-        <div className="mt-3">
-          {t("ملاحظة", "Note")}: {o.note}
-        </div>
-      )}
-      <div className="mt-10 grid grid-cols-2 gap-10 text-[11px]">
-        <div className="border-t border-black pt-1">{t("توقيع المستلم", "Received by")}</div>
-        <div className="border-t border-black pt-1">
-          {t("عن", "For")} {pk(rc.business)}
-        </div>
-      </div>
-      <div className="mt-6 text-center">{lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn}</div>
+      <div className="whitespace-pre-line text-center">{tpl.footer || (lang === "ar" ? rc.printing.receiptFooterAr : rc.printing.receiptFooterEn)}</div>
     </div>
   );
 }

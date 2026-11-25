@@ -64,6 +64,13 @@
       "when": 1795559646708,
       "tag": "0008_price_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795560638557,
+      "tag": "0009_drop_points_menu_invoices",
+      "breakpoints": true
     }
   ]
 }

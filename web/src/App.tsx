@@ -6,6 +6,12 @@ import { Spinner } from "./components/ui";
 import { LoginPage, SetupPage } from "./pages/Auth";
 import { HomePage } from "./pages/Home";
 
+/** /menu/categories (old address) → /products/categories */
+function OldMenuLink() {
+  const rest = window.location.pathname.replace(/^\/menu\/?/, "");
+  return <Navigate to={`/products/${rest}`} replace />;
+}
+
 // Each screen is its own small file, fetched the first time it is opened (fast start on slow internet).
 const loadAssets = () => import("./pages/Assets");
 const AssetsPage = lazy(() => loadAssets().then((m) => ({ default: m.AssetsPage })));
@@ -40,6 +46,7 @@ const PrintLabels = lazy(() => loadPrint().then((m) => ({ default: m.PrintLabels
 const PrintReceipt = lazy(() => loadPrint().then((m) => ({ default: m.PrintReceipt })));
 const PrintReport = lazy(() => loadPrint().then((m) => ({ default: m.PrintReport })));
 const PrintStatement = lazy(() => loadPrint().then((m) => ({ default: m.PrintStatement })));
+const PrintInvoiceDesign = lazy(() => loadPrint().then((m) => ({ default: m.PrintInvoiceDesign })));
 const loadPurchasing = () => import("./pages/Purchasing");
 const PurchasingPage = lazy(() => loadPurchasing().then((m) => ({ default: m.PurchasingPage })));
 const loadReports = () => import("./pages/Reports");
@@ -96,6 +103,7 @@ export function App() {
           <Route path="print/receipt/:id" element={g("orders", <PrintReceipt />)} />
           <Route path="print/labels" element={g("warehouse", <PrintLabels />)} />
           <Route path="print/statement/:id" element={g("clients", <PrintStatement />)} />
+          <Route path="print/invoice-design/:id" element={g("clients", <PrintInvoiceDesign />, "edit")} />
           <Route path="print/report" element={g("reports", <PrintReport />)} />
           <Route path="print/client-report/:id" element={g("clients", <PrintClientReport />)} />
           <Route path="print/clients-sheet" element={g("reports", <PrintClientsSheet />)} />
@@ -112,7 +120,9 @@ export function App() {
             <Route path="production/*" element={g("warehouse", <ProductionPage />)} />
             <Route path="clients" element={g("clients", <ClientsPage />)} />
             <Route path="clients/:id" element={g("clients", <ClientDetailPage />)} />
-            <Route path="menu/*" element={g("menu", <MenuPage />)} />
+            <Route path="products/*" element={g("menu", <MenuPage />)} />
+            {/* the staff products page used to live at /menu (now the public menu page) */}
+            <Route path="menu/*" element={<OldMenuLink />} />
             <Route path="warehouse/*" element={g("warehouse", <WarehousePage />)} />
             <Route path="purchasing/*" element={g("purchasing", <PurchasingPage />)} />
             <Route path="costing/*" element={g("costing", <CostingPage />)} />

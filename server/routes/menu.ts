@@ -140,6 +140,9 @@ const productSchema = z.object({
   weightG: z.number().min(0).max(100_000).default(0),
   /** Other direct cost per piece, entered in the product's currency. */
   extraCost: z.number().min(0).default(0),
+  showOnMenu: z.boolean().optional(),
+  menuDescAr: z.string().trim().max(200).default(""),
+  menuDescEn: z.string().trim().max(200).default(""),
 });
 
 const linkedGroupIds = (productId: string, categoryId: string) =>
@@ -194,6 +197,10 @@ function saveProduct(tx: Tx, id: string, body: z.infer<typeof productSchema>, is
     sort: body.sort,
     active: body.active,
     weightG: body.weightG,
+    menuDescAr: body.menuDescAr,
+    menuDescEn: body.menuDescEn,
+    // left out = keep what the button next to the product set
+    ...(body.showOnMenu === undefined ? {} : { showOnMenu: body.showOnMenu }),
     extraCostUsd: round4(toUsd(body.extraCost, body.currency, body.extraCost ? rateFor(body.currency) : null)),
   };
   if (isNew) tx.insert(products).values({ id, ...row }).run();
@@ -232,6 +239,23 @@ menuRouter.put(
       writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "product", entityId: id, before: { ...before, photo: "" }, after: { ...body, photo: body.photo ? "(image)" : "" } });
     });
     res.json({ row: productOut(db.select().from(products).where(eq(products.id, id)).get()!) });
+  }),
+);
+
+/** The button next to each product: show it on the public menu page or not. */
+menuRouter.put(
+  "/products/:id/public",
+  requirePerm("menu", "edit"),
+  h((req, res) => {
+    const id = String(req.params.id);
+    const { show } = parse(z.object({ show: z.boolean() }), req.body);
+    const before = db.select({ showOnMenu: products.showOnMenu }).from(products).where(and(eq(products.id, id), isNull(products.deletedAt))).get();
+    if (!before) throw notFound("product");
+    db.transaction((tx) => {
+      tx.update(products).set({ showOnMenu: show, updatedAt: nowIso(), syncedAt: null }).where(eq(products.id, id)).run();
+      writeAudit(tx, { userId: req.user!.id, action: "edit", entity: "product.public", entityId: id, before, after: { showOnMenu: show } });
+    });
+    res.json({ id, showOnMenu: show });
   }),
 );
 

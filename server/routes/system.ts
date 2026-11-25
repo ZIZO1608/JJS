@@ -57,6 +57,44 @@ for (const [key, schema] of [
   );
 }
 
+/** The public menu page: on/off, prices, WhatsApp number and the page texts. */
+const publicMenuSchema = z.object({
+  enabled: z.boolean(),
+  showPrices: z.boolean(),
+  whatsapp: z
+    .string()
+    .trim()
+    .transform((s) => s.replace(/[^\d]/g, "").replace(/^00/, ""))
+    .refine((s) => s === "" || (s.length >= 8 && s.length <= 15), "Write the number with the country code, e.g. 963 9xx xxx xxx"),
+  heroTitleAr: z.string().trim().max(120),
+  heroTitleEn: z.string().trim().max(120),
+  heroSubtitleAr: z.string().trim().max(240),
+  heroSubtitleEn: z.string().trim().max(240),
+  aboutAr: z.string().trim().max(800),
+  aboutEn: z.string().trim().max(800),
+  hoursAr: z.string().trim().max(200),
+  hoursEn: z.string().trim().max(200),
+  instagram: z.string().trim().max(200).refine((s) => s === "" || /^https:\/\//.test(s), "Paste the full link (https://…)"),
+  facebook: z.string().trim().max(200).refine((s) => s === "" || /^https:\/\//.test(s), "Paste the full link (https://…)"),
+  mapUrl: z.string().trim().max(500).refine((s) => s === "" || /^https:\/\//.test(s), "Paste the full link (https://…)"),
+});
+systemRouter.get(
+  "/public-menu",
+  requirePerm("settings", "view"),
+  h((_req, res) => res.json(getSetting("publicMenu"))),
+);
+systemRouter.put(
+  "/public-menu",
+  requirePerm("settings", "edit"),
+  h((req, res) => {
+    const body = parse(publicMenuSchema, req.body);
+    const before = getSetting("publicMenu");
+    setSetting("publicMenu", body);
+    writeAudit(db, { userId: req.user!.id, action: "edit", entity: "settings.publicMenu", before, after: body });
+    res.json(body);
+  }),
+);
+
 /** Network: let the admin's phone on the same Wi-Fi open the system. */
 systemRouter.get(
   "/network",

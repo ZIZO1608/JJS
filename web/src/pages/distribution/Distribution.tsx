@@ -335,6 +335,132 @@ function ConsignmentsTab() {
   );
 }
 
+interface DropPointRow {
+  id: string;
+  name: string;
+  phone: string;
+  area: { nameAr: string; nameEn: string } | null;
+  active: boolean;
+  cutType: "pct" | "piece" | "rent";
+  cutValue: number;
+  cutCurrency: Currency;
+  money: "cash" | "balance";
+  balanceUsd: number;
+  open: Consignment[];
+  piecesThere: number;
+  lastVisit: string | null;
+  month: { pieces: number; salesUsd: number; cutUsd: number; oursUsd: number; n: number };
+}
+
+/** Our own stands: what is sitting at each one, this month's sales, and the place's share. */
+function DropPointsTab() {
+  const { tr, pick, fmtDate, lang } = useI18n();
+  const { can } = useAuth();
+  const list = useData<{ from: string; rows: DropPointRow[] }>("/drop-points");
+  const [restock, setRestock] = useState<string | null>(null);
+  const [settle, setSettle] = useState<Consignment | null>(null);
+  const reload = () => void list.reload();
+  if (!list.data) return <Spinner />;
+  const rows = list.data.rows;
+  const cutText = (r: DropPointRow) =>
+    r.cutType === "pct"
+      ? tr(`${r.cutValue}٪ من المبيع`, `${r.cutValue}% of sales`)
+      : r.cutType === "piece"
+        ? tr(`${money(r.cutValue, r.cutCurrency, lang)} عن كل قطعة`, `${money(r.cutValue, r.cutCurrency, lang)} per piece`)
+        : tr(`أجار ${money(r.cutValue, r.cutCurrency, lang)} بالشهر`, `Rent ${money(r.cutValue, r.cutCurrency, lang)} a month`);
+  const total = rows.reduce((t, r) => ({ there: t.there + r.piecesThere, sales: t.sales + r.month.salesUsd, cut: t.cut + r.month.cutUsd, ours: t.ours + r.month.oursUsd }), { there: 0, sales: 0, cut: 0, ours: 0 });
+  return (
+    <div>
+      {rows.length === 0 ? (
+        <Empty
+          text={tr(
+            "ما في نقاط بيع إلنا. افتح زبون (أو زبون جديد) وعلّم «نقطة بيع إلنا»، وحدّد حصة المكان وسعر البيع.",
+            "No drop points yet. Open a client (or add one), tick “Drop point”, then set the place's share and the selling price.",
+          )}
+        />
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="card">
+              <div className="text-sm text-muted">{tr("قطع موجودة بالنقاط", "Pieces at the points")}</div>
+              <div className="text-2xl font-bold num">{total.there}</div>
+            </div>
+            <div className="card">
+              <div className="text-sm text-muted">{tr("مبيع هالشهر", "Sold this month")}</div>
+              <div className="text-2xl font-bold num ltr">{usd(total.sales)}</div>
+            </div>
+            <div className="card">
+              <div className="text-sm text-muted">{tr("حصة الأماكن", "Places' share")}</div>
+              <div className="text-2xl font-bold num ltr">{usd(total.cut)}</div>
+            </div>
+            <div className="card">
+              <div className="text-sm text-muted">{tr("حصتنا", "Our share")}</div>
+              <div className="text-2xl font-bold text-good num ltr">{usd(total.ours)}</div>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {rows.map((r) => (
+              <div key={r.id} className={`card ${r.active ? "" : "opacity-60"}`}>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link to={`/clients/${r.id}`} className="text-lg font-bold hover:underline">
+                      {r.name}
+                    </Link>
+                    <div className="text-sm text-muted">
+                      {r.area ? `${pick(r.area)} · ` : ""}
+                      {cutText(r)} · {r.money === "cash" ? tr("كاش بكل زيارة", "cash each visit") : tr("على الحساب", "on account")}
+                    </div>
+                  </div>
+                  {r.balanceUsd < -0.005 && (
+                    <span className="chip text-bad">
+                      {tr("عليه", "owes")} <span className="num ltr">{usd(-r.balanceUsd)}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-sm">
+                  <div className="rounded-lg bg-sunken p-2">
+                    <div className="text-muted">{tr("موجود هلّق", "There now")}</div>
+                    <div className="text-lg font-bold num">{r.piecesThere}</div>
+                  </div>
+                  <div className="rounded-lg bg-sunken p-2">
+                    <div className="text-muted">{tr("انباع بالشهر", "Sold this month")}</div>
+                    <div className="text-lg font-bold num">{r.month.pieces}</div>
+                  </div>
+                  <div className="rounded-lg bg-sunken p-2">
+                    <div className="text-muted">{tr("حصتنا بالشهر", "Our share")}</div>
+                    <div className="text-lg font-bold num ltr">{usd(r.month.oursUsd)}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-faint">{r.lastVisit ? tr(`آخر جرد: ${fmtDate(r.lastVisit)}`, `Last count: ${fmtDate(r.lastVisit)}`) : tr("ما انعمل جرد لسا", "Not counted yet")}</div>
+                {can("orders", "create") && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {r.open[0] && (
+                      <button className="btn btn-primary px-3 py-1.5 text-sm" onClick={() => setSettle(r.open[0]!)}>
+                        {tr("جرد وتسوية", "Count & settle")}
+                        {r.open.length > 1 && <span className="num"> (C{r.open[0]!.number})</span>}
+                      </button>
+                    )}
+                    <button className="btn px-3 py-1.5 text-sm" onClick={() => setRestock(r.id)}>
+                      {tr("+ حط بضاعة", "+ Leave goods")}
+                    </button>
+                    {r.phone && (
+                      <a className="btn btn-ghost px-3 py-1.5 text-sm" href={waLink(r.phone, "")} target="_blank" rel="noreferrer">
+                        {tr("واتساب", "WhatsApp")}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {restock && <ConsignmentDialog clientId={restock} onClose={() => setRestock(null)} onDone={() => (setRestock(null), reload())} />}
+      {settle && <SettleDialog c={settle} onClose={() => setSettle(null)} onDone={() => (setSettle(null), reload())} />}
+    </div>
+  );
+}
+
 interface ReturnRow {
   id: string;
   number: number;
@@ -404,12 +530,13 @@ export function DistributionPage() {
   const { tr } = useI18n();
   return (
     <>
-      <PageHeader title={tr("التوزيع", "Distribution")} subtitle={tr("خط المندوب اليوم، البضاعة بالأمانة، والمرتجعات.", "The rep's route today, goods on consignment, and returns.")} />
+      <PageHeader title={tr("التوزيع", "Distribution")} subtitle={tr("خط المندوب اليوم، البضاعة بالأمانة، نقاط البيع، والمرتجعات.", "The rep's route today, goods on consignment, drop points, and returns.")} />
       <Tabs
         base="/distribution"
         tabs={[
           { key: "route", label: tr("خط التوزيع", "Route sheet") },
           { key: "consignments", label: tr("بالأمانة", "Consignment") },
+          { key: "drop-points", label: tr("نقاط البيع", "Drop points") },
           { key: "returns", label: tr("المرتجعات", "Returns") },
         ]}
       />
@@ -417,6 +544,7 @@ export function DistributionPage() {
         <Route index element={<Navigate to="route" replace />} />
         <Route path="route" element={<RouteTab />} />
         <Route path="consignments" element={<ConsignmentsTab />} />
+        <Route path="drop-points" element={<DropPointsTab />} />
         <Route path="returns" element={<ReturnsTab />} />
       </Routes>
     </>

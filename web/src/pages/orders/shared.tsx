@@ -89,6 +89,7 @@ export function discountWords(reason: string, tr: Tr) {
     trial: ["تجربة مجانية", "Free trial"],
     internal: ["استهلاك داخلي", "Internal use"],
     manual: ["خصم يدوي", "Manual discount"],
+    drop_cut: ["حصة المكان", "Place's share"],
     loyalty: ["قطع مجانية (ولاء)", "Free items (loyalty)"],
     sub_free: ["قطع ضمن الاشتراك", "Included in subscription"],
   };

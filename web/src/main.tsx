@@ -18,6 +18,10 @@ import { ToastProvider } from "./lib/toast";
 // The client portal is its own download: staff never fetch it, clients never fetch the staff screens.
 const PortalApp = lazy(() => import("./portal/PortalApp").then((m) => ({ default: m.PortalApp })));
 
+// The public menu page (/menu): anyone can open it, no login, its own small download.
+const PublicMenu = lazy(() => import("./public/PublicMenu").then((m) => ({ default: m.PublicMenu })));
+const isPublicMenu = window.location.pathname === "/menu" || window.location.pathname === "/menu/";
+
 // Clients use the same address under /portal: their own login, screens and home-screen icon.
 const isPortal = window.location.pathname === "/portal" || window.location.pathname.startsWith("/portal/");
 if (isPortal) {
@@ -47,7 +51,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
       <ToastProvider raised={isPortal}>
-        {isPortal ? (
+        {isPublicMenu ? (
+          <Suspense fallback={null}>
+            <PublicMenu />
+          </Suspense>
+        ) : isPortal ? (
           <Suspense fallback={null}>
             <PortalApp />
           </Suspense>

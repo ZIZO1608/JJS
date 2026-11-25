@@ -66,6 +66,12 @@ export interface ClientSummary {
   lat: number | null;
   lng: number | null;
   mapUrl: string;
+  dropPoint: boolean;
+  dropCutType: "pct" | "piece" | "rent";
+  dropCutValue: number;
+  dropCutCurrency: Currency;
+  dropMoney: "cash" | "balance";
+  invoiceTemplate: string;
   aging: { balanceUsd: number; oldestUnpaidDate: string | null; daysOutstanding: number; termsDays: number; overdueDays: number };
 }
 export interface PaymentMethod extends Named {

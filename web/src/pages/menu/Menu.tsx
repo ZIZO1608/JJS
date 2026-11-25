@@ -4,6 +4,7 @@ import { DataTable } from "../../components/DataTable";
 import { Tabs } from "../../components/Tabs";
 import { Empty, Field, PageHeader, Select, Spinner, StatusDot, TextInput } from "../../components/ui";
 import { post, put } from "../../lib/api";
+import { useToast } from "../../lib/toast";
 import { useAppSettings } from "../../lib/appSettings";
 import { useAuth } from "../../lib/auth";
 import { money, num, pct, usd, type Currency } from "../../lib/format";
@@ -42,6 +43,9 @@ interface Product {
   costUsd: number;
   weightG?: number;
   extraCost?: number;
+  showOnMenu: boolean;
+  menuDescAr: string;
+  menuDescEn: string;
 }
 interface Group {
   id: string;
@@ -110,6 +114,9 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
     own: product?.ownGroupIds ?? [],
     weightG: product?.weightG ? String(product.weightG) : "",
     extraCost: product?.extraCost ? String(product.extraCost) : "",
+    showOnMenu: product?.showOnMenu ?? false,
+    menuDescAr: product?.menuDescAr ?? "",
+    menuDescEn: product?.menuDescEn ?? "",
   });
   const [lines, setLines] = useState<RecipeLine[]>(product ? recipeLinesFrom(product.recipe, items) : []);
   const inherited = catGroups(f.categoryId);
@@ -131,6 +138,9 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
       recipe: recipeBody(lines),
       weightG: num(f.weightG) > 0 ? num(f.weightG) : 0,
       extraCost: num(f.extraCost) > 0 ? num(f.extraCost) : 0,
+      showOnMenu: f.showOnMenu,
+      menuDescAr: f.menuDescAr,
+      menuDescEn: f.menuDescEn,
     };
     if (await run(() => (product ? put(`/menu/products/${product.id}`, body) : post("/menu/products", body)))) onSaved();
   };
@@ -233,6 +243,19 @@ function ProductDialog({ product, categories, groups, items, catGroups, onClose,
       <Check checked={f.active} onChange={(v) => setF({ ...f, active: v })}>
         {tr("ظاهر بشاشة الطلبات", "Shown on the order screen")}
       </Check>
+      <div className="rounded-xl border border-line p-3">
+        <Check checked={f.showOnMenu} onChange={(v) => setF({ ...f, showOnMenu: v })}>
+          {tr("ظاهر بالمنيو العام (صفحة /menu للناس)", "Shown on the public menu (the /menu page for everyone)")}
+        </Check>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label={tr("وصف قصير بالمنيو (عربي)", "Short line on the menu (Arabic)")} htmlFor="p-dar" error={errors.menuDescAr}>
+            <TextInput id="p-dar" dir="rtl" maxLength={200} value={f.menuDescAr} placeholder="دجاج مشوي، خس، صوص الثوم" onChange={(e) => setF({ ...f, menuDescAr: e.target.value })} />
+          </Field>
+          <Field label={tr("وصف قصير بالمنيو (إنكليزي)", "Short line on the menu (English)")} htmlFor="p-den" error={errors.menuDescEn}>
+            <TextInput id="p-den" dir="ltr" maxLength={200} value={f.menuDescEn} placeholder="Grilled chicken, lettuce, garlic sauce" onChange={(e) => setF({ ...f, menuDescEn: e.target.value })} />
+          </Field>
+        </div>
+      </div>
     </ActionDialog>
   );
 }
@@ -249,6 +272,22 @@ function ProductsTab() {
   const [cat, setCat] = useState("");
   const [editing, setEditing] = useState<Product | "new" | null>(null);
   const [toDelete, setToDelete] = useState<Product | null>(null);
+  const [flipping, setFlipping] = useState<string | null>(null);
+  const toast = useToast();
+  const { err } = useI18n();
+  const canEdit = can("menu", "edit");
+  /** The button next to each product: on the public menu or not. */
+  const flipPublic = async (p: Product) => {
+    setFlipping(p.id);
+    try {
+      await put(`/menu/products/${p.id}/public`, { show: !p.showOnMenu });
+      prods.setData((d) => (d ? { rows: d.rows.map((x) => (x.id === p.id ? { ...x, showOnMenu: !p.showOnMenu } : x)) } : d));
+    } catch (e) {
+      toast(err(e), "error");
+    } finally {
+      setFlipping(null);
+    }
+  };
 
   if (!prods.data || !cats.data || !groups.data) return <Spinner />;
   const catName = (id: string) => {
@@ -277,13 +316,16 @@ function ProductsTab() {
                 </option>
               ))}
             </Select>
+            <a className="btn btn-ghost" href="/menu" target="_blank" rel="noreferrer">
+              {tr("افتح المنيو العام ↗", "Open public menu ↗")}
+            </a>
             {can("menu", "create") &&
               (cats.data.rows.length ? (
                 <button className="btn btn-primary" onClick={() => setEditing("new")}>
                   {tr("+ منتج", "+ Product")}
                 </button>
               ) : (
-                <Link className="btn" to="/menu/categories">
+                <Link className="btn" to="/products/categories">
                   {tr("أضف صنف أولاً", "Add a category first")}
                 </Link>
               ))}
@@ -346,6 +388,28 @@ function ProductsTab() {
                 {p.active ? tr("ظاهر", "Shown") : tr("مخفي", "Hidden")}
               </span>
             ),
+          },
+          {
+            key: "public",
+            header: tr("المنيو العام", "Public menu"),
+            render: (p) =>
+              canEdit ? (
+                <button
+                  className={`btn whitespace-nowrap px-2.5 py-1 text-sm ${p.showOnMenu ? "btn-primary" : ""}`}
+                  disabled={flipping === p.id}
+                  aria-pressed={p.showOnMenu}
+                  title={tr("اضغط لتظهره أو تخفيه بصفحة /menu", "Click to show or hide it on the /menu page")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void flipPublic(p);
+                  }}
+                >
+                  {p.showOnMenu ? tr("✓ ظاهر", "✓ On menu") : tr("مخفي", "Off menu")}
+                </button>
+              ) : (
+                <span className="text-sm text-muted">{p.showOnMenu ? tr("ظاهر", "On menu") : "—"}</span>
+              ),
+            sortValue: (p) => (p.showOnMenu ? 1 : 0),
           },
           ...(can("menu", "delete") ? [{ key: "x", header: "", render: (p: Product) => <RowActions canEdit={false} canDelete onDelete={() => setToDelete(p)} /> }] : []),
         ]}
@@ -716,7 +780,7 @@ export function MenuPage() {
     <>
       <PageHeader title={tr("المنيو", "Menu")} subtitle={tr("المنتجات وأسعارها ووصفاتها، والأصناف، والإضافات مثل الحشوة المضاعفة.", "Products with prices and recipes, categories, and add-ons like double filling.")} />
       <Tabs
-        base="/menu"
+        base="/products"
         tabs={[
           { key: "products", label: tr("المنتجات", "Products") },
           { key: "categories", label: tr("الأصناف", "Categories") },

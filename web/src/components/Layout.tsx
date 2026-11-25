@@ -19,7 +19,7 @@ export const pathFor = (m: Module) =>
     orders: "/orders",
     daily_close: "/close",
     clients: "/clients",
-    menu: "/menu",
+    menu: "/products",
     warehouse: "/warehouse",
     purchasing: "/purchasing",
     costing: "/costing",

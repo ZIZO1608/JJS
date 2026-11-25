@@ -53,6 +53,11 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
     lat: client?.lat ?? (null as number | null),
     lng: client?.lng ?? (null as number | null),
     mapUrl: client?.mapUrl ?? "",
+    dropPoint: client?.dropPoint ?? false,
+    dropCutType: client?.dropCutType ?? ("pct" as ClientSummary["dropCutType"]),
+    dropCutValue: String(client?.dropCutValue ?? 0),
+    dropCutCurrency: client?.dropCutCurrency ?? ((app?.defaultCurrency ?? "USD") as Currency),
+    dropMoney: client?.dropMoney ?? ("cash" as ClientSummary["dropMoney"]),
   });
   const [portalAccess, setPortalAccess] = useState(true);
   const [opening, setOpening] = useState({ amount: "", currency: (app?.defaultCurrency ?? "USD") as Currency });
@@ -75,6 +80,7 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
         repId: f.repId || null,
         paymentTermsDays: Number.isNaN(terms) ? 0 : Math.round(terms),
         creditLimitUsd: Number.isNaN(limit) ? 0 : limit,
+        dropCutValue: Number.isNaN(num(f.dropCutValue)) ? 0 : num(f.dropCutValue),
       };
       if (!client) {
         body.portalAccess = portalAccess;
@@ -132,6 +138,9 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
             error={errors.address}
             onChange={(v) => setF((x) => ({ ...x, ...v }))}
           />
+        </div>
+        <div className="sm:col-span-2">
+          <DropPointFields f={f} set={set} error={errors.dropCutValue} />
         </div>
         <div className="sm:col-span-2">
           <Field label={tr("ملاحظات", "Notes")} htmlFor="c-note" error={errors.note}>
@@ -213,7 +222,7 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
             {tr("امنع الطلب بالدين إذا تجاوز الحد", "Block credit orders above the limit")}
           </label>
           <label className="inline-flex items-center gap-2 sm:col-span-2">
-            <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment} onChange={(e) => set("consignment", e.target.checked)} />
+            <input type="checkbox" className="h-4 w-4 accent-ink" checked={f.consignment || f.dropPoint} disabled={f.dropPoint} onChange={(e) => set("consignment", e.target.checked)} />
             {tr("محل بالأمانة (بيدفع بس على اللي باعه)", "Consignment shop (pays only for what it sold)")}
           </label>
           {!client && (
@@ -246,6 +255,69 @@ export function ClientDialog({ client, onClose, onSaved }: { client: ClientSumma
         </div>
       </details>
     </Modal>
+  );
+}
+
+type DropForm = { dropPoint: boolean; dropCutType: ClientSummary["dropCutType"]; dropCutValue: string; dropCutCurrency: Currency; dropMoney: ClientSummary["dropMoney"]; consignment: boolean };
+
+/** Our own stand or fridge at this place: what the place keeps from each sale, and who holds the money. */
+function DropPointFields<F extends DropForm>({ f, set, error }: { f: F; set: <K extends keyof F>(k: K, v: F[K]) => void; error?: string }) {
+  const { tr } = useI18n();
+  const cut = f.dropCutType;
+  return (
+    <div className={`rounded-xl border p-3 ${f.dropPoint ? "border-brand bg-brand/5" : "border-line bg-sunken/50"}`}>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" className="mt-1 h-4 w-4 accent-ink" checked={f.dropPoint} onChange={(e) => set("dropPoint", e.target.checked as F["dropPoint"])} />
+        <span>
+          <span className="block font-semibold">{tr("نقطة بيع إلنا (ستاند / برّاد)", "Drop point (our stand / fridge)")}</span>
+          <span className="block text-sm text-muted">
+            {tr(
+              "منحط ساندويشاتنا بهالمكان وبتضل إلنا. المكان بياخد حصة من المبيع. سعر البيع هون بتحطّه من تبويب «الأسعار» بصفحة الزبون.",
+              "We leave our sandwiches at this place and they stay ours. The place takes a share of what sells. Set the selling price here from the “Prices” tab on the client page.",
+            )}
+          </span>
+        </span>
+      </label>
+      {f.dropPoint && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <Field label={tr("حصة المكان", "Place's share")} htmlFor="c-cut-type">
+            <Select id="c-cut-type" value={cut} onChange={(e) => set("dropCutType", e.target.value as F["dropCutType"])}>
+              <option value="pct">{tr("نسبة من المبيع ٪", "% of sales")}</option>
+              <option value="piece">{tr("مبلغ ثابت عن كل قطعة", "Fixed amount per piece")}</option>
+              <option value="rent">{tr("أجار شهري (منحسبه مصروف)", "Monthly rent (we pay it as an expense)")}</option>
+            </Select>
+          </Field>
+          {cut === "pct" ? (
+            <Field label={tr("النسبة ٪", "Percent %")} htmlFor="c-cut-v" error={error} hint={tr("مثلاً ١٥", "e.g. 15")}>
+              <TextInput id="c-cut-v" inputMode="decimal" dir="ltr" className="num" value={f.dropCutValue} onChange={(e) => set("dropCutValue", e.target.value as F["dropCutValue"])} />
+            </Field>
+          ) : (
+            <div className="grid grid-cols-[1fr_auto] gap-2">
+              <Field
+                label={cut === "piece" ? tr("المبلغ عن كل قطعة", "Amount per piece") : tr("الأجار بالشهر", "Rent per month")}
+                htmlFor="c-cut-v"
+                error={error}
+                hint={cut === "rent" ? tr("للتذكير فقط: سجّله بالمصاريف الشهرية", "A reminder only: add it under monthly expenses") : undefined}
+              >
+                <TextInput id="c-cut-v" inputMode="decimal" dir="ltr" className="num" value={f.dropCutValue} onChange={(e) => set("dropCutValue", e.target.value as F["dropCutValue"])} />
+              </Field>
+              <Field label={tr("العملة", "Currency")} htmlFor="c-cut-cur">
+                <Select id="c-cut-cur" value={f.dropCutCurrency} onChange={(e) => set("dropCutCurrency", e.target.value as F["dropCutCurrency"])}>
+                  <option value="USD">USD</option>
+                  <option value="SYP">SYP</option>
+                </Select>
+              </Field>
+            </div>
+          )}
+          <Field label={tr("حصتنا من المصاري", "Our share of the money")} htmlFor="c-drop-money" hint={f.dropMoney === "cash" ? tr("المندوب بيقبضها بكل زيارة", "The rep collects it at each visit") : tr("بيدفعوها بعدين متل أي دين", "They pay it later, like any debt")}>
+            <Select id="c-drop-money" value={f.dropMoney} onChange={(e) => set("dropMoney", e.target.value as F["dropMoney"])}>
+              <option value="cash">{tr("كاش بكل زيارة", "Cash at each visit")}</option>
+              <option value="balance">{tr("على حسابهم", "On their account")}</option>
+            </Select>
+          </Field>
+        </div>
+      )}
+    </div>
   );
 }
 
